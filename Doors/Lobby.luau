@@ -36,7 +36,7 @@ end
 task.wait(1)
 
 local Window = Library:CreateWindow({
-    Title = "Eternal Hub",
+    Title = "catpaint",
     Footer = "dsc.gg/PB9AHh6sub",
     NotifySide = "Right",
     ShowCustomCursor = false,
@@ -48,7 +48,7 @@ local Window = Library:CreateWindow({
 })
 
 Library:SetWatermarkVisibility(true)
-Library:SetWatermark("Eternal Hub | Loading...")
+Library:SetWatermark("catpaint | Loading...")
 
 local FrameTimer = tick()
 local FrameCounter = 0
@@ -72,7 +72,7 @@ local WatermarkConnection = game:GetService("RunService").RenderStepped:Connect(
 		end
 	end
 
-	Library:SetWatermark(("Eternal Hub | %s fps | %s ms"):format(math.floor(FPS), tostring(ping)))
+	Library:SetWatermark(("catpaint | %s fps | %s ms"):format(math.floor(FPS), tostring(ping)))
 end)
 
 Library:OnUnload(function()
