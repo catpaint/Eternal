@@ -1,7 +1,7 @@
 local Library = (Eternal.UILibrary == "Linoria" and "LinoriaLib" or "Obsidian")
 -- local BaseUrl = "https://raw.githubusercontent.com/mstudio45/" .. Library .. "/refs/heads/main/" -- broken since upio github got banned
 local BaseUrl = "https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/"
-local EternalUrl = "https://raw.githubusercontent.com/eternal60123-cell/Eternal/refs/heads/main/"
+local EternalUrl = "https://raw.githubusercontent.com/catpaint/Eternal/refs/heads/main/"
 
 local Interface = {
   Library = loadstring(game:HttpGet(BaseUrl .. "Library.lua"))(),
