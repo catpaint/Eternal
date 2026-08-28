@@ -1,33 +1,76 @@
 local LoadStart = tick()
-Eternal.SavePath = "Doors/Game"
 
-local Library = Eternal.Interface.Library
-local SaveManager = Eternal.Interface.SaveManager
-local ThemeManager = Eternal.Interface.ThemeManager
+getgenv().it = true
+getgenv().mstudio45 = getgenv().mstudio45 or {}
+getgenv().mstudio45.Legit = false
+getgenv().mstudio45.Paid = true
+
+if not mstudio45.Environment then
+    local gethuiFunc = gethui or function() return Services.CoreGui end
+    mstudio45.Environment = setmetatable({
+        cloneref = function(obj) return obj end,
+        gethui = gethuiFunc,
+        GenerateRandomString = function(len)
+            local str = ""
+            for i = 1, (len or 10) do str = str .. string.char(math.random(97, 122)) end
+            return str
+        end
+    }, {
+        __index = function(_, k)
+            if getgenv()[k] then return getgenv()[k] end
+            return nil
+        end
+    })
+end
+
+if not mstudio45.ESPLibrary then
+    local s, lib = pcall(function()
+        return loadstring(game:HttpGet("https://raw.githubusercontent.com/mstudio45/Abysall/refs/heads/main/Components/ESP.luau"))()
+    end)
+    mstudio45.ESPLibrary = (s and lib) or setmetatable({}, {
+        __index = function() return function() end end
+    })
+end
+
+if not mstudio45.Interface or type(mstudio45.Interface) ~= "table" or not mstudio45.Interface.Library then
+    local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/"
+    local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
+    local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
+    local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
+    mstudio45.Interface = { Library = Library, SaveManager = SaveManager, ThemeManager = ThemeManager }
+end
+
+mstudio45.SavePath = "Doors/Game"
+
+local Library = mstudio45.Interface.Library
+local SaveManager = mstudio45.Interface.SaveManager
+local ThemeManager = mstudio45.Interface.ThemeManager
 
 local Toggles = Library.Toggles
 local Options = Library.Options
 
-local function CloneReference(Object)
-	if Eternal and Eternal.Environment.cloneref then
-		return Eternal.Environment.cloneref(Object)
-	end
-	return Object
-end
-
-local Services = setmetatable({}, {
-	__index = function(Self, Name)
-		return CloneReference(game:GetService(Name))
-	end
-})
-
-local Globals = {}
-local Connections = {}
-local ESPConnections = {}
-local Gb = {}
+local Global = {}
+local Conns = {}
+local ESPConns = {}
 local FakePrompts = {}
 local Functions = {}
 local PartProperties = {}
+
+local function CloneReference(Object)
+    if mstudio45 and mstudio45.Environment and type(mstudio45.Environment) == "table" and type(mstudio45.Environment.cloneref) == "function" then
+        local s, res = pcall(function() return mstudio45.Environment.cloneref(Object) end)
+        if s and typeof(res) == "Instance" then
+            return res
+        end
+    end
+    return Object
+end
+
+local Services = setmetatable({}, {
+	__index = function(self, Name)
+		return CloneReference(game:GetService(Name))
+	end
+})
 
 local Objects = {
 	Prompts = {},
@@ -52,11 +95,13 @@ local Objects = {
 	PathLights = {}
 }
 
-Globals.IncompatibleMessage = "Your executor doesn't support this feature."
+Global.ExecutorIssueMessage = "Your executor doesn't support this feature."
+Global.PayedFeatueMessage = "Payed only feature."
 
-Functions.CC = function(Array)
-	for _, Name in Array do
-		if not Eternal.Environment[Name] then
+Functions.CheckEnv = function(...)
+	local Names = { ... }
+	for i = 1, #Names do
+		if not mstudio45.Environment[Names[i]] then
 			return false
 		end
 	end
@@ -90,7 +135,7 @@ local Entities = {
 	},
 	["Groundskeeper"] = {
 		Name = "Groundskeeper",
-		NotifyMessage = { Title = "Entity 'Groundskeeper' has spawned.", Body = "Avoid stepping on the grass." }
+		NotifyMessage = { Title = "Entity 'Groundskeeper' has spawned.", Body = "Dont step on the grass." }
 	},
 	["A60"] = {
 		Name = "A-60",
@@ -131,6 +176,26 @@ local Entities = {
 	["SallyMoving"] = {
 		Name = "Sally",
 		NotifyMessage = { Title = "Entity 'Sally' has spawned.", Body = "Drop an item for her." }
+	},
+	["Scribble"] = {
+		Name = "Scribbles",
+		NotifyMessage = { Title = "Entity 'Scribbles' has spawned.", Body = "Watch out for Scribbles!" }
+	},
+	["Scribbles"] = {
+		Name = "Scribbles",
+		NotifyMessage = { Title = "Entity 'Scribbles' has spawned.", Body = "Watch out for Scribbles!" }
+	},
+	["ScribbleMoving"] = {
+		Name = "Scribbles",
+		NotifyMessage = { Title = "Entity 'Scribbles' has spawned.", Body = "Watch out for Scribbles!" }
+	},
+	["Bash"] = {
+		Name = "Bash",
+		NotifyMessage = { Title = "Entity 'Bash' has spawned.", Body = "Hide or get out of the way!" }
+	},
+	["BashMoving"] = {
+		Name = "Bash",
+		NotifyMessage = { Title = "Entity 'Bash' has spawned.", Body = "Hide or get out of the way!" }
 	}
 }
 
@@ -238,15 +303,21 @@ if FinishedLoadingRoom then
 	FinishedLoadingRoom:Destroy()
 end
 
+local NotificationLibrary = {
+	LiveNotifications = 0,
+	Notifications = 1
+}
+
 local function GetHiddenContainer()
-	if Functions.CC({"gethui"}) then
-		return Eternal.Environment.gethui()
+	if Functions.CheckEnv("gethui") then
+		local s, res = pcall(function() return mstudio45.Environment.gethui() end)
+		if s and typeof(res) == "Instance" then return res end
 	end
-	return Services.CoreGui
+	return game:GetService("CoreGui") or LocalPlayer:WaitForChild("PlayerGui")
 end
 
 local Container = Instance.new("ScreenGui")
-Container.Name = Eternal.ESPLibrary:GenerateRandomString()
+Container.Name = (mstudio45.ESPLibrary and type(mstudio45.ESPLibrary.GenerateRandomString) == "function" and mstudio45.ESPLibrary:GenerateRandomString()) or "mstudio45_UI"
 Container.Parent = GetHiddenContainer()
 Container.DisplayOrder = 32767
 Container.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -262,16 +333,17 @@ end
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
+local Workspace = cloneref(game:GetService("Workspace"))
 
 local LocalPlayer = Players.LocalPlayer
 
-local EternalGui = Instance.new("ScreenGui")
-EternalGui.Name = "EternalNotificationGui"
-EternalGui.ResetOnSpawn = false
-EternalGui.IgnoreGuiInset = true
-EternalGui.DisplayOrder = 999999
-EternalGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-EternalGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+local LolhaxGui = Instance.new("ScreenGui")
+LolhaxGui.Name = "LolhaxNotificationGui"
+LolhaxGui.ResetOnSpawn = false
+LolhaxGui.IgnoreGuiInset = true
+LolhaxGui.DisplayOrder = 999999
+LolhaxGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+LolhaxGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
 local NotificationHolder = Instance.new("Frame")
 NotificationHolder.Name = "NotificationHolder"
@@ -281,62 +353,49 @@ NotificationHolder.AnchorPoint = Vector2.new(0.5, 0.5)
 NotificationHolder.Position = UDim2.fromScale(0.5, 0.5)
 NotificationHolder.Size = UDim2.fromScale(1, 1)
 NotificationHolder.ZIndex = 999999
-NotificationHolder.Parent = EternalGui
+NotificationHolder.Parent = LolhaxGui
 
 local Notifications = {}
 
 local NotificationSpacing = 0.065
 
---local LogoURL = "https://raw.githubusercontent.com/GeorgeRoblox/Notification/refs/heads/main/Images/bcrown.png"
---local LogoFile = "Eternal_B_Crown.png"
+local LogoURL = "https://raw.githubusercontent.com/mstudio45/Notification/refs/heads/main/Images/bcrown.png"
+local LogoFile = "mstudio45_B_Crown.png"
 
 local function GetLogoAsset()
-    local Success, Result = pcall(function()
-        if not isfile or not writefile or not getcustomasset then
-            return nil
-        end
-
+    if not (isfile and writefile and getcustomasset) then return nil end
+    local ok, res = pcall(function()
         if not isfile(LogoFile) then
-            local Request =
-                (syn and syn.request)
-                or request
-                or http_request
-                or (http and http.request)
-
-            if not Request then
-                return nil
-            end
-
-            local Response = Request({
-                Url = LogoURL,
-                Method = "GET"
-            })
-
-            if Response and Response.Body then
-                writefile(LogoFile, Response.Body)
-            end
+            local fetch = (syn and syn.request) or request or http_request or (http and http.request)
+            if not fetch then return nil end
+            local resp = fetch({ Url = LogoURL, Method = "GET" })
+            if resp and resp.Body then writefile(LogoFile, resp.Body) end
         end
-
-        if isfile(LogoFile) then
-            return getcustomasset(LogoFile)
-        end
-
-        return nil
+        return isfile(LogoFile) and getcustomasset(LogoFile) or nil
     end)
-
-    if Success then
-        return Result
-    end
-
-    return nil
+    return ok and res or nil
 end
 
 local LogoAsset = GetLogoAsset()
 
-local function UpdateEternalPositions()
+local function GetNotifySide()
+    return Options.NotifySide and Options.NotifySide.Value or "Right"
+end
+
+local function GetNotifyX()
+    if GetNotifySide() == "Right" then return 0.88 end
+    return 0.5
+end
+
+local function GetNotifyYBase()
+    if GetNotifySide() == "Right" then return 0.08 end
+    return 0.60
+end
+
+local function Updatemstudio45Positions()
     for Index, Data in ipairs(Notifications) do
         if Data.Main and Data.Main.Parent then
-            local TargetY = 0.60 + ((Index - 1) * NotificationSpacing)
+            local TargetY = GetNotifyYBase() + ((Index - 1) * NotificationSpacing)
 
             TweenService:Create(
                 Data.Main,
@@ -346,151 +405,286 @@ local function UpdateEternalPositions()
                     Enum.EasingDirection.Out
                 ),
                 {
-                    Position = UDim2.fromScale(0.5, TargetY)
+                    Position = UDim2.fromScale(GetNotifyX(), TargetY)
                 }
             ):Play()
         end
     end
 end
+function NotificationLibrary:Notify(TitleText, Desc, Delay)
+	task.spawn(function()
+		local TextService = game:GetService("TextService")
+		local ViewportSize = workspace.CurrentCamera.ViewportSize
 
-local function EternalNotify(TitleText, DescriptionText, Image, Color, Time)
-    local MainColor = Color or Color3.fromRGB(0, 120, 255)
+		local NotifyScaleX = 0.25
+		local TextOffset = 60
+		local Spacing = 10
+		local BaseY = 5
+		local NotifyWidth = ViewportSize.X * NotifyScaleX
+		local SlideX = NotifyWidth + 12
+		local TextWidth = math.max(NotifyWidth - TextOffset - 30, 150)
 
-    local Main = Instance.new("Frame")
-    Main.Name = "Notification"
-    Main.Parent = NotificationHolder
-    Main.AnchorPoint = Vector2.new(0.5, 0.5)
+		local function Reflow()
+			local Y = BaseY
+			for _, Object in Container:GetChildren() do
+				if Object.Name == "Notification" and Object:GetAttribute("Destroying") ~= true then
+					local Cur = Object:GetAttribute("CurrentPosition")
+					if not Cur or Cur.Y.Offset ~= Y then
+						Services.TweenService:Create(
+							Object,
+							TweenInfo.new(0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out),
+							{ Position = UDim2.new(1, -SlideX, 0, Y) }
+						):Play()
+					end
+					Object:SetAttribute("CurrentPosition", UDim2.new(1, -SlideX, 0, Y))
+					Y += Object.Size.Y.Offset + Spacing
+				end
+			end
+		end
 
-    Main.Size = UDim2.fromScale(0.23, 0.06)
-    Main.Position = UDim2.fromScale(0.5, 0.68)
+		local Notification = Instance.new("Frame")
+		local Line = Instance.new("Frame")
+		local Warning = Instance.new("ImageLabel")
+		local UICorner = Instance.new("UICorner")
+		local UICorner2 = Instance.new("UICorner")
+		local Title = Instance.new("TextLabel")
+		local Description = Instance.new("TextLabel")
 
-    Main.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-    Main.BackgroundTransparency = 1
+		Notification.Name = "Notification"
+		Notification.BackgroundColor3 = Library.Scheme.BackgroundColor
+		Notification.BackgroundTransparency = 0.4
+		Notification.BorderSizePixel = 0
+		Notification.Size = UDim2.new(NotifyScaleX, 0, 0, 50)
 
-    Main.BorderSizePixel = 1
-    Main.BorderColor3 = MainColor
+		Line.Name = "Line"
+		Line.Parent = Notification
+		Line.BackgroundColor3 = Library.Scheme.AccentColor
+		Line.BorderSizePixel = 0
+		Line.Position = UDim2.new(0, 0, 1, -3)
+		Line.Size = UDim2.new(0, 0, 0, 3)
 
-    Main.ZIndex = 999999
+		Warning.Name = "Warning"
+		Warning.Parent = Notification
+		Warning.BackgroundTransparency = 1
+		Warning.AnchorPoint = Vector2.new(0, 0.5)
+		Warning.Position = UDim2.new(0, 10, 0.5, 0)
+		Warning.Size = UDim2.new(0, 40, 0, 40)
+		Warning.Image = "rbxassetid://3944668821"
+		Warning.ImageColor3 = Library.Scheme.AccentColor
+		Warning.ScaleType = Enum.ScaleType.Fit
 
-    local Corner = Instance.new("UICorner")
-    Corner.CornerRadius = UDim.new(0, 5)
-    Corner.Parent = Main
+		UICorner.CornerRadius = UDim.new(0, 20)
+		UICorner.Parent = Warning
 
-    local Line = Instance.new("Frame")
-    Line.Name = "Line"
-    Line.Parent = Main
-    Line.AnchorPoint = Vector2.new(0, 1)
-    Line.Position = UDim2.fromScale(0, 1)
-    Line.Size = UDim2.fromScale(0, 0.035)
-    Line.BackgroundColor3 = MainColor
-    Line.BackgroundTransparency = 1
-    Line.BorderSizePixel = 0
-    Line.ZIndex = 1000000
+		UICorner2.CornerRadius = UDim.new(0, 4)
+		UICorner2.Parent = Notification
 
-    local LineCorner = Instance.new("UICorner")
-    LineCorner.CornerRadius = UDim.new(1, 0)
-    LineCorner.Parent = Line
+		Title.Name = "Title"
+		Title.Parent = Notification
+		Title.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		Title.BackgroundTransparency = 1
+		Title.Position = UDim2.new(0, TextOffset, 0.125, 0)
+		Title.Size = UDim2.new(0, TextWidth, 0, 18)
+		Title.Text = TitleText or "..."
+		Title.TextColor3 = Library.Scheme.FontColor
+		Title.TextSize = 10
+		Title.TextWrapped = true
+		Title.TextStrokeTransparency = 0.75
+		Title.TextXAlignment = Enum.TextXAlignment.Left
 
-    local Logo = Instance.new("ImageLabel")
-    Logo.Name = "Logo"
-    Logo.Parent = Main
-    Logo.AnchorPoint = Vector2.new(0.5, 0.5)
-    Logo.Position = UDim2.fromScale(0.067, 0.5)
-    Logo.Size = UDim2.fromScale(0.115, 0.88)
-    Logo.BackgroundTransparency = 1
-    Logo.BorderSizePixel = 0
-    Logo.ScaleType = Enum.ScaleType.Fit
-    Logo.ImageTransparency = 1
-    Logo.ZIndex = 1000000
+		Description.Name = "Description"
+		Description.Parent = Notification
+		Description.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		Description.BackgroundTransparency = 1
+		Description.Position = UDim2.new(0, TextOffset, 0.4, 0)
+		Description.Size = UDim2.new(0, TextWidth, 0, 18)
+		Description.Text = Desc or "..."
+		Description.TextColor3 = Library.Scheme.FontColor
+		Description.TextTransparency = 0.1
+		Description.TextSize = 10
+		Description.TextWrapped = true
+		Description.TextStrokeTransparency = 0.75
+		Description.TextXAlignment = Enum.TextXAlignment.Left
+
+		local Params = Instance.new("GetTextBoundsParams")
+		Params.Text = Description.Text
+		Params.RichText = true
+		Params.Font = Description.FontFace
+		Params.Size = Description.TextSize
+		Params.Width = TextWidth
+		local Bounds = TextService:GetTextBoundsAsync(Params)
+
+		local DescHeight = math.max(math.ceil(Bounds.Y) + 4, 18)
+		local Height = 50 + (DescHeight - 18)
+
+		Description.Size = UDim2.new(0, TextWidth, 0, DescHeight)
+		Notification.Size = UDim2.new(NotifyScaleX, 0, 0, Height)
+
+		local StackY = BaseY
+		for _, Object in Container:GetChildren() do
+			if Object.Name == "Notification" and Object:GetAttribute("Destroying") ~= true then
+				StackY += Object.Size.Y.Offset + Spacing
+			end
+		end
+
+		Notification.Parent = Container
+		Notification.Position = UDim2.new(1, 5, 0, StackY)
+		Notification:SetAttribute("ID", NotificationLibrary.Notifications)
+		Notification:SetAttribute("CurrentPosition", UDim2.new(1, -SlideX, 0, StackY))
+
+		NotificationLibrary.LiveNotifications += 1
+		NotificationLibrary.Notifications += 1
+
+		Services.TweenService:Create(
+			Notification,
+			TweenInfo.new(1, Enum.EasingStyle.Exponential),
+			{ Position = UDim2.new(1, -SlideX, 0, Notification.Position.Y.Offset) }
+		):Play()
+
+		task.wait(0.25)
+		if typeof(Delay) == "Instance" then
+			Delay.Destroying:Wait()
+		else
+			Services.TweenService:Create(
+				Line,
+				TweenInfo.new(Delay - 0.25, Enum.EasingStyle.Linear),
+				{ Size = UDim2.new(1, -10, 0, 3) }
+			):Play()
+			task.wait(Delay - 0.25)
+		end
+
+		Notification:SetAttribute("Destroying", true)
+
+		Services.TweenService:Create(
+			Notification,
+			TweenInfo.new(0.3, Enum.EasingStyle.Exponential, Enum.EasingDirection.In),
+			{ Position = UDim2.new(1, 5, 0, Notification.Position.Y.Offset) }
+		):Play()
+
+		NotificationLibrary.LiveNotifications -= 1
+
+		task.wait(0.3)
+		Notification:Destroy()
+		Reflow()
+	end)
+end
+local function LolhaxNotify(TitleText, DescriptionText, Image, Color, Time)
+    local accent = Color or Color3.fromRGB(0, 120, 255)
+    local nx = GetNotifyX()
+
+    local box = Instance.new("Frame")
+    box.Name = "Notification"
+    box.Parent = NotificationHolder
+    box.AnchorPoint = Vector2.new(0.5, 0.5)
+    box.Size = UDim2.fromScale(0.23, 0.06)
+    box.Position = UDim2.fromScale(nx, 0.68)
+    box.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    box.BackgroundTransparency = 1
+    box.BorderSizePixel = 1
+    box.BorderColor3 = accent
+    box.ZIndex = 999999
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 5)
+    corner.Parent = box
+
+    local bar = Instance.new("Frame")
+    bar.Name = "Line"
+    bar.Parent = box
+    bar.AnchorPoint = Vector2.new(0, 1)
+    bar.Position = UDim2.fromScale(0, 1)
+    bar.Size = UDim2.fromScale(0, 0.035)
+    bar.BackgroundColor3 = accent
+    bar.BackgroundTransparency = 1
+    bar.BorderSizePixel = 0
+    bar.ZIndex = 1000000
+
+    local barR = Instance.new("UICorner")
+    barR.CornerRadius = UDim.new(1, 0)
+    barR.Parent = bar
+
+    local icon = Instance.new("ImageLabel")
+    icon.Name = "Logo"
+    icon.Parent = box
+    icon.AnchorPoint = Vector2.new(0.5, 0.5)
+    icon.Position = UDim2.fromScale(0.067, 0.5)
+    icon.Size = UDim2.fromScale(0.115, 0.88)
+    icon.BackgroundTransparency = 1
+    icon.BorderSizePixel = 0
+    icon.ScaleType = Enum.ScaleType.Fit
+    icon.ImageTransparency = 1
+    icon.ZIndex = 1000000
 
     if Image and Image ~= "" then
         if typeof(Image) == "string" and Image:sub(1, 13) == "rbxassetid://" then
-            Logo.Image = Image
+            icon.Image = Image
         elseif isfile and isfile(Image) and getcustomasset then
-            Logo.Image = getcustomasset(Image)
+            icon.Image = getcustomasset(Image)
         elseif LogoAsset then
-            Logo.Image = LogoAsset
+            icon.Image = LogoAsset
         end
     elseif LogoAsset then
-        Logo.Image = LogoAsset
+        icon.Image = LogoAsset
     end
 
-    local Title = Instance.new("TextLabel")
-    Title.Name = "Title"
-    Title.Parent = Main
-    Title.AnchorPoint = Vector2.new(0, 0.5)
-    Title.Position = UDim2.fromScale(0.135, 0.35)
-    Title.Size = UDim2.fromScale(0.84, 0.35)
-    Title.BackgroundTransparency = 1
-    Title.BorderSizePixel = 0
+    local title = Instance.new("TextLabel")
+    title.Name = "Title"
+    title.Parent = box
+    title.AnchorPoint = Vector2.new(0, 0.5)
+    title.Position = UDim2.fromScale(0.135, 0.35)
+    title.Size = UDim2.fromScale(0.84, 0.35)
+    title.BackgroundTransparency = 1
+    title.BorderSizePixel = 0
+    title.Font = Enum.Font.SourceSans
+    title.Text = "[mstudio45] " .. tostring(TitleText or "Notification")
+    title.TextScaled = true
+    title.TextSize = 1
+    title.TextStrokeTransparency = 0.5
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.TextColor3 = accent
+    title.TextTransparency = 1
+    title.ZIndex = 1000000
 
-    Title.Font = Enum.Font.SourceSans
-    Title.Text = "[Eternal] " .. tostring(TitleText or "Notification")
-    Title.TextScaled = true
-    Title.TextSize = 1
-    Title.TextStrokeTransparency = 0.5
-    Title.TextXAlignment = Enum.TextXAlignment.Left
-    Title.TextColor3 = MainColor
-    Title.TextTransparency = 1
-    Title.ZIndex = 1000000
+    local desc = Instance.new("TextLabel")
+    desc.Name = "Description"
+    desc.Parent = box
+    desc.AnchorPoint = Vector2.new(0, 0.5)
+    desc.Position = UDim2.fromScale(0.135, 0.68)
+    desc.Size = UDim2.fromScale(0.84, 0.29)
+    desc.BackgroundTransparency = 1
+    desc.BorderSizePixel = 0
+    desc.Font = Enum.Font.SourceSans
+    desc.Text = tostring(DescriptionText or "...")
+    desc.TextScaled = true
+    desc.TextSize = 1
+    desc.TextStrokeTransparency = 0.5
+    desc.TextXAlignment = Enum.TextXAlignment.Left
+    desc.TextColor3 = accent
+    desc.TextTransparency = 1
+    desc.ZIndex = 1000000
 
-    local Description = Instance.new("TextLabel")
-    Description.Name = "Description"
-    Description.Parent = Main
-    Description.AnchorPoint = Vector2.new(0, 0.5)
-    Description.Position = UDim2.fromScale(0.135, 0.68)
-    Description.Size = UDim2.fromScale(0.84, 0.29)
-    Description.BackgroundTransparency = 1
-    Description.BorderSizePixel = 0
+    local textW = math.max(title.TextBounds.X, desc.TextBounds.X) * 1.125
+    box.Size += UDim2.fromOffset(math.clamp(textW - 265, 0, 1000), 0)
 
-    Description.Font = Enum.Font.SourceSans
-    Description.Text = tostring(DescriptionText or "...")
-    Description.TextScaled = true
-    Description.TextSize = 1
-    Description.TextStrokeTransparency = 0.5
-    Description.TextXAlignment = Enum.TextXAlignment.Left
-    Description.TextColor3 = MainColor
-    Description.TextTransparency = 1
-    Description.ZIndex = 1000000
+    local snd = Instance.new("Sound")
+    snd.SoundId = "rbxassetid://3318713980"
+    snd.Volume = (Toggles.NotifyPlaySound and Toggles.NotifyPlaySound.Value and Options.NotifySoundVolume.Value) or (Toggles.NotifyPlaySound and 0 or 3)
+    snd.PlayOnRemove = true
+    snd.Parent = game.CoreGui
+    snd:Destroy()
 
-    local Number = math.max(
-        Title.TextBounds.X,
-        Description.TextBounds.X
-    ) * 1.125
-
-    local FinalOffset = math.clamp(
-        Number - 265,
-        0,
-        1000
-    )
-
-    Main.Size += UDim2.fromOffset(FinalOffset, 0)
-
-    local Sound = Instance.new("Sound")
-    Sound.SoundId = "rbxassetid://3318713980"
-    Sound.Volume = (Toggles.NotifyPlaySound and Toggles.NotifyPlaySound.Value and Options.NotifySoundVolume.Value) or (Toggles.NotifyPlaySound and 0 or 3)
-    Sound.PlayOnRemove = true
-    Sound.Parent = game.CoreGui
-    Sound:Destroy()
-
-    local Data = {
-        Main = Main,
-        Line = Line,
-        Logo = Logo,
-        Title = Title,
-        Description = Description
-    }
+    local Data = { Main = box, Line = bar, Logo = icon, Title = title, Description = desc }
 
     table.insert(Notifications, Data)
 
     local Index = #Notifications
 
-    local TargetY = 0.60 + ((Index - 1) * NotificationSpacing)
+    local TargetY = GetNotifyYBase() + ((Index - 1) * NotificationSpacing)
 
     local LockColor
 
     LockColor = RunService.RenderStepped:Connect(function()
-        if not Main or not Main.Parent then
+        if not box or not box.Parent then
             if LockColor then
                 LockColor:Disconnect()
             end
@@ -498,30 +692,30 @@ local function EternalNotify(TitleText, DescriptionText, Image, Color, Time)
             return
         end
 
-        Main.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+        box.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 
-        Main.BorderColor3 = MainColor:Lerp(
+        box.BorderColor3 = accent:Lerp(
             Color3.new(0, 0, 0),
             0.4
         )
 
-        Line.BackgroundColor3 = MainColor
+        bar.BackgroundColor3 = accent
 
-        Logo.ImageColor3 = MainColor
+        icon.ImageColor3 = accent
 
-        Title.TextColor3 = MainColor
+        title.TextColor3 = accent
 
-        Title.TextStrokeColor3 = MainColor:Lerp(
+        title.TextStrokeColor3 = accent:Lerp(
             Color3.new(0, 0, 0),
             0.8
         )
 
-        Description.TextColor3 = MainColor:Lerp(
+        desc.TextColor3 = accent:Lerp(
             Color3.new(0, 0, 0),
             0.15
         )
 
-        Description.TextStrokeColor3 = MainColor:Lerp(
+        desc.TextStrokeColor3 = accent:Lerp(
             Color3.new(0, 0, 0),
             0.8
         )
@@ -535,233 +729,91 @@ local function EternalNotify(TitleText, DescriptionText, Image, Color, Time)
         Enum.EasingDirection.Out
     )
 
-    TweenService:Create(
-        Main,
-        InInfo,
-        {
-            Position = UDim2.fromScale(0.5, TargetY),
-            BackgroundTransparency = 0.4
-        }
-    ):Play()
+    TweenService:Create(box, InInfo, { Position = UDim2.fromScale(nx, TargetY), BackgroundTransparency = 0.4 }):Play()
+    TweenService:Create(bar, InInfo, { BackgroundTransparency = 0 }):Play()
+    TweenService:Create(icon, InInfo, { ImageTransparency = 0 }):Play()
+    TweenService:Create(title, InInfo, { TextTransparency = 0 }):Play()
+    TweenService:Create(desc, InInfo, { TextTransparency = 0 }):Play()
 
-    TweenService:Create(
-        Line,
-        InInfo,
-        {
-            BackgroundTransparency = 0
-        }
-    ):Play()
-
-    TweenService:Create(
-        Logo,
-        InInfo,
-        {
-            ImageTransparency = 0
-        }
-    ):Play()
-
-    TweenService:Create(
-        Title,
-        InInfo,
-        {
-            TextTransparency = 0
-        }
-    ):Play()
-
-    TweenService:Create(
-        Description,
-        InInfo,
-        {
-            TextTransparency = 0
-        }
-    ):Play()
-
-    Line:TweenSize(
-        UDim2.fromScale(1, 0.035),
-        "Out",
-        "Linear",
-        Timer
-    )
+    bar:TweenSize(UDim2.fromScale(1, 0.035), "Out", "Linear", Timer)
 
     task.delay(Timer + 0.1, function()
-        if not Main or not Main.Parent then
+        if not box or not box.Parent then
             return
         end
 
-        local OutInfo = TweenInfo.new(
-            0.5,
-            Enum.EasingStyle.Quart,
-            Enum.EasingDirection.In
-        )
+        local OutInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+        local exit = TweenService:Create(box, OutInfo, { Position = UDim2.fromScale(nx, TargetY - 0.045), BackgroundTransparency = 1 })
+        exit:Play()
+        TweenService:Create(bar, OutInfo, { BackgroundTransparency = 1 }):Play()
+        TweenService:Create(icon, OutInfo, { ImageTransparency = 1 }):Play()
+        TweenService:Create(title, OutInfo, { TextTransparency = 1 }):Play()
+        TweenService:Create(desc, OutInfo, { TextTransparency = 1 }):Play()
 
-        local MainTween = TweenService:Create(
-            Main,
-            OutInfo,
-            {
-                Position = UDim2.fromScale(
-                    0.5,
-                    TargetY - 0.045
-                ),
-                BackgroundTransparency = 1
-            }
-        )
-
-        MainTween:Play()
-
-        TweenService:Create(
-            Line,
-            OutInfo,
-            {
-                BackgroundTransparency = 1
-            }
-        ):Play()
-
-        TweenService:Create(
-            Logo,
-            OutInfo,
-            {
-                ImageTransparency = 1
-            }
-        ):Play()
-
-        TweenService:Create(
-            Title,
-            OutInfo,
-            {
-                TextTransparency = 1
-            }
-        ):Play()
-
-        TweenService:Create(
-            Description,
-            OutInfo,
-            {
-                TextTransparency = 1
-            }
-        ):Play()
-
-        MainTween.Completed:Once(function()
-            if LockColor then
-                LockColor:Disconnect()
+        exit.Completed:Once(function()
+            if LockColor then LockColor:Disconnect() end
+            for i, n in ipairs(Notifications) do
+                if n == Data then table.remove(Notifications, i) break end
             end
-
-            for i, Notification in ipairs(Notifications) do
-                if Notification == Data then
-                    table.remove(Notifications, i)
-                    break
-                end
-            end
-
-            Main:Destroy()
-
-            UpdateEternalPositions()
+            box:Destroy()
+            Updatemstudio45Positions()
         end)
     end)
 end
 
 Functions.Notify = function(Settings)
-    local HiddenContainer = GetHiddenContainer()
+    if not Settings.Body then Settings.Body = "..." end
 
-    if not Settings.Body then
-        Settings.Body = "..."
-    end
-
-    if not Options.NotifyStyle
-    or Options.NotifyStyle.Value == "Eternal" then
-
-        local IsEntity = false
-        local EntityName = ""
-
-        for Index, Object in pairs(Entities) do
-            if Object.NotifyMessage.Title == Settings.Title
-            or Object.NotifyMessage.Body == Settings.Body then
-                IsEntity = true
-                EntityName = Index
-                break
-            end
-        end
-
-        local NotificationColor = Color3.fromRGB(0, 120, 255)
-
-        EternalNotify(
-            Settings.Title,
-            Settings.Body,
-            Settings.Image,
-            NotificationColor,
-            Settings.Time
-        )
-
+    if Options.NotifyStyle and Options.NotifyStyle.Value == "LolhaxV3" then
+        LolhaxNotify(Settings.Title, Settings.Body, Settings.Image, Color3.fromRGB(0, 120, 255), Settings.Time)
+    elseif Options.NotifyStyle and Options.NotifyStyle.Value == "mstudio45" then
+        local snd = Instance.new("Sound", GetHiddenContainer())
+        snd.SoundId = "rbxassetid://4590662766"
+        snd.Volume = (Toggles.NotifyPlaySound and Toggles.NotifyPlaySound.Value and Options.NotifySoundVolume.Value) or (Toggles.NotifyPlaySound and 0 or 3)
+        snd.PlayOnRemove = true
+        snd:Destroy()
+        NotificationLibrary:Notify(Settings.Title, Settings.Body, Settings.Time or 5)
     else
-
-        local Sound = Instance.new("Sound", HiddenContainer)
-
-        Sound.SoundId = "rbxassetid://4590662766"
-
-        Sound.Volume =
-            (Toggles.NotifyPlaySound
-            and Toggles.NotifyPlaySound.Value
-            and Options.NotifySoundVolume.Value)
-            or (Toggles.NotifyPlaySound and 0 or 3)
-
-        Sound.PlayOnRemove = true
-        Sound:Destroy()
-
-        Library:OldNotify({
-            Title = Settings.Title,
-            Description = Settings.Body,
-            Time = Settings.Time
-        })
+        Library:OldNotify({ Title = Settings.Title, Description = Settings.Body, Time = Settings.Time })
     end
 end
-
 Functions.Caption = function(Text, PlaySound)
-	if typeof(PlaySound) ~= "boolean" then
-		PlaySound = true
-	end
-	local CaptionValue = Instance.new("NumberValue")
-	local Caption = Globals.MainUI:WaitForChild("MainFrame"):WaitForChild("Caption"):Clone()
-	local CaptionSound = Globals.MainUI:WaitForChild("Initiator"):WaitForChild("Main_Game"):WaitForChild("Reminder"):WaitForChild("Caption")
-	local CaptionSoundClone = CaptionSound:Clone()
-	CaptionSoundClone.Parent = CaptionSound.Parent
-	CaptionSoundClone.Volume = 0.1
+	if typeof(PlaySound) ~= "boolean" then PlaySound = true end
 
-	Caption.Destroying:Connect(function()
-		CaptionValue:Destroy()
-	end)
+	local val = Instance.new("NumberValue")
+	local cap = Global.MainUI:WaitForChild("MainFrame"):WaitForChild("Caption"):Clone()
+	local src = Global.MainUI:WaitForChild("Initiator"):WaitForChild("Main_Game"):WaitForChild("Reminder"):WaitForChild("Caption")
+	local snd = src:Clone()
+	snd.Parent = src.Parent
+	snd.Volume = 0.1
 
-	for _, Child in Globals.MainUI:GetChildren() do
-		if Child.Name == "LiveCaption" then
-			Child:Destroy()
-		end
+	cap.Destroying:Connect(function() val:Destroy() end)
+
+	for _, c in Global.MainUI:GetChildren() do
+		if c.Name == "LiveCaption" then c:Destroy() end
 	end
 
-	Caption.Parent = Globals.MainUI
-	Caption.Visible = true
-	Caption.Name = "LiveCaption"
-	Caption.Text = Text
+	cap.Parent = Global.MainUI
+	cap.Visible = true
+	cap.Name = "LiveCaption"
+	cap.Text = Text
 
-	if PlaySound then
-		CaptionSoundClone:Play()
-	end
+	if PlaySound then snd:Play() end
+	Services.Debris:AddItem(snd, 5)
 
-	Services.Debris:AddItem(CaptionSoundClone, 5)
-
-	local HolderTween = Services.TweenService:Create(CaptionValue, TweenInfo.new(3), { Value = 100 })
-	HolderTween:Play()
-	HolderTween.Completed:Connect(function()
-		CaptionValue:Destroy()
-		Services.TweenService:Create(Caption, TweenInfo.new(4, Enum.EasingStyle.Linear), { TextTransparency = 1 }):Play()
-		Services.TweenService:Create(Caption, TweenInfo.new(4, Enum.EasingStyle.Linear), { TextStrokeTransparency = 1 }):Play()
+	local tw = Services.TweenService:Create(val, TweenInfo.new(3), { Value = 100 })
+	tw:Play()
+	tw.Completed:Connect(function()
+		val:Destroy()
+		Services.TweenService:Create(cap, TweenInfo.new(4, Enum.EasingStyle.Linear), { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
 	end)
 end
 
 Functions.GetHasteTime = function()
-	local TimeRemaining = FloorReplicated.DigitalTimer.Value
-	local Minutes = math.floor(TimeRemaining / 60)
-	local Seconds = TimeRemaining - (Minutes * 60)
-	local MinutesText = Minutes < 10 and ("0" .. tostring(Minutes)) or tostring(Minutes)
-	local SecondsText = Seconds < 10 and ("0" .. tostring(Seconds)) or tostring(Seconds)
-	return MinutesText .. ":" .. SecondsText
+	local t = FloorReplicated.DigitalTimer.Value
+	local m = math.floor(t / 60)
+	local s = t - m * 60
+	return string.format("%02d:%02d", m, s)
 end
 
 Library.OldNotify = Library.Notify
@@ -802,20 +854,48 @@ local FakeEvents = {
 	Shade   = Instance.new("RemoteEvent"),
 	A90     = Instance.new("RemoteEvent"),
 	Surge   = Instance.new("RemoteEvent"),
+	Figure = Instance.new("RemoteEvent"),
 }
 
 FakeEvents.Screech.Name  = "Screech"
 FakeEvents.Shade.Name    = "ShadeResult"
 FakeEvents.A90.Name      = "A90"
 FakeEvents.Surge.Name    = "SurgeRemote"
+FakeEvents.Figure.Name = "FootstepRemoteThatWeNeed"
 
 FakeEvents.Screech_Real = RemotesFolder:WaitForChild("Screech")
 FakeEvents.Shade_Real   = RemotesFolder:WaitForChild("ShadeResult")
 FakeEvents.A90_Real     = RemotesFolder:FindFirstChild("A90")
 FakeEvents.Surge_Real   = RemotesFolder:FindFirstChild("SurgeRemote")
+FakeEvents.Figure_Real = RemotesFolder:FindFirstChild("FootstepRemoteThatWeNeed")
 
-Globals.FogInstances = {}
-Globals.OldFog = Services.Lighting.FogEnd
+if not Workspace:FindFirstChild("mstudio45_Folder") then
+local BkRemotes = Instance.new("Folder", game.Workspace)
+BkRemotes.Name = "mstudio45_Folder"
+end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "DontDelete"
+gui.IgnoreGuiInset = true
+gui.Enabled = false
+gui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Parent = gui
+frame.Size = UDim2.new(1, 0, 1, 0)
+frame.Position = UDim2.new(0, 0, 0, 0)
+frame.BackgroundColor3 = Color3.new(0, 0, 0)
+
+local img = Instance.new("ImageLabel")
+img.Parent = frame
+img.Size = UDim2.new(1, 0, 1, 0)
+img.Position = UDim2.new(0, 0, 0, 0)
+img.BackgroundTransparency = 1
+img.ScaleType = Enum.ScaleType.Stretch
+img.Image = "rbxassetid://126189096308482"
+
+Global.FogInstances = {}
+Global.OldFog = Services.Lighting.FogEnd
 
 for _, Object in Services.Lighting:GetChildren() do
 	if Object:IsA("Atmosphere") then
@@ -831,40 +911,53 @@ for _, Object in Services.Lighting:GetChildren() do
 		end)
 
 		Object.Destroying:Once(function()
-			AtmoConnection:Disconnect()
+			if AtmoConnection then AtmoConnection:Disconnect() end
 		end)
 
-		table.insert(Connections, AtmoConnection)
-		table.insert(Globals.FogInstances, Object)
+		table.insert(Conns, AtmoConnection)
+		table.insert(Global.FogInstances, Object)
 	end
 end
 
-Globals.SeekNodesFolder = Instance.new("Folder", Services.Workspace)
-Globals.SeekNodesFolder.Name = Eternal.ESPLibrary:GenerateRandomString()
+local function GenRandomStr()
+	local str
+	pcall(function()
+		if mstudio45 and mstudio45.ESPLibrary and type(mstudio45.ESPLibrary.GenerateRandomString) == "function" then
+			str = mstudio45.ESPLibrary:GenerateRandomString()
+		end
+	end)
+	if type(str) == "string" and #str > 0 then return str end
+	return "Folder_" .. tostring(math.random(100000, 999999))
+end
 
-Globals.RoomsNodesFolder = Instance.new("Folder", Services.Workspace)
-Globals.RoomsNodesFolder.Name = Eternal.ESPLibrary:GenerateRandomString()
+Global.SeekNodesFolder = Instance.new("Folder", Services.Workspace)
+Global.SeekNodesFolder.Name = GenRandomStr()
+
+Global.RoomsNodesFolder = Instance.new("Folder", Services.Workspace)
+Global.RoomsNodesFolder.Name = GenRandomStr()
 
 Functions.SendChat = function(Message)
-	local Folder = Services.ReplicatedStorage:FindFirstChild("DefaultChatSystemEvents") or Instance.new("Folder")
-	local Event = Folder:FindFirstChild("SayMessageRequest") or Instance.new("RemoteEvent")
-	Event:FireServer(Message, "All")
-	local Channel = (Services.TextChatService:FindFirstChild("TextChannels") and Services.TextChatService.TextChannels:FindFirstChild("RBXGeneral")) or Instance.new("TextChannel")
-	Channel:SendAsync(Message)
+	local ok, Chan = pcall(function()
+		return Services.TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+	end)
+	if ok and Chan then
+		Chan:SendAsync(Message)
+		return
+	end
+	local Legacy = Services.ReplicatedStorage:FindFirstChild("DefaultChatSystemEvents")
+	if Legacy then
+		local SayReq = Legacy:FindFirstChild("SayMessageRequest")
+		if SayReq then SayReq:FireServer(Message, "All") end
+	end
 end
 
 Functions.IsCrouching = function()
-    if Toggles.CrouchSpoof.Value or Toggles.PositionSpoof.Value then
-        return true
-    end
-
     if Floor == "Fools" or Floor == "OldHotel" then
         return Character:GetAttribute("Crouching")
     end
 
     return CollisionPart.CollisionGroup == "PlayerCrouching"
 end
-
 
 Functions.GetInjuriesSpeed = function()
 	return 0.075 * (Humanoid.MaxHealth - Humanoid.Health)
@@ -945,91 +1038,68 @@ local EntityDistances = {
 	["CustomEntity"]  = 85,
 }
 
-Functions.GetNearestEntity = function(CheckDisabled, List, UseRaycasting)
-	local Nearest = { Distance = math.huge, Object = nil }
+Functions.GetNearestEntity = function(CheckDisabled, List)
+	local best, bestDist = nil, math.huge
 
-	for _, Entity in Services.Workspace:GetChildren() do
-		if Entity and EntityDistances[Entity.Name] and Entity.PrimaryPart then
-			local EntityData = Entities[Entity.Name]
-			if not (List and List[EntityData.Name]) then
-				local Distance = LocalPlayer:DistanceFromCharacter(Entity.PrimaryPart.Position)
-				if Distance < EntityDistances[Entity.Name] and Distance < Nearest.Distance then
-					if not CheckDisabled or Entity:GetAttribute("Inactive") ~= true then
-						Nearest.Distance = Distance
-						Nearest.Object = Entity
-					end
+	for _, ent in Services.Workspace:GetChildren() do
+		local range = ent and ent.PrimaryPart and EntityDistances[ent.Name]
+		if range then
+			local skip = (List and List[Entities[ent.Name].Name])
+			local inactive = CheckDisabled and ent:GetAttribute("Inactive") == true
+			if not skip and not inactive then
+				local d = LocalPlayer:DistanceFromCharacter(ent.PrimaryPart.Position)
+				if d < range and d < bestDist then
+					best, bestDist = ent, d
 				end
 			end
 		end
 	end
-	return Nearest.Object
+	return best
 end
 
 Functions.GetNearestFigure = function()
-	local Nearest = { Distance = math.huge, Object = nil }
 	local FigureNames = { FigureRig = true, FigureRagdoll = true, Figure = true }
+	local best, bestDist = nil, math.huge
 
-	for _, Object in Objects.Entities do
-		if Object:IsA("Model") and Object.PrimaryPart and FigureNames[Object.Name] then
-			local Distance = LocalPlayer:DistanceFromCharacter(Object.PrimaryPart.Position)
-			if Distance < Nearest.Distance and Distance < 25 then
-				Nearest.Distance = Distance
-				Nearest.Object = Object
+	for _, obj in Objects.Entities do
+		if obj:IsA("Model") and obj.PrimaryPart and FigureNames[obj.Name] then
+			local d = LocalPlayer:DistanceFromCharacter(obj.PrimaryPart.Position)
+			if d < 25 and d < bestDist then
+				best, bestDist = obj, d
 			end
 		end
 	end
-	return Nearest.Object
-end
-
-Functions.GetNearestHidingSpot = function()
-	local Nearest = { Distance = math.huge, Object = nil }
-	local LastHideSpot = Character:FindFirstChild("LastHideSpot")
-
-	for _, Object in Objects.HidingSpots do
-		if Object.PrimaryPart and Object:FindFirstChild("HidePrompt") then
-			local Distance = LocalPlayer:DistanceFromCharacter(Object.PrimaryPart.Position)
-			if Distance < Object.HidePrompt.MaxActivationDistance and Distance < Nearest.Distance then
-				local Persistent = Functions.IsHidePersistent()
-				if not Persistent or (LastHideSpot and LastHideSpot.Value ~= Object) or not LastHideSpot then
-					Nearest.Distance = Distance
-					Nearest.Object = Object
-				end
-			end
-		end
-	end
-	return Nearest.Object
+	return best
 end
 
 Functions.GetNearestTurnNode = function()
-	local Nearest = { Distance = math.huge, Object = nil }
+	local best, bestDist = nil, math.huge
 
-	for _, Node in Objects.SeekNodes do
-		local Distance = LocalPlayer:DistanceFromCharacter(Node.Position)
-		if Distance < 35 and Distance < Nearest.Distance then
-			Nearest.Distance = Distance
-			Nearest.Object = Node
+	for _, node in Objects.SeekNodes do
+		local d = LocalPlayer:DistanceFromCharacter(node.Position)
+		if d < 35 and d < bestDist then
+			best, bestDist = node, d
 		end
 	end
-	return Nearest.Object
+	return best
 end
 
 Functions.GetNearestDuckBoard = function()
-	local Nearest = { Distance = math.huge, Object = nil }
+	local best, bestDist = nil, math.huge
 
-	for _, Board in Objects.SeekDuckBoards do
-		if Board.PrimaryPart then
-			local Distance = LocalPlayer:DistanceFromCharacter(Board.PrimaryPart.Position)
-			if Distance < 25 and Distance < Nearest.Distance then 
-				Nearest.Distance = Distance
-				Nearest.Object = Board
+	for _, board in Objects.SeekDuckBoards do
+		if board.PrimaryPart then
+			local d = LocalPlayer:DistanceFromCharacter(board.PrimaryPart.Position)
+			if d < 25 and d < bestDist then
+				best, bestDist = board, d
 			end
 		end
 	end
-	return Nearest.Object
+	return best
 end
 
 Functions.GetCurrentAnchor = function()
-	local AnchorCode = Globals.MainUI.AnchorHintFrame.AnchorCode.Text
+	local AnchorCode = Global.MainUI.AnchorHintFrame.AnchorCode.Text
 	for _, Anchor in Objects.Objectives do
 		if Anchor.Name == "MinesAnchor" and Anchor:FindFirstChild("Sign") then
 			if Anchor.Sign.TextLabel.Text == AnchorCode then
@@ -1064,9 +1134,9 @@ Functions.GetFlyVelocity = function()
 	return Velocity.Unit
 end
 
-Globals.PromptContainer = Instance.new("Folder")
-Globals.PromptContainer.Name = "PromptContainer"
-Globals.PromptContainer.Parent = GetHiddenContainer()
+Global.PromptContainer = Instance.new("Folder")
+Global.PromptContainer.Name = "PromptContainer"
+Global.PromptContainer.Parent = GetHiddenContainer()
 
 local ESPBlacklist = {}
 
@@ -1082,68 +1152,81 @@ Functions.AddESP = function(ESPOptions, RoomBased)
 		local ObjectRoom = tonumber(Object:GetAttribute("ParentRoom"))
 
 		if ObjectRoom == CurrentRoom or (table.find(Objects.Doors, Object) and ObjectRoom == CurrentRoom + 1) then
-			Eternal.ESPLibrary:AddESP(ESPOptions)
+			mstudio45.ESPLibrary:AddESP(ESPOptions)
 		end
 
 		local RoomConnection = LocalPlayer:GetAttributeChangedSignal("CurrentRoom"):Connect(function()
-			if Eternal.ESPLibrary.ColorTable[Object] then
-				ESPOptions.Color = Eternal.ESPLibrary.ColorTable[Object]
+			if mstudio45.ESPLibrary.ColorTable[Object] then
+				ESPOptions.Color = mstudio45.ESPLibrary.ColorTable[Object]
 			end
 
 			local NewCurrentRoom = tonumber(LocalPlayer:GetAttribute("CurrentRoom"))
 			local ObjRoom = tonumber(Object:GetAttribute("ParentRoom"))
 
 			if ObjRoom == NewCurrentRoom or (table.find(Objects.Doors, Object) and ObjRoom == NewCurrentRoom + 1) then
-				Eternal.ESPLibrary:AddESP(ESPOptions)
+				mstudio45.ESPLibrary:AddESP(ESPOptions)
 			else
-				Eternal.ESPLibrary:RemoveESP(Object)
+				mstudio45.ESPLibrary:RemoveESP(Object)
 			end
 		end)
 
-		table.insert(Connections, RoomConnection)
-		ESPConnections[Object] = RoomConnection
+		table.insert(Conns, RoomConnection)
+		ESPConns[Object] = RoomConnection
 
 		Object.Destroying:Once(function()
 			RoomConnection:Disconnect()
-			if Eternal then
-				Eternal.ESPLibrary:RemoveESP(Object)
+			if mstudio45 then
+				mstudio45.ESPLibrary:RemoveESP(Object)
 			end
-			local Pos = table.find(Connections, RoomConnection)
-			if Pos then table.remove(Connections, Pos) end
+			local Pos = table.find(Conns, RoomConnection)
+			if Pos then table.remove(Conns, Pos) end
 		end)
 	else
-		Eternal.ESPLibrary:AddESP(ESPOptions)
+		mstudio45.ESPLibrary:AddESP(ESPOptions)
 	end
 end
 
 Functions.RemoveESP = function(Object)
-	local Conn = ESPConnections[Object]
+	local Conn = ESPConns[Object]
 	if Conn then
 		Conn:Disconnect()
-		ESPConnections[Object] = nil
-		local Pos = table.find(Connections, Conn)
-		if Pos then table.remove(Connections, Pos) end
+		ESPConns[Object] = nil
+		local Pos = table.find(Conns, Conn)
+		if Pos then table.remove(Conns, Pos) end
 	end
-	Eternal.ESPLibrary:RemoveESP(Object)
+	mstudio45.ESPLibrary:RemoveESP(Object)
 end
 
 Functions.BlacklistESP = function(Object)
 	table.insert(ESPBlacklist, Object)
 end
 
-Functions.GetDoorNumber = function(Object)
-	local DoorNumber = tonumber(Object.Parent.Name) or tonumber(Object.Parent.Parent.Name)
-	if DoorNumber then
-		DoorNumber = DoorNumber + 1
-	end
-	if Floor == "Mines" then
-		DoorNumber = DoorNumber + 100
-	end
-	if Floor == "Backdoor" then
-		DoorNumber = DoorNumber - 50
-	end
+Functions.GetAttributeOpened = function(Object)
+	return if Object:GetAttribute("Opened") then "[Opened]" else nil
+end
 
-	return tostring(DoorNumber)
+local function GetDoorText(Object)
+	return "Door " .. (Functions.GetAttributeOpened(Object) or "")
+end
+
+local function RefreshDoorESP(Door, ESPObj)
+	if mstudio45 and mstudio45.ESPLibrary then
+		mstudio45.ESPLibrary:UpdateObjectText(ESPObj, GetDoorText(Door))
+	end
+end
+local function KeepDoorTextSynced(Object, ESPObj)
+	local conn
+	conn = Services.RunService.Heartbeat:Connect(function()
+		if not (mstudio45 and mstudio45.ESPLibrary) or not Object.Parent then
+			if conn then conn:Disconnect() end
+		else
+			RefreshDoorESP(Object, ESPObj)
+		end
+	end)
+	Object.Destroying:Once(function()
+		if conn then conn:Disconnect() end
+	end)
+	return conn
 end
 
 Functions.GetLibraryCode = function()
@@ -1176,8 +1259,9 @@ Functions.GetLibraryCode = function()
 end
 
 local Window = Library:CreateWindow({
-	Title = "catpaint",
-	Footer = "dsc.gg/PB9AHh6sub",
+	Title = "mstudio45 V4",
+	Footer = "Game: DOORS | dsc.gg/mstudio45",
+	Icon = 77196040991392,
 	NotifySide = "Right",
 	ShowCustomCursor = false,
 	AutoShow = true,
@@ -1187,48 +1271,109 @@ local Window = Library:CreateWindow({
 	CornerRadius = 2,
 })
 
-Eternal.Interface.ApplyInfoTab(Window)
+if mstudio45.Interface and type(mstudio45.Interface.ApplyInfoTab) == "function" then
+    pcall(function() mstudio45.Interface.ApplyInfoTab(Window) end)
+end
 
 local Tabs = {
 	General  = Window:AddTab("General", "house"),
 	Exploits = Window:AddTab("Exploits", "shield"),
 	Visuals  = Window:AddTab("Visuals", "eye"),
-	Floors   = Window:AddTab("Floors", "earth"),
+	Floors   = Window:AddTab("Floors", "globe"),
+	Troll    = Window:AddTab("Troll", "smile"),
+	Settings = Window:AddTab("Settings", "settings"),
 }
 
-Gb.General_Character = Tabs.General:AddLeftGroupbox("Character")
-Gb.General_Character:AddSlider("SpeedBoostSlider", {
-	Text = "Speed Boost", Min = 0, Max = 100, Default = 0, Rounding = 0, Compact = true
+local MenuGroup = Tabs.Settings:AddLeftGroupbox("Menu")
+MenuGroup:AddToggle("KeybindMenuOpen", {
+	Default = Library.KeybindFrame and Library.KeybindFrame.Visible or false,
+	Text = "Open Keybind Menu",
+	Callback = function(value)
+		if Library.KeybindFrame then Library.KeybindFrame.Visible = value end
+	end,
 })
-Gb.General_Character:AddToggle("SpeedBoostToggle", {
-	Text = "Enable Speed Boost", Default = false, Tooltip = "Increases your walkspeed by the specified amount."
+MenuGroup:AddToggle("ShowCustomCursor", {
+	Text = "Custom Cursor",
+	Default = false,
+	Callback = function(Value)
+		Library.ShowCustomCursor = Value
+	end,
 })
-Gb.General_Character:AddToggle("FlyToggle", {
+MenuGroup:AddToggle("AlwaysOnTop", {
+	Text = "Always On Top",
+	Default = Window.AlwaysOnTop or false,
+	Callback = function(Value)
+		if Window.SetAlwaysOnTop then Window:SetAlwaysOnTop(Value) end
+	end,
+})
+MenuGroup:AddDivider()
+MenuGroup:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu keybind" })
+MenuGroup:AddButton("Copy Discord Invite", function()
+	if toclipboard then toclipboard("https://dsc.gg/mstudio45") end
+	Library:Notify("Discord invite copied.")
+end)
+MenuGroup:AddButton("Unload", function()
+	Library:Unload()
+end)
+
+Library.ToggleKeybind = Options.MenuKeybind
+
+Options.MenuKeybind:OnClick(function()
+	Library:Toggle()
+end)
+
+Services.UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.RightControl or input.KeyCode == Enum.KeyCode.RightShift then
+		Library:Toggle()
+	end
+end)
+
+pcall(function()
+	if ThemeManager and SaveManager then
+		ThemeManager:SetLibrary(Library)
+		SaveManager:SetLibrary(Library)
+		SaveManager:IgnoreThemeSettings()
+		ThemeManager:SetFolder("mstudio45")
+		SaveManager:SetFolder("mstudio45/Doors")
+		SaveManager:BuildConfigSection(Tabs.Settings)
+		ThemeManager:ApplyToTab(Tabs.Settings)
+	end
+end)
+
+General_Character = Tabs.General:AddLeftGroupbox("Character")
+General_Character:AddSlider("WalkSpeedSlider", {
+	Text = "WalkSpeed", Min = 0, Max = 100, Default = 0, Rounding = 0, Compact = true
+})
+General_Character:AddToggle("WalkSpeedToggle", {
+	Text = "Enable Walk Speed", Default = false, Tooltip = "Increases your walkspeed by the specified amount."
+})
+General_Character:AddToggle("FlyToggle", {
 	Text = "Fly", Default = false, Tooltip = "Allows you to freely fly around the map."
 })
 Toggles.FlyToggle:AddKeyPicker("FlyKeybind", {
 	Text = "Fly", Default = "F", Mode = "Toggle", SyncToggleState = true
 })
-Gb.General_Character:AddSlider("FlySpeed", {
+General_Character:AddSlider("FlySpeed", {
 	Text = "Fly Speed", Min = 0, Max = 115, Default = 20, Rounding = 0, Compact = true
 })
-Gb.General_Character:AddDivider()
-Gb.General_Character:AddToggle("NoclipToggle", {
+General_Character:AddDivider()
+General_Character:AddToggle("NoclipToggle", {
 	Text = "Noclip", Default = false, Tooltip = "Allows your character to pass through solid objects."
 })
-Gb.General_Character:AddToggle("RemoveClosetDelay", {
+General_Character:AddToggle("RemoveClosetDelay", {
 	Text = "No Closet Delay", Default = false,
 	Tooltip = "Removes the short window where you can't exit out of a closet after the animation finishes."
 })
-Gb.General_Character:AddToggle("RemoveAcceleration", {
+General_Character:AddToggle("RemoveAcceleration", {
 	Text = "Remove Acceleration", Default = false, Tooltip = "Prevents your character from sliding while moving."
 })
 
 local CustomPhysics
 
-Options.SpeedBoostSlider:OnChanged(function(Value)
+Options.WalkSpeedSlider:OnChanged(function(Value)
 	if RemotesFolder:FindFirstChild("Crouch") then
-		RemotesFolder.Crouch:FireServer(Value and true or Functions.IsCrouching(), true)
+		RemotesFolder.Crouch:FireServer(Value and true or Functions.IsCrouching())
 	end
 end)
 
@@ -1241,16 +1386,16 @@ Toggles.RemoveAcceleration:OnChanged(function(Value)
 	end
 end)
 
-Gb.General_Character:AddDivider()
-Gb.General_Character:AddToggle("EnableCharacterJump", {
+General_Character:AddDivider()
+General_Character:AddToggle("EnableCharacterJump", {
 	Text = "Enable Jumping", Default = false, Tooltip = "Allows your character to jump."
 })
 
 local OldJump = false
 
-Toggles.SpeedBoostToggle:OnChanged(function(Value)
+Toggles.WalkSpeedToggle:OnChanged(function(Value)
 	if Humanoid then
-		Humanoid.WalkSpeed = Functions.GetCurrentSpeed() + (Value and Options.SpeedBoostSlider.Value or 0)
+		Humanoid.WalkSpeed = Functions.GetCurrentSpeed() + (Value and Options.WalkSpeedSlider.Value or 0)
 	end
 end)
 Toggles.EnableCharacterJump:OnChanged(function(Value)
@@ -1259,16 +1404,40 @@ Toggles.EnableCharacterJump:OnChanged(function(Value)
 	end
 end)
 
-Gb.General_Self = Tabs.General:AddLeftGroupbox("Self")
-Gb.General_Self:AddToggle("DoorReachToggle", {
+General_Self = Tabs.General:AddLeftGroupbox("Player")
+General_Self:AddToggle("DoorReachToggle", {
 	Text = "Door Reach", Default = false, Tooltip = "Allows you to open doors from further away."
 })
-Gb.General_Self:AddToggle("DisableIdleKick", {
+
+local DoorReachConnection = nil
+local DoorReachLastFire = 0
+
+Toggles.DoorReachToggle:OnChanged(function(Value)
+	if Value then
+		if DoorReachConnection then return end
+		DoorReachConnection = Services.RunService.Heartbeat:Connect(function()
+			if tick() - DoorReachLastFire < 0.5 then return end
+			local LatestRoom = GameData:FindFirstChild("LatestRoom")
+			local Room = LatestRoom and CurrentRooms:FindFirstChild(tostring(LatestRoom.Value))
+			local Door = Room and Room:FindFirstChild("Door")
+			local ClientOpen = Door and Door:FindFirstChild("ClientOpen")
+			if ClientOpen then
+				ClientOpen:FireServer()
+				DoorReachLastFire = tick()
+			end
+		end)
+		table.insert(Conns, DoorReachConnection)
+	elseif DoorReachConnection then
+		DoorReachConnection:Disconnect()
+		DoorReachConnection = nil
+	end
+end)
+General_Self:AddToggle("DisableIdleKick", {
 	Text = "Disable Idle Kick", Default = false, Tooltip = "Prevents the kick from being idle for 20 minutes."
 })
 Toggles.DisableIdleKick:OnChanged(function(Value)
-	if Functions.CC({"getconnections"}) then
-		for _, Conn in Eternal.Environment.getconnections(LocalPlayer.Idled) do
+	if Functions.CheckEnv("getCons") then
+		for _, Conn in mstudio45.Environment.getCons(LocalPlayer.Idled) do
 			if Value then Conn:Disable() else Conn:Enable() end
 		end
 	end
@@ -1280,14 +1449,14 @@ LocalPlayer.Idled:Connect(function()
 	end
 end)
 
-Gb.General_Self:AddDivider()
-Gb.General_Self:AddSlider("PromptReachSlider", {
+General_Self:AddDivider()
+General_Self:AddSlider("PromptReachSlider", {
 	Text = "Prompt Reach Multiplier", Min = 1, Max = 2, Default = 1, Rounding = 1, Compact = true
 })
-Gb.General_Self:AddToggle("InstantPrompts", {
+General_Self:AddToggle("InstantPrompts", {
 	Text = "Instant Prompts", Default = false, Tooltip = "Allows you to trigger all prompts instantly."
 })
-Gb.General_Self:AddToggle("PromptClip", {
+General_Self:AddToggle("PromptClip", {
 	Text = "Prompt Clip", Default = false, Tooltip = "Allows you to interact with prompts through walls."
 })
 
@@ -1307,21 +1476,21 @@ Toggles.PromptClip:OnChanged(function(Value)
 	end
 end)
 
-Gb.Self_Misc = Tabs.General:AddRightGroupbox("Game")
-Gb.Self_Automation = Tabs.General:AddRightGroupbox("Automation")
-Gb.Self_Automation:AddToggle("AutoBreakerBox", {
+Self_Misc = Tabs.General:AddRightGroupbox("Game")
+Self_Automation = Tabs.General:AddRightGroupbox("Automation")
+Self_Automation:AddToggle("AutoBreakerBox", {
 	Text = "Auto Breaker Box", Default = false, Tooltip = "Automatically solves the breaker box."
 })
-Gb.Self_Automation:AddToggle("AutoSolveAnchors", {
+Self_Automation:AddToggle("AutoSolveAnchors", {
 	Text = "Auto Anchor", Default = false,
 	Tooltip = "Automatically enters the correct code into anchors when you are near them."
 })
 Toggles.AutoBreakerBox:OnChanged(function(Value)
 	if Value and CurrentRooms:FindFirstChild("ElevatorBreaker", true) then
-		if not Globals.BreakerBoxInteracted then
-			if not Globals.BreakerBoxNotified then
+		if not Global.BreakerBoxInteracted then
+			if not Global.BreakerBoxNotified then
 				Functions.Notify({ Title = "Interact with the breaker box.", Body = "It will be automatically solved." })
-				Globals.BreakerBoxInteracted = true
+				Global.BreakerBoxInteracted = true
 			end
 		else
 			RemotesFolder.EBF:FireServer()
@@ -1329,50 +1498,50 @@ Toggles.AutoBreakerBox:OnChanged(function(Value)
 	end
 end)
 
-Gb.Self_Automation:AddDivider()
-Gb.Self_Automation:AddToggle("AutoUnlockPadlockToggle", {
+Self_Automation:AddDivider()
+Self_Automation:AddToggle("AutoUnlockPadlockToggle", {
 	Text = "Auto Unlock Padlock", Default = false, Tooltip = "Automatically enters the code into the library padlock."
 })
-Gb.Self_Automation:AddSlider("AutoUnlockPadlockSlider", {
+Self_Automation:AddSlider("AutoUnlockPadlockSlider", {
 	Text = "Unlock Distance", Min = 1, Max = 50, Default = 10, Rounding = 0, Compact = true
 })
-Gb.Self_Automation:AddDivider()
-Gb.Self_Automation:AddToggle("AutoInteractToggle", {
+Self_Automation:AddDivider()
+Self_Automation:AddToggle("AutoInteractToggle", {
 	Text = "Auto Interact", Default = false, Tooltip = "Automatically triggers nearby prompts."
 })
 Toggles.AutoInteractToggle:AddKeyPicker("AutoInteractKeybind", {
 	Text = "Auto Interact", Default = "R",
 	Mode = "Toggle", SyncToggleState = true
 })
-Gb.Self_Automation:AddDropdown("AutoInteractIgnoreList", {
+Self_Automation:AddDropdown("AutoInteractIgnoreList", {
 	Text = "Ignore List",
 	Values = { "Glitch Fragments", "Jeff Items", "Dropped Items", "Currency", "Minecarts", "Locks" },
-	Default = { "Glitch Fragments", "Jeff Items", "Dropped Items" },
+	Default = { "Glitch Fragments", "Jeff Items", "Dropped Items", "Minecarts" },
 	Multi = true, AllowNull = true
 })
 
-Gb.Self_Misc:AddButton({
+Self_Misc:AddButton({
 	Text = "Play Again", Tooltip = "Makes you join a new run, click again to cancel.", DoubleClick = true,
 	Func = function() RemotesFolder.PlayAgain:FireServer() end
 })
-Gb.Self_Misc:AddButton({
+Self_Misc:AddButton({
 	Text = "Return to Lobby", Tooltip = "Makes you teleport back to the lobby.", DoubleClick = true,
 	Func = function() RemotesFolder.Lobby:FireServer() end
 })
-Gb.Self_Misc:AddButton({
+Self_Misc:AddButton({
 	Text = "Revive",
 	Tooltip = "Makes you revive, if you have a revive and haven't already revived in this run.",
 	DoubleClick = true,
 	Func = function() RemotesFolder.Revive:FireServer() end
 })
-Gb.Self_Misc:AddButton({
+Self_Misc:AddButton({
 	Text = "Reset Character",
 	Tooltip = "Kills your character on the server. (takes around 20 seconds if replicatesignal isn't supported)",
 	DoubleClick = true,
 	Func = function()
-		Globals.SelfKilled = true
-		if Functions.CC({"replicatesignal"}) then
-			Eternal.Environment.replicatesignal(LocalPlayer.Kill)
+		Global.SelfKilled = true
+		if Functions.CheckEnv("replicatesignal") then
+			mstudio45.Environment.replicatesignal(LocalPlayer.Kill)
 		else
 			if RemotesFolder:FindFirstChild("Underwater") then
 				RemotesFolder.Underwater:FireServer(true)
@@ -1383,45 +1552,128 @@ Gb.Self_Misc:AddButton({
 	end
 })
 
-Gb.Exploits_Anti = Tabs.Exploits:AddLeftGroupbox("Anti")
-Gb.Exploits_Anti:AddToggle("BypassGiggle",         { Text = "Anti Giggle",           Default = false, Tooltip = "Prevents 'Giggle' from attacking you." })
-Gb.Exploits_Anti:AddToggle("BypassDupe",           { Text = "Anti Dupe",             Default = false, Tooltip = "Prevents you from open 'Dupe' fake doors." })
-Gb.Exploits_Anti:AddToggle("BypassEyes",           { Text = "Anti Eyes",             Default = false, Tooltip = "Prevents 'Eyes' from hurting you." })
-Gb.Exploits_Anti:AddToggle("BypassLookman",        { Text = "Anti Lookman",          Default = false, Tooltip = "Prevents 'Lookman' from hurting you." })
-Gb.Exploits_Anti:AddToggle("BypassGloombatEggs",   { Text = "Anti Gloombat Eggs",    Default = false, Tooltip = "Prevents taking damage from stepping on 'Gloombat' eggs." })
-Gb.Exploits_Anti:AddToggle("BypassSeekObstructions", { Text = "Anti Seek Obstructions", Default = false, Tooltip = "Prevents obstacles in the 'Seek' chase from harming you." })
-Gb.Exploits_Anti:AddToggle("BypassVacuum",         { Text = "Anti Vacuum",           Default = false, Tooltip = "Prevents you from falling into 'Vacuum' fake doors." })
-Gb.Exploits_Anti:AddToggle("BypassKillbricks",     { Text = "Anti Killbricks",       Default = false, Tooltip = "Prevents 'Lava' from hurting you." })
-Gb.Exploits_Anti:AddToggle("BypassSeekingWall",    { Text = "Anti Seek Wall",     Default = false, Tooltip = "Prevents 'ScaryWall' from hurting you." })
-Gb.Exploits_Anti:AddToggle("BypassSnare",          { Text = "Anti Snare",            Default = false, Tooltip = "Prevents 'Snare' from trapping you." })
-Gb.Exploits_Anti:AddToggle("BypassBanana",         { Text = "Anti Banana",           Default = false, Tooltip = "Prevents 'Banana Peel' from slipping you up (sometimes doesn't work)." })
-Gb.Exploits_Anti:AddToggle("BypassJeff",           { Text = "Anti Jeff (FE)",             Default = false, Tooltip = "Prevents 'Jeff the Killer' from stabbing you (sometimes doesn't work)." })
-Gb.Exploits_Anti:AddToggle("BypassMandrake", {
+Exploits_Anti = Tabs.Exploits:AddLeftGroupbox("Anti")
+Exploits_Anti:AddToggle("BypassGiggle",         { Text = "Anti Giggle",           Default = false, Tooltip = "Prevents 'Giggle' from attacking you." })
+Exploits_Anti:AddToggle("BypassDupe",           { Text = "Anti Dupe",             Default = false, Tooltip = "Prevents you from open 'Dupe' fake doors." })
+Exploits_Anti:AddToggle("BypassEyes",           { Text = "Anti Eyes",             Default = false, Tooltip = "Prevents 'Eyes' from hurting you." })
+Exploits_Anti:AddToggle("BypassLookman",        { Text = "Anti Lookman",          Default = false, Tooltip = "Prevents 'Lookman' from hurting you." })
+Exploits_Anti:AddToggle("BypassGloombatEggs",   { Text = "Anti Gloombat Eggs",    Default = false, Tooltip = "Prevents taking damage from stepping on 'Gloombat' eggs." })
+Exploits_Anti:AddToggle("BypassSeekObstructions", { Text = "Anti Seek Obstructions", Default = false, Tooltip = "Prevents obstacles in the 'Seek' chase from harming you." })
+Exploits_Anti:AddToggle("BypassVacuum",         { Text = "Anti Vacuum",           Default = false, Tooltip = "Prevents you from falling into 'Vacuum' fake doors." })
+Exploits_Anti:AddToggle("BypassKillbricks",     { Text = "Anti Killbricks",       Default = false, Tooltip = "Prevents 'Lava' from hurting you." })
+Exploits_Anti:AddToggle("BypassSeekingWall",    { Text = "Anti Seek Wall",     Default = false, Tooltip = "Prevents 'ScaryWall' from hurting you." })
+Exploits_Anti:AddToggle("BypassSnare",          { Text = "Anti Snare",            Default = false, Tooltip = "Prevents 'Snare' from trapping you." })
+Exploits_Anti:AddToggle("BypassBanana",         { Text = "Anti Banana",           Default = false, Tooltip = "Prevents 'Banana Peel' from slipping you up (sometimes doesn't work)." })
+Exploits_Anti:AddToggle("BypassJeff",           { Text = "Anti Jeff (FE)",             Default = false, Tooltip = "Prevents 'Jeff the Killer' from stabbing you (sometimes doesn't work)." })
+Exploits_Anti:AddToggle("BypassMandrake", {
     Text = "Anti Mandrake (FE)",
     Default = false,
-    Tooltip = "Prevents 'Mandrake' from attacking you."
+    Tooltip = "Prevents 'Mandrake' from attacking you.",
+    Disabled = false,
+    DisabledTooltip = nil
 })
 
 Toggles.BypassMandrake:OnChanged(function(Value)
-    for _, Object in Objects.Entities do
-        if Object.Name == "Root" and Object:IsA("BasePart") then
+	for _, Object in Objects.Entities do
+		if Object.Name == "Root" and Object:IsA("BasePart") then
+			local BF = Object:FindFirstChild("AntiMandrakeForce")
+			if Value then
+				if not BF then
+					BF = Instance.new("BodyForce")
+					BF.Name = "AntiMandrakeForce"
+					BF.Parent = Object
+				end
+				BF.Force = Vector3.new(0, -100000, 0)
+			else
+				if BF then
+					BF:Destroy()
+				end
+			end
+		end
+	end
+end)
 
-            local BF = Object:FindFirstChild("AntiMandrakeForce")
+Exploits_Anti:AddToggle("AntiDrone", {
+    Text = "Anti Drone",
+    Default = false,
+    Tooltip = "Instantly deletes any Drone model or entity as soon as it appears in Workspace."
+})
 
-            if Value then
-                if not BF then
-                    BF = Instance.new("BodyForce")
-                    BF.Name = "AntiMandrakeForce"
-                    BF.Parent = Object
-                end
+local AntiDroneConnection = nil
+local function CheckAndDestroyDrone(obj)
+    if not obj then return end
+    local name = obj.Name:lower()
+    if name:find("drone") then
+        task.spawn(function()
+            pcall(function()
+                obj:Destroy()
+            end)
+        end)
+    end
+end
 
-                BF.Force = Vector3.new(100000, -99999999, 100000)
-            else
-                if BF then
-                    BF:Destroy()
-                end
+Toggles.AntiDrone:OnChanged(function(Value)
+    if AntiDroneConnection then
+        AntiDroneConnection:Disconnect()
+        AntiDroneConnection = nil
+    end
+    if Value then
+        for _, obj in ipairs(Services.Workspace:GetDescendants()) do
+            CheckAndDestroyDrone(obj)
+        end
+        AntiDroneConnection = Services.Workspace.DescendantAdded:Connect(function(obj)
+            if Toggles.AntiDrone and Toggles.AntiDrone.Value then
+                CheckAndDestroyDrone(obj)
+            end
+        end)
+    end
+end)
+
+Exploits_Anti:AddToggle("BypassElectrifiedWater", {
+    Text = "Anti Electrified Water",
+    Default = true,
+    Tooltip = "Disables touch damage on all electrified water parts, puddles and wires."
+})
+
+local AntiWaterConnection = nil
+local function ApplyWaterBypass(state)
+    local currentRooms = Services.Workspace:FindFirstChild("CurrentRooms")
+    if not currentRooms then return end
+    for _, desc in ipairs(currentRooms:GetDescendants()) do
+        if desc:IsA("BasePart") then
+            local n = desc.Name:lower()
+            local mat = tostring(desc.Material):lower()
+            if n:find("water") or n:find("puddle") or n:find("wet") or n:find("electric") or n:find("shock") or n:find("zap") or n:find("spill") or n:find("current") or mat:find("water") then
+                pcall(function()
+                    desc.CanTouch = not state
+                    desc.CanCollide = false
+                end)
             end
         end
+    end
+end
+
+Toggles.BypassElectrifiedWater:OnChanged(function(Value)
+    if AntiWaterConnection then
+        AntiWaterConnection:Disconnect()
+        AntiWaterConnection = nil
+    end
+    if Value then
+        ApplyWaterBypass(true)
+        AntiWaterConnection = Services.Workspace.DescendantAdded:Connect(function(desc)
+            if Toggles.BypassElectrifiedWater and Toggles.BypassElectrifiedWater.Value and desc:IsA("BasePart") then
+                local n = desc.Name:lower()
+                local mat = tostring(desc.Material):lower()
+                if n:find("water") or n:find("puddle") or n:find("wet") or n:find("electric") or n:find("shock") or n:find("zap") or n:find("spill") or n:find("current") or mat:find("water") then
+                    pcall(function()
+                        desc.CanTouch = false
+                        desc.CanCollide = false
+                    end)
+                end
+            end
+        end)
+    else
+        ApplyWaterBypass(false)
     end
 end)
 
@@ -1443,21 +1695,19 @@ Toggles.BypassDupe:OnChanged(function(Value)
 	end
 end)
 Toggles.BypassEyes:OnChanged(function(Value)
-	if Value and Globals.IsEyes then
-		if Floor == "Fools" or Floor == "OldHotel" then
-			RemotesFolder.MotorReplication:FireServer(0, (Globals.SpoofOffset == 200 and 65 or -65), 0, false)
-		else
-			RemotesFolder.MotorReplication:FireServer(-650)
-		end
+	if not Value or not Global.IsEyes then return end
+	if Floor == "Fools" or Floor == "OldHotel" then
+		RemotesFolder.MotorReplication:FireServer(0, (Global.SpoofOffset == 200 and 65 or -65), 0, false)
+	else
+		RemotesFolder.MotorReplication:FireServer(-650)
 	end
 end)
 Toggles.BypassLookman:OnChanged(function(Value)
-	if Value and Globals.IsLookman then
-		if Floor == "Fools" or Floor == "OldHotel" then
-			RemotesFolder.MotorReplication:FireServer(0, (Globals.SpoofOffset == 200 and 65 or -65), 0, false)
-		else
-			RemotesFolder.MotorReplication:FireServer(-650)
-		end
+	if not Value or not Global.IsLookman then return end
+	if Floor == "Fools" or Floor == "OldHotel" then
+		RemotesFolder.MotorReplication:FireServer(0, (Global.SpoofOffset == 200 and 65 or -65), 0, false)
+	else
+		RemotesFolder.MotorReplication:FireServer(-650)
 	end
 end)
 Toggles.BypassGloombatEggs:OnChanged(function(Value)
@@ -1534,142 +1784,163 @@ Toggles.BypassJeff:OnChanged(function(Value)
 	end
 end)
 
-Gb.Exploits_Troll = Tabs.Exploits:AddRightGroupbox("Other")
-Gb.Exploits_Troll:AddToggle("TwerkDance", { 
+Exploits_Troll = Tabs.Exploits:AddRightGroupbox("Other")
+Exploits_Troll:AddToggle("TwerkDance", { 
     Text = "Twerk", 
     Default = false, 
     Tooltip = "just Twerk." 
 })
-Gb.Exploits_Troll:AddToggle("OrbitStuff", { 
-    Text = "Orbit Items", 
-    Default = false, 
-    Disabled = Floor == "Party",
-    DisabledTooltip = Floor == "Party" and "Orbit items is disabled on this floor." or nil,
-    Tooltip = "Spins items that are dropped around you." 
+local OrbitStuffToggle = Exploits_Troll:AddToggle("OrbitStuff", {
+	Text = "Orbit Items",
+	Default = false,
+	Disabled = Floor == "Party",
+	DisabledTooltip = Floor == "Party" and "Orbit items is disabled on this floor." or nil,
+	Tooltip = "Spins items that are dropped around you."
 })
+OrbitStuffToggle = OrbitStuffToggle or Toggles.OrbitStuff
 
-Gb.Exploits_Troll:AddToggle("OrbitHidePrompts", { 
-    Text = "Hide Prompts", 
-    Default = false, 
-    Tooltip = "Hides prompts when orbiting items." 
+local OrbitHidePromptsToggle = Exploits_Troll:AddToggle("OrbitHidePrompts", {
+	Text = "Hide Prompts",
+	Default = false,
+	Tooltip = "Hides prompts when orbiting items."
 })
-Gb.Exploits_Troll:AddSlider("OrbitSpeed", { Text = "Orbit Speed", Min = 2, Max = 5, Default = 2, Rounding = 1 })
-Gb.Exploits_Troll:AddSlider("OrbitYOffset", { Text = "Orbit Y Offset", Min = 0, Max = 2, Default = 2, Rounding = 1 })
+OrbitHidePromptsToggle = OrbitHidePromptsToggle or Toggles.OrbitHidePrompts
 
-radius = 4
+local OrbitSpeedOption = Exploits_Troll:AddSlider("OrbitSpeed", { Text = "Orbit Speed", Min = 2, Max = 10, Default = 2, Rounding = 1 })
+OrbitSpeedOption = OrbitSpeedOption or Options.OrbitSpeed
 
-Toggles.OrbitStuff:OnChanged(function(Value)
-    if Value then
-        task.spawn(function()
-            while Toggles.OrbitStuff.Value do
-                local items = Drops:GetChildren()
-                if Toggles.OrbitHidePrompts.Value then
-                    for _, item in ipairs(items) do
-                        for _, obj in ipairs(item:GetDescendants()) do
-                            if obj:IsA("ProximityPrompt") then
-                                obj.Enabled = false
-                            end
-                        end
-                    end
-                else
-                    for _, item in ipairs(items) do
-                        for _, obj in ipairs(item:GetDescendants()) do
-                            if obj:IsA("ProximityPrompt") then
-                                obj.Enabled = true
-                            end
-                        end
-                    end
-                end
+local OrbitYOffsetOption = Exploits_Troll:AddSlider("OrbitYOffset", { Text = "Orbit Y Offset", Min = 0, Max = 2, Default = 2, Rounding = 1 })
+OrbitYOffsetOption = OrbitYOffsetOption or Options.OrbitYOffset
 
-                local t = tick()
-                local count = #items
+local radius = 4
+local OrbitConnection
+local CachedGlowsticks = {}
 
-                for i, drop in ipairs(items) do
-                    if drop:IsA("Model") then
-                        local angle = t * Options.OrbitSpeed.Value + (i / count) * math.pi * 2
+local function RefreshGlowsticks()
+	CachedGlowsticks = {}
+	for _, Descendant in game.Workspace:GetDescendants() do
+		if Descendant.Name == "GlowstickLive" and Descendant:IsA("BasePart") then
+			table.insert(CachedGlowsticks, Descendant)
+		end
+	end
+end
 
-                        local offset = Vector3.new(
-                            math.cos(angle) * radius,
-                            -Options.OrbitYOffset.Value,
-                            math.sin(angle) * radius
-                        )
+OrbitStuffToggle:OnChanged(function(Value)
+	if Value then
+		if OrbitConnection then return end
+		RefreshGlowsticks()
 
-                        local newPos = Character.HumanoidRootPart.Position + offset
-                        drop:PivotTo(CFrame.new(newPos))
-                    end
-                end
+		local RescanTimer = 0
+		OrbitConnection = RunService.RenderStepped:Connect(function()
+			RescanTimer += 1
+			if RescanTimer >= 30 then
+				RescanTimer = 0
+				RefreshGlowsticks()
+			end
 
-                task.wait()
-            end
-        end)
-    end
+			local items = {}
+			for _, Drop in Drops:GetChildren() do
+				table.insert(items, Drop)
+			end
+			for _, Glow in ipairs(CachedGlowsticks) do
+				table.insert(items, Glow)
+			end
+
+			local showPrompts = OrbitHidePromptsToggle and not OrbitHidePromptsToggle.Value
+			for _, item in ipairs(items) do
+				for _, obj in ipairs(item:GetDescendants()) do
+					if obj:IsA("ProximityPrompt") then
+						obj.Enabled = showPrompts
+					end
+				end
+			end
+
+			local t = tick()
+			local count = #items
+
+			for i, drop in ipairs(items) do
+				if drop:IsA("Model") or drop:IsA("BasePart") then
+					local angle = t * OrbitSpeedOption.Value + (i / count) * math.pi * 2
+					local offset = Vector3.new(
+						math.cos(angle) * radius,
+						-OrbitYOffsetOption.Value,
+						math.sin(angle) * radius
+					)
+					local newPos = Character.HumanoidRootPart.Position + offset
+					drop:PivotTo(CFrame.new(newPos))
+				end
+			end
+		end)
+	else
+		if OrbitConnection then
+			OrbitConnection:Disconnect()
+			OrbitConnection = nil
+		end
+	end
 end)
 
 local track
 
 Toggles.TwerkDance:OnChanged(function(Value)
-    if Value then
-
-        local anim = Instance.new("Animation")
-        anim.AnimationId = "rbxassetid://12874447851"
-
+	if Value then
+		local anim = Instance.new("Animation")
+		anim.AnimationId = "rbxassetid://12874447851"
 		local hum = Character:FindFirstChildOfClass("Humanoid")
-        track = hum:LoadAnimation(anim)
-        track.Looped = true
-        track:Play()
-
-    else
-        if track then
-            track:Stop()
-        end
-    end
+		track = hum:LoadAnimation(anim)
+		track.Looped = true
+		track:Play()
+	else
+		if track then
+			track:Stop()
+		end
+	end
 end)
 
-Gb.Exploits_BypassRight = Tabs.Exploits:AddRightGroupbox("Bypass")
-Gb.Exploits_BypassRight:AddToggle("DisableAnticheat", {
+Exploits_BypassRight = Tabs.Exploits:AddRightGroupbox("Bypass")
+Exploits_BypassRight:AddToggle("DisableAnticheat", {
 	Text = "Anticheat Bypass", Default = false,
 	Tooltip = "Completely disables the anticheat, after interacting with a ladder."
 })
-Gb.Exploits_BypassRight:AddToggle("TeleportManipulationToggle", {
+Exploits_BypassRight:AddToggle("TeleportManipulationToggle", {
 	Text = "Teleport Manipulation", Default = false,
 	Tooltip = "Moves your character forward slowly, mitigating the game's anti-noclip."
 })
 Toggles.DisableAnticheat:OnChanged(function(Value)
-	if Globals.AnticheatDisabled == true and not Value then
+	if Global.AnticheatDisabled == true and not Value then
 		RemotesFolder.ClimbLadder:FireServer()
-		Globals.AnticheatDisabled = false
+		Global.AnticheatDisabled = false
 	end
 end)
 Toggles.TeleportManipulationToggle:AddKeyPicker("TeleportManipulationKeybind", {
 	Text = "Teleport Manipulation", Default = "V",
 	Mode = Library.IsMobile and "Toggle" or "Hold", SyncToggleState = true
 })
-Gb.Exploits_BypassRight:AddDropdown("TeleportManipulationMode", {
+Exploits_BypassRight:AddDropdown("TeleportManipulationMode", {
 	Values = {"Pivot", "Velocity"}, Text = "Manipulation Method",
 	Default = 1,
 })
-Gb.Exploits_BypassRight:AddDivider()
-Gb.Exploits_BypassRight:AddToggle("InfiniteItemsToggle", {
+Exploits_BypassRight:AddDivider()
+Exploits_BypassRight:AddToggle("InfiniteItemsToggle", {
 	Text = "Infinite Items", Default = false,
 	Tooltip = "Allows certain items to be used without draining their uses.",
-	Disabled = not Functions.CC({"fireproximityprompt"}),
-	DisabledTooltip = Globals.IncompatibleMessage
+	Disabled = not Functions.CheckEnv("fireproximityprompt"),
+	DisabledTooltip = Global.ExecutorIssueMessage
 })
-Gb.Exploits_BypassRight:AddDropdown("InfiniteItemsList", {
+Exploits_BypassRight:AddDropdown("InfiniteItemsList", {
 	Text = "Item List",
-	Values = { "Lockpicks", "Skeleton Key", "Shears", "Multitool" },
+	Values = { "Lockpicks", "Skeleton Key", "Shears", "Multitool", "Crucifix" },
 	Multi = true, AllowNull = true,
-	Disabled = not Functions.CC({"fireproximityprompt"}),
-	DisabledTooltip = Globals.IncompatibleMessage
+	Disabled = not Functions.CheckEnv("fireproximityprompt"),
+	DisabledTooltip = Global.ExecutorIssueMessage
 })
 
-Gb.Exploits_BypassRight:AddDivider()
-Gb.Exploits_BypassRight:AddToggle("PositionSpoof", {
+Exploits_BypassRight:AddDivider()
+Exploits_BypassRight:AddToggle("PositionSpoof", {
 	Text = "Position Spoof", Default = false,
-	Tooltip = "Makes your character appear underground on the server, protecting you from rush-like entities."
+	Tooltip = "Makes it that you will be invincible against rush like entities."
 })
-Gb.Exploits_BypassRight:AddToggle("CrouchSpoof", {
-	Text = "Crouch Spoof", Default = false, Tooltip = "Makes the game think you are always crouching."
+Exploits_BypassRight:AddToggle("AnitFigureHearing", {
+	Text = "Anti Figure Hearing", Default = false, Tooltip = "Makes the game think you are always crouching."
 })
 Toggles.PositionSpoof:OnChanged(function(Value)
 	if Floor ~= "Fools" and Floor ~= "OldHotel" then
@@ -1684,47 +1955,61 @@ Toggles.PositionSpoof:OnChanged(function(Value)
 	end
 end)
 Toggles.PositionSpoof:AddKeyPicker("PositionSpoof", {
-	Text = "Position Spoof", Default = "B", Mode = "Toggle", SyncToggleState = true
+	Text = "Position Spoof", Default = "G", Mode = "Toggle", SyncToggleState = true
 })
+Toggles.AnitFigureHearing:OnChanged(function(Value)
+	if RemotesFolder:FindFirstChild("Crouch") then
+		RemotesFolder.Crouch:FireServer(Value and true or Functions.IsCrouching(), true)
+	end
+end)
 
+Toggles.AnitFigureHearing:OnChanged(function(Value)
+	if Value then
+		FakeEvents.Figure.Parent = RemotesFolder
+		FakeEvents.Figure_Real.Parent = Workspace.mstudio45_Folder
+	else
+		FakeEvents.Figure_Real.Parent = RemotesFolder
+		FakeEvents.Figure.Parent = Workspace.mstudio45_Folder
+	end
+end)
 
-Gb.Exploits_Remove = Tabs.Exploits:AddRightGroupbox("Remove")
-Gb.Exploits_Remove:AddToggle("RemoveScreech", { Text = "Remove Screech",  Default = false, Tooltip = "Prevents 'Screech' from spawning." })
-Gb.Exploits_Remove:AddToggle("RemoveHalt",    { Text = "Remove Halt",     Default = false, Tooltip = "Prevents 'Halt' from spawning." })
-Gb.Exploits_Remove:AddToggle("RemoveA90",     { Text = "Remove A-90",     Default = false, Tooltip = "Prevents 'A-90' from spawning." })
-Gb.Exploits_Remove:AddToggle("RemoveDread",   { Text = "Remove Dread",    Default = false, Tooltip = "Prevents 'Dread' from spawning." })
-Gb.Exploits_Remove:AddDivider()
-Gb.Exploits_Remove:AddToggle("NoScreechDamage", { Text = "No Screech Damage", Default = false, Tooltip = "Prevents 'Screech' from hurting you." })
-Gb.Exploits_Remove:AddToggle("NoHaltDamage",    { Text = "No Halt Damage",    Default = false, Tooltip = "Prevents 'Halt' from hurting you." })
-Gb.Exploits_Remove:AddToggle("NoA90Damage",     { Text = "No A-90 Damage",    Default = false, Tooltip = "Prevents 'A-90' from hurting you." })
-Gb.Exploits_Remove:AddToggle("NoSurgeDamage",   { Text = "No Surge Damage",   Default = false, Tooltip = "Prevents 'Surge' from hurting you." })
+Exploits_Remove = Tabs.Exploits:AddRightGroupbox("Remove")
+Exploits_Remove:AddToggle("RemoveScreech", { Text = "Remove Screech",  Default = false, Tooltip = "Prevents 'Screech' from spawning." })
+Exploits_Remove:AddToggle("RemoveHalt",    { Text = "Remove Halt",     Default = false, Tooltip = "Prevents 'Halt' from spawning." })
+Exploits_Remove:AddToggle("RemoveA90",     { Text = "Remove A-90",     Default = false, Tooltip = "Prevents 'A-90' from spawning." })
+Exploits_Remove:AddToggle("RemoveDread",   { Text = "Remove Dread",    Default = false, Tooltip = "Prevents 'Dread' from spawning." })
+Exploits_Remove:AddDivider()
+Exploits_Remove:AddToggle("NoScreechDamage", { Text = "No Screech Damage", Default = false, Tooltip = "Prevents 'Screech' from hurting you." })
+Exploits_Remove:AddToggle("NoHaltDamage",    { Text = "No Halt Damage",    Default = false, Tooltip = "Prevents 'Halt' from hurting you." })
+Exploits_Remove:AddToggle("NoA90Damage",     { Text = "No A-90 Damage",    Default = false, Tooltip = "Prevents 'A-90' from hurting you." })
+Exploits_Remove:AddToggle("NoSurgeDamage",   { Text = "No Surge Damage",   Default = false, Tooltip = "Prevents 'Surge' from hurting you." })
 
 Toggles.NoScreechDamage:OnChanged(function(Value)
 	if Value then
 		FakeEvents.Screech.Parent = RemotesFolder
-		FakeEvents.Screech_Real.Parent = nil
+		FakeEvents.Screech_Real.Parent = Workspace.mstudio45_Folder
 	else
 		FakeEvents.Screech_Real.Parent = RemotesFolder
-		FakeEvents.Screech.Parent = nil
+		FakeEvents.Screech.Parent = Workspace.mstudio45_Folder
 	end
 end)
 Toggles.NoHaltDamage:OnChanged(function(Value)
 	if Value then
 		FakeEvents.Shade.Parent = RemotesFolder
-		FakeEvents.Shade_Real.Parent = nil
+		FakeEvents.Shade_Real.Parent = Workspace.mstudio45_Folder
 	else
 		FakeEvents.Shade_Real.Parent = RemotesFolder
-		FakeEvents.Shade.Parent = nil
+		FakeEvents.Shade.Parent = Workspace.mstudio45_Folder
 	end
 end)
 Toggles.NoA90Damage:OnChanged(function(Value)
 	if RemotesFolder:FindFirstChild("A90") then
 		if Value then
 			FakeEvents.A90.Parent = RemotesFolder
-			FakeEvents.A90_Real.Parent = nil
+			FakeEvents.A90_Real.Parent = Workspace.mstudio45_Folder
 		else
 			FakeEvents.A90_Real.Parent = RemotesFolder
-			FakeEvents.A90.Parent = nil
+			FakeEvents.A90.Parent = Workspace.mstudio45_Folder
 		end
 	end
 end)
@@ -1732,74 +2017,224 @@ Toggles.NoSurgeDamage:OnChanged(function(Value)
 	if RemotesFolder:FindFirstChild("SurgeRemote") then
 		if Value then
 			FakeEvents.Surge.Parent = RemotesFolder
-			FakeEvents.Surge_Real.Parent = nil
+			FakeEvents.Surge_Real.Parent = Workspace.mstudio45_Folder
 		else
 			FakeEvents.Surge_Real.Parent = RemotesFolder
-			FakeEvents.Surge.Parent = nil
+			FakeEvents.Surge.Parent = Workspace.mstudio45_Folder
 		end
 	end
 end)
 
 local Modules = {}
 
-Toggles.RemoveScreech:OnChanged(function(Value)
-	Modules.Screech.Name = Value and "Screech_Disabled" or "Screech"
-	if Modules.GlitchScreech then
-		Modules.GlitchScreech.Name = Value and "GlitchScreech_Disabled" or "GlitchScreech"
-	end
-end)
-Toggles.RemoveHalt:OnChanged(function(Value)
-	Modules.Shade.Name = Value and "Shade_Disabled" or "Shade"
-end)
-Toggles.RemoveA90:OnChanged(function(Value)
-	if Modules.A90 then
-		Modules.A90.Name = Value and "A90_Disabled" or "A90"
-	end
-end)
-Toggles.RemoveDread:OnChanged(function(Value)
-	if Modules.Dread then
-		Modules.Dread.Name = Value and "Dread_Disabled" or "Dread"
-	end
-end)
+local DISABLED_HOLDER_NAME = "mstudio45DisabledModules"
+local DECOY_ATTR = "mstudio45Decoy"
+local DisabledModuleDummy
+local OriginalRequire
+local RequireHookInstalled = false
 
-Gb.Exploits_Audio = Tabs.Exploits:AddLeftGroupbox("Sound")
-Globals.JamMuffle = Services.SoundService:WaitForChild("Main"):FindFirstChild("Jamming") or Instance.new("EqualizerSoundEffect")
+local function EnsureRequireHook()
+	if RequireHookInstalled then return end
+	local Env = mstudio45 and mstudio45.Environment
+	if not (Env and Env.hookfunction and Env.newcclosure) then return end
+	DisabledModuleDummy = DisabledModuleDummy or setmetatable({}, {
+		__call = function() end,
+		__index = function() return function() end end,
+		__newindex = function() end,
+	})
+	local Hook = Env.newcclosure(function(Module, ...)
+		if type(Module) == "Instance" and Module:IsA("ModuleScript") and Module:GetAttribute(DECOY_ATTR) then
+			return DisabledModuleDummy
+		end
+		return OriginalRequire(Module, ...)
+	end)
+	local ok, NewOriginal = pcall(Env.hookfunction, require, Hook)
+	if ok and NewOriginal then
+		OriginalRequire = NewOriginal
+		RequireHookInstalled = true
+	end
+end
 
-Gb.Exploits_Audio:AddToggle("RemoveJamminMusic",       { Text = "Remove Jammin Music",       Default = false, Tooltip = "Removes the music and muffle effect from the 'Jammin' modifier." })
+local function RestoreRequireHook()
+	if RequireHookInstalled and OriginalRequire then
+		local Env = mstudio45 and mstudio45.Environment
+		if Env and Env.hookfunction then
+			pcall(Env.hookfunction, require, OriginalRequire)
+		end
+	end
+	RequireHookInstalled = false
+	OriginalRequire = nil
+end
+
+local function EnsureDisabledHolder(Parent)
+	if not Parent then return nil end
+	local Holder = Parent:FindFirstChild(DISABLED_HOLDER_NAME)
+	if not Holder then
+		Holder = Instance.new("Folder")
+		Holder.Name = DISABLED_HOLDER_NAME
+		Holder.Parent = Parent
+	end
+	return Holder
+end
+
+local function SetModuleDisabled(ModulesFolder, Module, ToggleOn)
+	if not Module then return end
+	if ToggleOn then
+		if Module.Name:sub(-9) ~= "_Disabled" then
+			Module.Name = Module.Name .. "_Disabled"
+		end
+	else
+		if Module.Name:sub(-9) == "_Disabled" then
+			Module.Name = Module.Name:sub(1, -10)
+		end
+	end
+end
+
+local function FindRealModule(ModulesFolder, Holder, Name)
+	if not ModulesFolder then return nil end
+	local Real = Holder and Holder:FindFirstChild(Name)
+	if Real then return Real end
+	Real = ModulesFolder:FindFirstChild(Name)
+	if Real and Real:GetAttribute(DECOY_ATTR) then return nil end
+	return Real
+end
+
+local function FindUIModules()
+	local PlayerGui = LocalPlayer:FindFirstChild("PlayerGui")
+	if not PlayerGui then return nil end
+	local MainUI = PlayerGui:FindFirstChild("MainUI")
+	if not MainUI then return nil end
+	local Initiator = MainUI:FindFirstChild("Initiator")
+	if not Initiator then return nil end
+	local Main_Game = Initiator:FindFirstChild("Main_Game")
+	if not Main_Game then return nil end
+	local RL = Main_Game:FindFirstChild("RemoteListener")
+	if not RL then return nil end
+	return RL:FindFirstChild("Modules")
+end
+
+local function FindEntityModules()
+	local ModulesClient = Services.ReplicatedStorage:FindFirstChild("ModulesClient") or Services.ReplicatedStorage:FindFirstChild("ClientModules")
+	if not ModulesClient then return nil end
+	return ModulesClient:FindFirstChild("EntityModules")
+end
+
+local function RenameModule(Folder, From, To)
+	if not Folder then return end
+	local Mod = Folder:FindFirstChild(From) or Folder:FindFirstChild(To)
+	if Mod then Mod.Name = To end
+end
+
+local function SyncEntityRemoval()
+	local UIModules = FindUIModules()
+	if Toggles.RemoveScreech.Value then
+		RenameModule(UIModules, "Screech", "Screech_Disabled")
+	else
+		RenameModule(UIModules, "Screech_Disabled", "Screech")
+	end
+	if Toggles.RemoveA90.Value then
+		RenameModule(UIModules, "A90", "A90_Disabled")
+	else
+		RenameModule(UIModules, "A90_Disabled", "A90")
+	end
+	if Toggles.RemoveDread.Value then
+		RenameModule(UIModules, "Dread", "Dread_Disabled")
+	else
+		RenameModule(UIModules, "Dread_Disabled", "Dread")
+	end
+	if Toggles.DisableTimothyJumpscare.Value then
+		RenameModule(UIModules, "SpiderJumpscare", "SpiderJumpscare_Disabled")
+	else
+		RenameModule(UIModules, "SpiderJumpscare_Disabled", "SpiderJumpscare")
+	end
+	local EM = FindEntityModules()
+	if Toggles.RemoveHalt.Value then
+		RenameModule(EM, "Shade", "Shade_Disabled")
+	else
+		RenameModule(EM, "Shade_Disabled", "Shade")
+	end
+	if Toggles.DisableGlitchJumpscare.Value then
+		RenameModule(EM, "Glitch", "Glitch_Disabled")
+	else
+		RenameModule(EM, "Glitch_Disabled", "Glitch")
+	end
+	if Toggles.DisableVoidJumpscare.Value then
+		RenameModule(EM, "Void", "Void_Disabled")
+	else
+		RenameModule(EM, "Void_Disabled", "Void")
+	end
+end
+
+local function RestoreAllModules()
+	local function RestoreFolder(Folder)
+		if not Folder then return end
+		for _, Child in Folder:GetChildren() do
+			if Child.Name:sub(-9) == "_Disabled" then
+				Child.Name = Child.Name:sub(1, -10)
+			end
+		end
+	end
+	if Global.MainUI and Global.MainUI.Initiator and Global.MainUI.Initiator.Main_Game then
+		local RL = Global.MainUI.Initiator.Main_Game:FindFirstChild("RemoteListener")
+		if RL then
+			local UIModules = RL:FindFirstChild("Modules")
+			if UIModules then RestoreFolder(UIModules) end
+		end
+	end
+	local ModulesClient = Services.ReplicatedStorage:FindFirstChild("ModulesClient") or Services.ReplicatedStorage:FindFirstChild("ClientModules")
+	if ModulesClient then
+		local EM = ModulesClient:FindFirstChild("EntityModules")
+		if EM then RestoreFolder(EM) end
+	end
+	local FloorReplicated = Services.ReplicatedStorage:FindFirstChild("FloorReplicated")
+	if FloorReplicated then RestoreFolder(FloorReplicated) end
+end
+
+Toggles.RemoveScreech:OnChanged(function() SyncEntityRemoval() end)
+Toggles.RemoveHalt:OnChanged(function() SyncEntityRemoval() end)
+Toggles.RemoveA90:OnChanged(function() SyncEntityRemoval() end)
+Toggles.RemoveDread:OnChanged(function() SyncEntityRemoval() end)
+
+Exploits_Audio = Tabs.Exploits:AddLeftGroupbox("Sound")
+Global.JamMuffle = Services.SoundService:WaitForChild("Main"):FindFirstChild("Jamming") or Instance.new("EqualizerSoundEffect")
+
+Exploits_Audio:AddToggle("RemoveJamminMusic",       { Text = "Remove Jammin Music",       Default = false, Tooltip = "Removes the music and muffle effect from the 'Jammin' modifier." })
 
 Toggles.RemoveJamminMusic:OnChanged(function(Value)
-	local Jam = Globals.MainUI.Initiator.Main_Game.Health:FindFirstChild("Jam")
+	local Jam = Global.MainUI.Initiator.Main_Game.Health:FindFirstChild("Jam")
 	if Jam then
 		Jam.Volume = Value and 0 or 0.45
-		Globals.JamMuffle.Enabled = LiveModifiers:FindFirstChild("Jammin") and not Value or false
+		Global.JamMuffle.Enabled = LiveModifiers:FindFirstChild("Jammin") and not Value or false
 	end
 end)
 
-Gb.Visuals_LeftTab = Tabs.Visuals:AddLeftTabbox("Camera / Effects")
-Gb.Visuals_Camera = Gb.Visuals_LeftTab:AddTab("Camera")
-Gb.Visuals_Camera:AddToggle("AmbientToggle", { Text = "Ambient", Default = false, Tooltip = "Changes the lighting color to the specified value." })
-Gb.Visuals_Camera:AddSlider("FieldOfView", { Text = "Field of View", Min = 1, Max = 120, Default = 70, Rounding = 0 })
-Gb.Visuals_Camera:AddDivider()
-Gb.Visuals_Camera:AddToggle("RemoveCameraShake", {
+Visuals_LeftTab = Tabs.Visuals:AddLeftTabbox("Camera / Effects")
+Visuals_Camera = Visuals_LeftTab:AddTab("Camera")
+Visuals_Camera:AddToggle("AmbientToggle", { Text = "Ambient", Default = false, Tooltip = "Changes the lighting color to the specified value." })
+Visuals_Camera:AddSlider("FieldOfView", { Text = "Field of View", Min = 1, Max = 120, Default = 70, Rounding = 0 })
+Visuals_Camera:AddDivider()
+Visuals_Camera:AddToggle("RemoveCameraShake", {
 	Text = "Remove Camera Shake", Default = false, Tooltip = "Prevents the camera from shaking.",
-	Disabled = not Functions.CC({"require"}), DisabledTooltip = Globals.IncompatibleMessage
+	Disabled = not Functions.CheckEnv("require"), DisabledTooltip = Global.ExecutorIssueMessage
 })
-Gb.Visuals_Camera:AddToggle("RemoveCameraBobbing", {
+Visuals_Camera:AddToggle("RemoveCameraBobbing", {
 	Text = "Remove Camera Bobbing", Default = false, Tooltip = "Prevents the camera from bobbing when moving.",
-	Disabled = not Functions.CC({"require"}), DisabledTooltip = Globals.IncompatibleMessage
+	Disabled = not Functions.CheckEnv("require"), DisabledTooltip = Global.ExecutorIssueMessage
 })
-Gb.Visuals_Camera:AddToggle("RemoveCameraFog", { Text = "Remove Fog", Default = false, Tooltip = "Removes all fog effects from the camera." })
-Gb.Visuals_Camera:AddDivider()
-Gb.Visuals_Camera:AddToggle("ThirdPersonToggle", { Text = "Third Person", Default = false, Tooltip = "Zooms out your camera, allowing you to see your character from behind." })
+Visuals_Camera:AddToggle("RemoveCameraFog", { Text = "Remove Fog", Default = false, Tooltip = "Removes all fog effects from the camera." })
+Visuals_Camera:AddDivider()
+Visuals_Camera:AddToggle("ThirdPersonToggle", { Text = "Third Person", Default = false, Tooltip = "Zooms out your camera, allowing you to see your character from behind." })
 Toggles.ThirdPersonToggle:AddKeyPicker("ThirdPersonKeybind", { Text = "Third Person", Default = "T", Mode = "Toggle", SyncToggleState = true })
-Gb.Visuals_Camera:AddSlider("ThirdPersonOffsetX", { Text = "X Offset", Min = -10, Max = 10, Default = 1.5, Rounding = 1, Compact = true })
-Gb.Visuals_Camera:AddSlider("ThirdPersonOffsetY", { Text = "Y Offset", Min = -10, Max = 10, Default = 1,   Rounding = 1, Compact = true })
-Gb.Visuals_Camera:AddSlider("ThirdPersonOffsetZ", { Text = "Z Offset", Min = -10, Max = 10, Default = 5,   Rounding = 1, Compact = true })
-Gb.Visuals_Camera:AddToggle("ThirdPersonWallCheck", { Text = "Wall Check", Default = false, Tooltip = "Prevents third person from going through walls." })
+Visuals_Camera:AddSlider("ThirdPersonOffsetX", { Text = "X Offset", Min = -10, Max = 10, Default = 1.5, Rounding = 1, Compact = true })
+Visuals_Camera:AddSlider("ThirdPersonOffsetY", { Text = "Y Offset", Min = -10, Max = 10, Default = 1,   Rounding = 1, Compact = true })
+Visuals_Camera:AddSlider("ThirdPersonOffsetZ", { Text = "Z Offset", Min = -10, Max = 10, Default = 5,   Rounding = 1, Compact = true })
+Visuals_Camera:AddToggle("ThirdPersonWallCheck", { Text = "Wall Check", Default = false, Tooltip = "Prevents third person from going through walls." })
 
 Toggles.AmbientToggle:AddColorPicker("AmbientColor", { Text = "Ambient", Default = Color3.fromRGB(255, 255, 255), Transparency = 0 })
 Toggles.AmbientToggle:OnChanged(function(Value)
-	local OldAmbient = CurrentRooms:FindFirstChild(tostring(LocalPlayer:GetAttribute("CurrentRoom"))):GetAttribute("Ambient")
+	local Room = CurrentRooms:FindFirstChild(tostring(LocalPlayer:GetAttribute("CurrentRoom")))
+	if not Room then return end
+	local OldAmbient = Room:GetAttribute("Ambient")
 	Services.TweenService:Create(Services.Lighting, TweenInfo.new(0.2, Enum.EasingStyle.Exponential), {
 		Ambient = Value and Options.AmbientColor.Value or OldAmbient
 	}):Play()
@@ -1812,15 +2247,15 @@ Toggles.RemoveCameraBobbing:OnChanged(function(Value)
 	if Main_Game then Main_Game.spring.Speed = Value and 9e9 or 8 end
 end)
 Toggles.RemoveCameraFog:OnChanged(function(Value)
-	Services.Lighting.FogEnd = Value and 10000000 or Globals.OldFog
-	for _, Object in Globals.FogInstances do
+	Services.Lighting.FogEnd = Value and 10000000 or Global.OldFog
+	for _, Object in Global.FogInstances do
 		Object.Density = Value and 0 or Object:GetAttribute("Density_Old")
 	end
 end)
 
-Gb.Visuals_Effects = Gb.Visuals_LeftTab:AddTab("Effects")
-Gb.Visuals_Effects:AddToggle("TransparentHidingSpotsToggle", { Text = "Transparent Hiding Spots", Default = false, Tooltip = "Makes a hiding spot transparent when you enter it." })
-Gb.Visuals_Effects:AddSlider("TransparentHidingSpotsSlider", { Text = "Transparency", Min = 0, Max = 1, Default = 0.5, Rounding = 2, Compact = true })
+Visuals_Effects = Visuals_LeftTab:AddTab("Effects")
+Visuals_Effects:AddToggle("TransparentHidingSpotsToggle", { Text = "Transparent Hiding Spots", Default = false, Tooltip = "Makes a hiding spot transparent when you enter it." })
+Visuals_Effects:AddSlider("TransparentHidingSpotsSlider", { Text = "Transparency", Min = 0, Max = 1, Default = 0.5, Rounding = 2, Compact = true })
 
 local function ApplyHidingTransparency(Value, SliderValue)
 	for _, Object in Objects.HidingSpots do
@@ -1848,26 +2283,20 @@ Options.TransparentHidingSpotsSlider:OnChanged(function(Value)
 	ApplyHidingTransparency(Toggles.TransparentHidingSpotsToggle.Value, Value)
 end)
 
-Gb.Visuals_Effects:AddDivider()
-Gb.Visuals_Effects:AddToggle("DisableGlitchJumpscare",   { Text = "Disable Glitch Jumpscare",   Default = false, Tooltip = "Disables the jumpscare from 'Glitch'" })
-Gb.Visuals_Effects:AddToggle("DisableTimothyJumpscare",  { Text = "Disable Timothy Jumpscare",  Default = false, Tooltip = "Disables the jumpscare from 'Timothy'" })
-Gb.Visuals_Effects:AddToggle("DisableVoidJumpscare",     { Text = "Disable Void Jumpscare",     Default = false, Tooltip = "Disables the jumpscare from 'Void'" })
-Gb.Visuals_Effects:AddDivider()
-Gb.Visuals_Effects:AddToggle("DisableHideVignette",      { Text = "Disable Hide Vignette",      Default = false, Tooltip = "Disables the hiding screen effect." })
-Gb.Visuals_Effects:AddToggle("DisableFiredampEffect",    { Text = "Disable Firedamp Effect",    Default = false, Tooltip = "Disables the firedamp screen effect." })
-Gb.Visuals_Effects:AddToggle("DisableEntityJumpscares",  { Text = "Disable Entity Jumpscares",  Default = false, Tooltip = "Disables jumpscares from entities like Rush and Ambush." })
+Visuals_Effects:AddDivider()
+Visuals_Effects:AddToggle("DisableGlitchJumpscare",   { Text = "Disable Glitch Jumpscare",   Default = false, Tooltip = "Disables the jumpscare from 'Glitch'" })
+Visuals_Effects:AddToggle("DisableTimothyJumpscare",  { Text = "Disable Timothy Jumpscare",  Default = false, Tooltip = "Disables the jumpscare from 'Timothy'" })
+Visuals_Effects:AddToggle("DisableVoidJumpscare",     { Text = "Disable Void Jumpscare",     Default = false, Tooltip = "Disables the jumpscare from 'Void'" })
+Visuals_Effects:AddDivider()
+Visuals_Effects:AddToggle("DisableHideVignette",      { Text = "Disable Hide Vignette",      Default = false, Tooltip = "Disables the hiding screen effect." })
+Visuals_Effects:AddToggle("DisableFiredampEffect",    { Text = "Disable Firedamp Effect",    Default = false, Tooltip = "Disables the firedamp screen effect." })
+Visuals_Effects:AddToggle("DisableEntityJumpscares",  { Text = "Disable Entity Jumpscares",  Default = false, Tooltip = "Disables jumpscares from entities like Rush and Ambush." })
 
-Toggles.DisableGlitchJumpscare:OnChanged(function(Value)
-	Modules.Glitch.Name = Value and "Glitch_Disabled" or "Glitch"
-end)
-Toggles.DisableTimothyJumpscare:OnChanged(function(Value)
-	Modules.SpiderJumpscare.Name = Value and "SpiderJumpscare_Disabled" or "SpiderJumpscare"
-end)
-Toggles.DisableVoidJumpscare:OnChanged(function(Value)
-	if Modules.Void then Modules.Void.Name = Value and "Void_Disabled" or "Void" end
-end)
+Toggles.DisableGlitchJumpscare:OnChanged(function() SyncEntityRemoval() end)
+Toggles.DisableTimothyJumpscare:OnChanged(function() SyncEntityRemoval() end)
+Toggles.DisableVoidJumpscare:OnChanged(function() SyncEntityRemoval() end)
 Toggles.DisableHideVignette:OnChanged(function(Value)
-	local Vignette = Globals.MainUI:FindFirstChild("HideVignette") or Globals.MainUI.MainFrame:FindFirstChild("HideVignette")
+	local Vignette = Global.MainUI:FindFirstChild("HideVignette") or Global.MainUI.MainFrame:FindFirstChild("HideVignette")
 	if Vignette then Vignette.Image = Value and "Disabled" or "rbxassetid://6100076320" end
 end)
 Toggles.DisableFiredampEffect:OnChanged(function(Value)
@@ -1887,8 +2316,8 @@ Toggles.DisableFiredampEffect:OnChanged(function(Value)
 	LocalPlayer:SetAttribute("CurrentRoom", Old)
 end)
 Toggles.DisableEntityJumpscares:OnChanged(function(Value)
-	local Jumpscares = Globals.MainUI.Initiator.Main_Game.RemoteListener:FindFirstChild("Jumpscares")
-		or Globals.MainUI.Initiator.Main_Game.RemoteListener:FindFirstChild("Jumpscares_Disabled")
+	local Jumpscares = Global.MainUI.Initiator.Main_Game.RemoteListener:FindFirstChild("Jumpscares")
+		or Global.MainUI.Initiator.Main_Game.RemoteListener:FindFirstChild("Jumpscares_Disabled")
 	if Jumpscares then
 		Jumpscares.Name = Value and "Jumpscares_Disabled" or "Jumpscares"
 		for _, Object in Objects.JumpscareModules do
@@ -1896,18 +2325,27 @@ Toggles.DisableEntityJumpscares:OnChanged(function(Value)
 		end
 	end
 end)
+Visuals_Mspaint = Tabs.Visuals:AddLeftGroupbox("Mspaint")
+Visuals_Mspaint:AddButton({
+	Text = "Verry Good Mspaint Button", Tooltip = "Press this if you dare",
+	Func = function()
+		gui.Enabled = not gui.Enabled
+		if gui.Enabled then Functions.Notify({ Title = "Upio", Body = "You just got Upioned"}) end
+	end
+})
 
-Gb.Visuals_RightTab     = Tabs.Visuals:AddRightTabbox("Entities / Settings")
-Gb.Visuals_Entities     = Gb.Visuals_RightTab:AddTab("Entities")
-Gb.Visuals_EntitySettings = Gb.Visuals_RightTab:AddTab("Settings")
+Visuals_RightTab     = Tabs.Visuals:AddRightTabbox("Entities / Settings")
+Visuals_Entities     = Visuals_RightTab:AddTab("Entities")
+Visuals_EntitySettings = Visuals_RightTab:AddTab("Settings")
 
-Gb.Visuals_Entities:AddDropdown("EntityList", {
+Visuals_Entities:AddDropdown("EntityList", {
 	Text = "Entity List",
-	Values = { "Rush","Ambush","Eyes","Halt","Blitz","Lookman","Gloombat Swarm","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Monument","AR0xMBUSH","RNIUSHCG==" },
+	Values = { "Rush","Ambush","Eyes","Halt","Blitz","Lookman","Gloombat Swarm","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Monument","Scribbles","Bash","AR0xMBUSH","RNIUSHCG==" },
 	Multi = true, AllowNull = true
 })
-Gb.Visuals_Entities:AddToggle("NotifyEntities",    { Text = "Notify Entities",    Default = false, Tooltip = "Sends a notification when an entity spawns." })
-Gb.Visuals_Entities:AddDivider()
+Visuals_Entities:AddToggle("NotifyEntities",    { Text = "Notify Entities",    Default = false, Tooltip = "Sends a notification when an entity spawns." })
+Visuals_Entities:AddToggle("NotifyRoomAnomalies", { Text = "Notify Room Anomalies", Default = true, Tooltip = "Notifies you of any room anomaly (Dupe, Monument, Currents, Server Carts, Scribble, Giggle, etc.) as soon as a new room loads." })
+Visuals_Entities:AddDivider()
 
 local ItemsToNotify = {}
 for Index, Name in pairs(ItemNames) do
@@ -1916,39 +2354,41 @@ for Index, Name in pairs(ItemNames) do
 	end
 end
 
-Gb.Visuals_Entities:AddToggle("NotifyLibraryCode", { Text = "Notify Library Code", Default = false, Tooltip = "Automatically solves the code for the library padlock." })
-Gb.Visuals_Entities:AddToggle("NotifyOxygen",      { Text = "Notify Oxygen Level", Default = false, Tooltip = "Shows how much oxygen you have remaining." })
-Gb.Visuals_Entities:AddToggle("NotifyHasteTime",   { Text = "Notify Haste Time",   Default = false, Tooltip = "Shows how much time you have remaining before 'Haste' spawns." })
+Visuals_Entities:AddToggle("NotifyLadder",      { Text = "Notify Ladder Spawns", Default = false, Tooltip = "Notifies when a ladder spawns" })
+Visuals_Entities:AddToggle("NotifyLibraryCode", { Text = "Notify Library Code", Default = false, Tooltip = "Automatically solves the code for the library padlock." })
+Visuals_Entities:AddToggle("NotifyOxygen",      { Text = "Notify Oxygen Level", Default = false, Tooltip = "Shows how much oxygen you have remaining." })
+Visuals_Entities:AddToggle("NotifyHasteTime",   { Text = "Notify Haste Time",   Default = false, Tooltip = "Shows how much time you have remaining before 'Haste' spawns." })
 
-Globals.LibraryCodeFound = false
+Global.LibraryCodeFound = false
 Toggles.NotifyLibraryCode:OnChanged(function(Value)
 	if Value then
 		local Code = Functions.GetLibraryCode()
-		if Code and not Code:find("_") and not Globals.LibraryCodeFound and CurrentRooms:FindFirstChild("50") then
+		if Code and not Code:find("_") and not Global.LibraryCodeFound and CurrentRooms:FindFirstChild("50") then
 			local Lock = Services.Workspace:FindFirstChild("Padlock", true)
 			Functions.Notify({ Title = "Padlock code found!", Body = "The code is: '" .. Code .. "'", Time = Toggles.NotifyKeepNotifications.Value and Lock or 15 })
-			Globals.LibraryCodeFound = true
+			Global.LibraryCodeFound = true
 		end
 	end
 end)
 
-Gb.Visuals_EntitySettings:AddToggle("EntityChatToggle", { Text = "Notify Chat", Default = false, Tooltip = "Sends a message in the chat when an entity spawns." })
-Gb.Visuals_EntitySettings:AddInput("EntityChatMessage", { Text = "Message", Default = "spawned!", Numeric = false, Placeholder = "Message" })
-Gb.Visuals_EntitySettings:AddDivider()
-Gb.Visuals_EntitySettings:AddDropdown("NotifyStyle", { Text = "Notify Style", Values = { "Eternal", "Library" }, Default = 1 })
-Gb.Visuals_EntitySettings:AddSlider("NotifySoundVolume", { Text = "Sound Volume", Min = 0, Max = 10, Default = 3, Rounding = 1 })
-Gb.Visuals_EntitySettings:AddToggle("NotifyPlaySound", { Text = "Play Sound", Default = true, Tooltip = "Makes notifications play an alert sound." })
-Gb.Visuals_EntitySettings:AddToggle("NotifyKeepNotifications", { Text = "Keep Notifications", Default = false, Tooltip = "Certain notifications will stay on screen until they are no longer needed." })
-Gb.Visuals_EntitySettings:AddButton({ Text = "Test Notification", DoubleClick = false, Tooltip = "Sends a test notifcation, so you can see how your settings look.", Func = function()
+Visuals_EntitySettings:AddToggle("EntityChatToggle", { Text = "Notify Chat", Default = false, Tooltip = "Sends a message in the chat when an entity spawns." })
+Visuals_EntitySettings:AddInput("EntityChatMessage", { Text = "Message", Default = "spawned!", Numeric = false, Placeholder = "Message" })
+Visuals_EntitySettings:AddDivider()
+Visuals_EntitySettings:AddDropdown("NotifyStyle", { Text = "Notify Style", Values = { "mstudio45", "LolhaxV3", "Library" }, Default = 1 })
+Visuals_EntitySettings:AddDropdown("NotifySide", { Text = "Notify Side for LolhaxV3 Notify", Values = {"Center", "Right" }, Default = 1 })
+Visuals_EntitySettings:AddSlider("NotifySoundVolume", { Text = "Sound Volume", Min = 0, Max = 10, Default = 3, Rounding = 1 })
+Visuals_EntitySettings:AddToggle("NotifyPlaySound", { Text = "Play Sound", Default = true, Tooltip = "Makes notifications play an alert sound." })
+Visuals_EntitySettings:AddToggle("NotifyKeepNotifications", { Text = "Keep Notifications", Default = false, Tooltip = "Certain notifications will stay on screen until they are no longer needed." })
+Visuals_EntitySettings:AddButton({ Text = "Test Notification", DoubleClick = false, Tooltip = "Sends a test notifcation, so you can see how your settings look.", Func = function()
 	Functions.Notify({Title = "This is a test."})
-end})
+end})	
 
-Gb.Visuals_ESP          = Tabs.Visuals:AddRightTabbox("ESP/Settings")
-Gb.Visuals_ESP_Toggles  = Gb.Visuals_ESP:AddTab("ESP")
-Gb.Visuals_ESP_Settings = Gb.Visuals_ESP:AddTab("Settings")
+Visuals_ESP          = Tabs.Visuals:AddRightTabbox("ESP/Settings")
+Visuals_ESP_Toggles  = Visuals_ESP:AddTab("ESP")
+Visuals_ESP_Settings = Visuals_ESP:AddTab("Settings")
 
 local function MakeESPToggle(ToggleKey, ColorKey, Text, Tooltip, ObjectsTable, LabelFunc, RoomBased)
-	Gb.Visuals_ESP_Toggles:AddToggle(ToggleKey, { Text = Text, Default = false, Tooltip = Tooltip })
+	Visuals_ESP_Toggles:AddToggle(ToggleKey, { Text = Text, Default = false, Tooltip = Tooltip })
 	Toggles[ToggleKey]:AddColorPicker(ColorKey, { Text = Text, Default = Options[ColorKey] and Options[ColorKey].Value or Color3.new(1,1,1), Transparency = 0 })
 	Toggles[ToggleKey]:OnChanged(function(Value)
 		for _, Object in ObjectsTable do
@@ -1964,23 +2404,47 @@ local function MakeESPToggle(ToggleKey, ColorKey, Text, Tooltip, ObjectsTable, L
 	end)
 	Options[ColorKey]:OnChanged(function(Value)
 		for _, Object in ObjectsTable do
-			Eternal.ESPLibrary:UpdateObjectColor(Object, Value)
+			mstudio45.ESPLibrary:UpdateObjectColor(Object, Value)
 		end
 	end)
 end
 
-Gb.Visuals_ESP_Toggles:AddToggle("ObjectiveESPToggle", { Text = "Objectives", Default = false, Tooltip = "Highlights all objects required to progress." })
+Visuals_ESP_Toggles:AddDropdown("EntityESPOptions",     { 
+	Text = "Entity List",
+	Values = { "Rush","Ambush","Eyes","Dupe","Figure","Blitz","Lookman","Snare","Giggle","Grumble","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Mandrake Hole","Monument","Bramble","Scribbles","Bash","Server Cart","Electrified Water","Vacuum Sideroom","Gloombat Eggs","AR0xMBUSH","RNIUSHCG==" },
+	Multi = true,
+	AllowNull = true
+})
+Visuals_ESP_Toggles:AddToggle("EntityESPToggle",     { Text = "Entities",      Default = false, Tooltip = "Highlights all entities that spawn." })
+Visuals_ESP_Toggles:AddDivider()
+Visuals_ESP_Toggles:AddToggle("DoorESPToggle",       { Text = "Doors",        Default = false, Tooltip = "Highlights the next door." })
+Visuals_ESP_Toggles:AddToggle("PlayerESPToggle",     { Text = "Players",      Default = false, Tooltip = "Highlights other players." })
+Visuals_ESP_Toggles:AddToggle("ObjectiveESPToggle", { Text = "Objectives", Default = false, Tooltip = "Highlights all objects required to progress." })
+Visuals_ESP_Toggles:AddDivider()
+Visuals_ESP_Toggles:AddToggle("HidingSpotESPToggle", { Text = "Hiding Spots", Default = false, Tooltip = "Highlights places where you can hide from entities" })
+Visuals_ESP_Toggles:AddToggle("ChestESPToggle",      { Text = "Chests",       Default = false, Tooltip = "Highlights objects that can contain loot." })
+Visuals_ESP_Toggles:AddToggle("ItemESPToggle",       { Text = "Items",        Default = false, Tooltip = "Highlights all collectable items/consumables." })
+Visuals_ESP_Toggles:AddToggle("CurrencyESPToggle",   { Text = "Currency",     Default = false, Tooltip = "Highlights all currency that spawns." })
+Visuals_ESP_Toggles:AddToggle("LadderESPToggle",     { Text = "Ladders",      Default = false, Tooltip = "Highlights ladders that can be used to disable the anticheat." })
 Toggles.ObjectiveESPToggle:AddColorPicker("ObjectiveESPColor", { Text = "Objectives", Default = Color3.fromRGB(0, 255, 0), Transparency = 0 })
+Toggles.DoorESPToggle:AddColorPicker("DoorESPColor",           { Text = "Doors",        Default = Color3.fromRGB(0, 255, 255),  Transparency = 0 })
+Toggles.HidingSpotESPToggle:AddColorPicker("HidingSpotESPColor", { Text = "Hiding Spots", Default = Color3.fromRGB(0, 128, 0),  Transparency = 0 })
+Toggles.PlayerESPToggle:AddColorPicker("PlayerESPColor",       { Text = "Players",      Default = Color3.fromRGB(255, 255, 255), Transparency = 0 })
+Toggles.ChestESPToggle:AddColorPicker("ChestESPColor",         { Text = "Chests",       Default = Color3.fromRGB(255, 255, 0),   Transparency = 0 })
+Toggles.ItemESPToggle:AddColorPicker("ItemESPColor",           { Text = "Items",        Default = Color3.fromRGB(255, 0, 255),   Transparency = 0 })
+Toggles.CurrencyESPToggle:AddColorPicker("CurrencyESPColor",   { Text = "Currency",     Default = Color3.fromRGB(255, 255, 0),   Transparency = 0 })
+Toggles.LadderESPToggle:AddColorPicker("LadderESPColor",       { Text = "Ladders",      Default = Color3.fromRGB(255, 255, 255), Transparency = 0 })
+Toggles.EntityESPToggle:AddColorPicker("EntityESPColor",       { Text = "Entities",     Default = Color3.fromRGB(255, 0, 0),     Transparency = 0 })
 
 local ObjectiveLabels = {
 	["KeyObtain"]              = "Door Key",
 	["ElectricalKeyObtain"]    = "Electrical Key",
 	["MinesGenerator"]         = "Generator",
 	["FuseObtain"]             = "Generator Fuse",
-	["LiveHintBook"]           = "Hint Book",
+	["LiveHintBook"]           = "Book",
 	["LiveBreakerPolePickup"]  = "Fuse Breaker",
-	["LibraryHintPaper"]       = "Hint Paper",
-	["PickupItem"]             = "Hint Paper",
+	["LibraryHintPaper"]       = "Paper",
+	["PickupItem"]             = "Paper",
 	["CringlePresent"]         = "Present",
 	["LeverForGate"]           = "Gate Lever",
 	["MinesGateButton"]        = "Gate Button",
@@ -1992,13 +2456,13 @@ Toggles.ObjectiveESPToggle:OnChanged(function(Value)
 		if Value then
 			local Label = ObjectiveLabels[Object.Name]
 			if Object.Name == "TimerLever" then
-				Label = "Time Lever [+" .. Object:GetAttribute("AddTime") .. "s]"
+				Label = "Time Lever"
 			elseif Object.Name == "MinesAnchor" then
 				Label = "Anchor [" .. Object:WaitForChild("Sign").TextLabel.Text .. "]"
 			elseif Object.Name == "WaterPump" then
 				Functions.AddESP({ Object = Object.Wheel, Text = "Water Pump", Color = Options.ObjectiveESPColor.Value }, true)
 			elseif Object.Name == "VineGuillotine" then
-				Functions.AddESP({ Object = Object.Lever, Text = "Vine Lever", Color = Options.ObjectiveESPColor.Value }, true)
+				Functions.AddESP({ Object = Object.Lever, Text = "Lever", Color = Options.ObjectiveESPColor.Value }, true)
 			end
 			if Label then
 				Functions.AddESP({ Object = Object, Text = Label, Color = Options.ObjectiveESPColor.Value }, true)
@@ -2010,34 +2474,9 @@ Toggles.ObjectiveESPToggle:OnChanged(function(Value)
 end)
 Options.ObjectiveESPColor:OnChanged(function(Value)
 	for _, Object in Objects.Objectives do
-		Eternal.ESPLibrary:UpdateObjectColor(Object, Value)
+		mstudio45.ESPLibrary:UpdateObjectColor(Object, Value)
 	end
 end)
-
-Gb.Visuals_ESP_Toggles:AddToggle("DoorESPToggle",       { Text = "Doors",        Default = false, Tooltip = "Highlights the next door." })
-Gb.Visuals_ESP_Toggles:AddToggle("HidingSpotESPToggle", { Text = "Hiding Spots", Default = false, Tooltip = "Highlights places where you can hide from entities" })
-Gb.Visuals_ESP_Toggles:AddToggle("PlayerESPToggle",     { Text = "Players",      Default = false, Tooltip = "Highlights other players." })
-Gb.Visuals_ESP_Toggles:AddToggle("ChestESPToggle",      { Text = "Chests",       Default = false, Tooltip = "Highlights objects that can contain loot." })
-Gb.Visuals_ESP_Toggles:AddToggle("ItemESPToggle",       { Text = "Items",        Default = false, Tooltip = "Highlights all collectable items/consumables." })
-Gb.Visuals_ESP_Toggles:AddToggle("CurrencyESPToggle",   { Text = "Currency",     Default = false, Tooltip = "Highlights all currency that spawns." })
-Gb.Visuals_ESP_Toggles:AddToggle("LadderESPToggle",     { Text = "Ladders",      Default = false, Tooltip = "Highlights ladders that can be used to disable the anticheat." })
-Gb.Visuals_ESP_Toggles:AddDivider()
-Gb.Visuals_ESP_Toggles:AddDropdown("EntityESPOptions",     { 
-	Text = "Entity List",
-	Values = { "Rush","Ambush","Eyes","Dupe","Figure","Blitz","Lookman","Snare","Giggle","Grumble","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Mandrake Hole","Monument","Bramble","AR0xMBUSH","RNIUSHCG==" },
-	Multi = true,
-	AllowNull = true
-})
-Gb.Visuals_ESP_Toggles:AddToggle("EntityESPToggle",     { Text = "Entities",      Default = false, Tooltip = "Highlights all entities that spawn." })
-
-Toggles.DoorESPToggle:AddColorPicker("DoorESPColor",           { Text = "Doors",        Default = Color3.fromRGB(0, 255, 255),  Transparency = 0 })
-Toggles.HidingSpotESPToggle:AddColorPicker("HidingSpotESPColor", { Text = "Hiding Spots", Default = Color3.fromRGB(0, 128, 0),  Transparency = 0 })
-Toggles.PlayerESPToggle:AddColorPicker("PlayerESPColor",       { Text = "Players",      Default = Color3.fromRGB(255, 255, 255), Transparency = 0 })
-Toggles.ChestESPToggle:AddColorPicker("ChestESPColor",         { Text = "Chests",       Default = Color3.fromRGB(255, 255, 0),   Transparency = 0 })
-Toggles.ItemESPToggle:AddColorPicker("ItemESPColor",           { Text = "Items",        Default = Color3.fromRGB(255, 0, 255),   Transparency = 0 })
-Toggles.CurrencyESPToggle:AddColorPicker("CurrencyESPColor",   { Text = "Currency",     Default = Color3.fromRGB(255, 255, 0),   Transparency = 0 })
-Toggles.LadderESPToggle:AddColorPicker("LadderESPColor",       { Text = "Ladders",      Default = Color3.fromRGB(255, 255, 255), Transparency = 0 })
-Toggles.EntityESPToggle:AddColorPicker("EntityESPColor",       { Text = "Entities",     Default = Color3.fromRGB(255, 0, 0),     Transparency = 0 })
 
 local HidingSpotLabels = {
 	Wardrobe = "Closet", ["Backdoor_Wardrobe"] = "Closet", Toolshed = "Closet",
@@ -2054,21 +2493,29 @@ local EntityESPLabels = {
 	Snare = "Snare", GrumbleRig = "Grumble",
 	Drakobloxxer = "Drakobloxxer", Hole = "Mandrake Hole", Groundskeeper = "Groundskeeper",
 	LiveEntityBramble = "Bramble", Figure = "Figure", FigureRig = "Figure", FigureRagdoll = "Figure",
-	FakeDoor = "Dupe", DoorFake = "Dupe"
+	FakeDoor = "Dupe", DoorFake = "Dupe",
+	Scribble = "Scribbles", Scribbles = "Scribbles", ScribbleMoving = "Scribbles", ScribbleCeiling = "Scribble",
+	Bash = "Bash", BashMoving = "Bash",
+	MonumentEntity = "Monument",
+	ServerCartHazard = "Server Cart", ServerCart = "Server Cart",
+	Currents = "Electrified Water", CurrentsHazard = "Electrified Water",
+	SideroomSpace = "Vacuum Sideroom",
+	GloomPile = "Gloombat Eggs"
 }
 
 local NodeEntities = {
-	Rush = true, Ambush = true, Eyes = true, Blitz = true, Lookman = true, ["A-60"] = true, ["A-120"] = true, Sally = true, ["Jeff The Killer"] = true, Monument = true, ["AR0xMBUSH"] = true, ["RNIUSHCG=="] = true
+	Rush = true, Ambush = true, Eyes = true, Blitz = true, Lookman = true, ["A-60"] = true, ["A-120"] = true, Sally = true, ["Jeff The Killer"] = true, Monument = true, Scribbles = true, Bash = true, ["Server Cart"] = true, ["Electrified Water"] = true, ["Vacuum Sideroom"] = true, ["Gloombat Eggs"] = true, ["AR0xMBUSH"] = true, ["RNIUSHCG=="] = true
 }
 
 Toggles.DoorESPToggle:OnChanged(function(Value)
 	for _, Object in Objects.Doors do
-		if Value then Functions.AddESP({ Object = Object, Text = "Door [" .. Functions.GetDoorNumber(Object) .. "]", Color = Options.DoorESPColor.Value }, true)
+		if Value then Functions.AddESP({ Object = Object, Text = GetDoorText(Object), Color = Options.DoorESPColor.Value }, true)
 		else Functions.RemoveESP(Object) end
 	end
 end)
+
 Options.DoorESPColor:OnChanged(function(Value)
-	for _, Object in Objects.Doors do Eternal.ESPLibrary:UpdateObjectColor(Object, Value) end
+	for _, Object in Objects.Doors do mstudio45.ESPLibrary:UpdateObjectColor(Object, Value) end
 end)
 
 Toggles.HidingSpotESPToggle:OnChanged(function(Value)
@@ -2079,7 +2526,7 @@ Toggles.HidingSpotESPToggle:OnChanged(function(Value)
 	end
 end)
 Options.HidingSpotESPColor:OnChanged(function(Value)
-	for _, Object in Objects.HidingSpots do Eternal.ESPLibrary:UpdateObjectColor(Object, Value) end
+	for _, Object in Objects.HidingSpots do mstudio45.ESPLibrary:UpdateObjectColor(Object, Value) end
 end)
 
 Toggles.PlayerESPToggle:OnChanged(function(Value)
@@ -2097,7 +2544,7 @@ end)
 Options.PlayerESPColor:OnChanged(function(Value)
 	for _, Player in Services.Players:GetPlayers() do
 		if Player.Character and Player ~= LocalPlayer then
-			Eternal.ESPLibrary:UpdateObjectColor(Player.Character, Value)
+			mstudio45.ESPLibrary:UpdateObjectColor(Player.Character, Value)
 		end
 	end
 end)
@@ -2121,7 +2568,7 @@ Toggles.ChestESPToggle:OnChanged(function(Value)
 end)
 
 Options.ChestESPColor:OnChanged(function(Value)
-	for _, Object in Objects.Chests do Eternal.ESPLibrary:UpdateObjectColor(Object, Value) end
+	for _, Object in Objects.Chests do mstudio45.ESPLibrary:UpdateObjectColor(Object, Value) end
 end)
 
 Toggles.ItemESPToggle:OnChanged(function(Value)
@@ -2137,7 +2584,7 @@ Toggles.ItemESPToggle:OnChanged(function(Value)
 	end
 end)
 Options.ItemESPColor:OnChanged(function(Value)
-	for _, Object in Objects.Items do Eternal.ESPLibrary:UpdateObjectColor(Object, Value) end
+	for _, Object in Objects.Items do mstudio45.ESPLibrary:UpdateObjectColor(Object, Value) end
 end)
 
 Toggles.CurrencyESPToggle:OnChanged(function(Value)
@@ -2156,7 +2603,7 @@ Toggles.CurrencyESPToggle:OnChanged(function(Value)
 	end
 end)
 Options.CurrencyESPColor:OnChanged(function(Value)
-	for _, Object in Objects.Currency do Eternal.ESPLibrary:UpdateObjectColor(Object, Value) end
+	for _, Object in Objects.Currency do mstudio45.ESPLibrary:UpdateObjectColor(Object, Value) end
 end)
 
 Toggles.EntityESPToggle:OnChanged(function(Value)
@@ -2192,7 +2639,7 @@ Options.EntityESPOptions:OnChanged(function(Value)
 end)
 
 Options.EntityESPColor:OnChanged(function(Value)
-	for _, Object in Objects.Entities do Eternal.ESPLibrary:UpdateObjectColor(Object, Value) end
+	for _, Object in Objects.Entities do mstudio45.ESPLibrary:UpdateObjectColor(Object, Value) end
 end)
 
 Toggles.LadderESPToggle:OnChanged(function(Value)
@@ -2201,63 +2648,71 @@ Toggles.LadderESPToggle:OnChanged(function(Value)
 		else Functions.RemoveESP(Object) end
 	end
 end)
+
+Toggles.NotifyLadder:OnChanged(function(Value)
+	for _, Object in Objects.Ladders do
+		if Value then
+			Functions.Notify({ Title = "Ladder Notify", Body = "Ladder has spawned in Room " .. (Object:GetAttribute("ParentRoom") or "?") .. "." })
+		end
+	end
+end)
 Options.LadderESPColor:OnChanged(function(Value)
-	for _, Object in Objects.Ladders do Eternal.ESPLibrary:UpdateObjectColor(Object, Value) end
+	for _, Object in Objects.Ladders do mstudio45.ESPLibrary:UpdateObjectColor(Object, Value) end
 end)
 
-Gb.Visuals_ESP_Settings:AddToggle("ESPRainbow",     { Text = "Rainbow Effect", Default = false, Tooltip = "Makes the esp objects change colour like a rainbow." })
-Gb.Visuals_ESP_Settings:AddToggle("ESPShowDistance",{ Text = "Show Distance",  Default = true,  Tooltip = "Shows how far away your character is from the object." })
-Gb.Visuals_ESP_Settings:AddDivider()
-Gb.Visuals_ESP_Settings:AddSlider("ESPFillTransparency",        { Text = "Fill Transparency",         Min = 0, Max = 1, Default = 0.75, Rounding = 2, Compact = true })
-Gb.Visuals_ESP_Settings:AddSlider("ESPOutlineTransparency",     { Text = "Outline Transparency",      Min = 0, Max = 1, Default = 0,    Rounding = 2, Compact = true })
-Gb.Visuals_ESP_Settings:AddSlider("ESPTextTransparency",        { Text = "Text Transparency",         Min = 0, Max = 1, Default = 0,    Rounding = 2, Compact = true })
-Gb.Visuals_ESP_Settings:AddSlider("ESPTextOutlineTransparency", { Text = "Text Outline Transparency", Min = 0, Max = 1, Default = 0,    Rounding = 2, Compact = true })
-Gb.Visuals_ESP_Settings:AddSlider("ESPFadeTime",                { Text = "Fade Time",                 Min = 0, Max = 1, Default = 0, Rounding = 2, Compact = true })
-Gb.Visuals_ESP_Settings:AddSlider("ESPTextSize",                { Text = "Text Size",                 Min = 12, Max = 24, Default = 20, Rounding = 0, Compact = true })
-Gb.Visuals_ESP_Settings:AddDropdown("ESPTextFont", {
+Visuals_ESP_Settings:AddToggle("ESPRainbow",     { Text = "Rainbow Effect", Default = false, Tooltip = "Makes the esp objects change colour like a rainbow." })
+Visuals_ESP_Settings:AddToggle("ESPShowDistance",{ Text = "Show Distance",  Default = true,  Tooltip = "Shows how far away your character is from the object." })
+Visuals_ESP_Settings:AddDivider()
+Visuals_ESP_Settings:AddSlider("ESPFillTransparency",        { Text = "Fill Transparency",         Min = 0, Max = 1, Default = 0.75, Rounding = 2, Compact = true })
+Visuals_ESP_Settings:AddSlider("ESPOutlineTransparency",     { Text = "Outline Transparency",      Min = 0, Max = 1, Default = 0,    Rounding = 2, Compact = true })
+Visuals_ESP_Settings:AddSlider("ESPTextTransparency",        { Text = "Text Transparency",         Min = 0, Max = 1, Default = 0,    Rounding = 2, Compact = true })
+Visuals_ESP_Settings:AddSlider("ESPTextOutlineTransparency", { Text = "Text Outline Transparency", Min = 0, Max = 1, Default = 0,    Rounding = 2, Compact = true })
+Visuals_ESP_Settings:AddSlider("ESPFadeTime",                { Text = "Fade Time",                 Min = 0, Max = 1, Default = 0, Rounding = 2, Compact = true })
+Visuals_ESP_Settings:AddSlider("ESPTextSize",                { Text = "Text Size",                 Min = 12, Max = 24, Default = 20, Rounding = 0, Compact = true })
+Visuals_ESP_Settings:AddDropdown("ESPTextFont", {
 	Text = "Text Font",
 	Values = { "RobotoCondensed","Legacy","Arial","ArialBold","SourceSans","SourceSansBold","SourceSansLight","SourceSansItalic","Bodoni","Garamond","Cartoon","Code","Highway","SciFi","Arcade","Fantasy","Antique","SourceSansSemibold","Gotham","GothamMedium","GothamBold","GothamBlack","AmaticSC","Bangers","Creepster","DenkOne","Fondamento","FredokaOne","GrenzeGotisch","IndieFlower","JosefinSans","Jura","Kalam","LuckiestGuy","Merriweather","Michroma","Nunito","Oswald","PatrickHand","PermanentMarker","Roboto","RobotoMono","Sarpanch","SpecialElite","TitilliumWeb","Ubuntu","BuilderSans","BuilderSansMedium","BuilderSansBold","BuilderSansExtraBold","Arimo","ArimoBold" },
 	Default = 1
 })
-Gb.Visuals_ESP_Settings:AddDivider()
-Gb.Visuals_ESP_Settings:AddDropdown("ESPTracersOrigin",  { Text = "Tracer Origin", Values = { "Bottom","Center","Top","Mouse" }, Default = 1 })
-Gb.Visuals_ESP_Settings:AddSlider("ESPTracerThickness",  { Text = "Tracer Thickness", Min = 0.5, Max = 2, Default = 0.75, Rounding = 2, Compact = true })
-Gb.Visuals_ESP_Settings:AddToggle("ESPTracersToggle",    { Text = "Enable Tracers", Default = false, Tooltip = "Draws a line to highlighted objects." })
-Gb.Visuals_ESP_Settings:AddDivider()
-Gb.Visuals_ESP_Settings:AddSlider("ESPArrowsRadius",     { Text = "Arrow Radius", Min = 100, Max = 500, Default = 250, Rounding = 0, Compact = true })
-Gb.Visuals_ESP_Settings:AddToggle("ESPArrowsToggle",     { Text = "Enable Arrows", Default = false, Tooltip = "Shows arrow that point to off-screen objects." })
+Visuals_ESP_Settings:AddDivider()
+Visuals_ESP_Settings:AddDropdown("ESPTracersOrigin",  { Text = "Tracer Origin", Values = { "Bottom","Center","Top","Mouse" }, Default = 1 })
+Visuals_ESP_Settings:AddSlider("ESPTracerThickness",  { Text = "Tracer Thickness", Min = 0.5, Max = 2, Default = 0.75, Rounding = 2, Compact = true })
+Visuals_ESP_Settings:AddToggle("ESPTracersToggle",    { Text = "Enable Tracers", Default = false, Tooltip = "Draws a line to highlighted objects." })
+Visuals_ESP_Settings:AddDivider()
+Visuals_ESP_Settings:AddSlider("ESPArrowsRadius",     { Text = "Arrow Radius", Min = 100, Max = 500, Default = 250, Rounding = 0, Compact = true })
+Visuals_ESP_Settings:AddToggle("ESPArrowsToggle",     { Text = "Enable Arrows", Default = false, Tooltip = "Shows arrow that point to off-screen objects." })
 
-Eternal.ESPLibrary:SetRainbow(false)
-Eternal.ESPLibrary:SetShowDistance(true)
-Eternal.ESPLibrary:SetFillTransparency(0.75)
-Eternal.ESPLibrary:SetOutlineTransparency(0)
-Eternal.ESPLibrary:SetTextTransparency(0)
-Eternal.ESPLibrary:SetTextOutlineTransparency(0)
-Eternal.ESPLibrary:SetRenderLimit(240)
-Eternal.ESPLibrary:SetFadeTime(0)
-Eternal.ESPLibrary:SetTextSize(20)
-Eternal.ESPLibrary:SetFont(Enum.Font.Highway)
-Eternal.ESPLibrary:SetTracers(false)
-Eternal.ESPLibrary:SetTracerSize(0.75)
-Eternal.ESPLibrary:SetTracerOrigin("Bottom")
-Eternal.ESPLibrary:SetArrows(false)
-Eternal.ESPLibrary:SetArrowRadius(250)
-Eternal.ESPLibrary:SetDistanceSizeRatio(0.8)
+mstudio45.ESPLibrary:SetRainbow(false)
+mstudio45.ESPLibrary:SetShowDistance(true)
+mstudio45.ESPLibrary:SetFillTransparency(0.75)
+mstudio45.ESPLibrary:SetOutlineTransparency(0)
+mstudio45.ESPLibrary:SetTextTransparency(0)
+mstudio45.ESPLibrary:SetTextOutlineTransparency(0)
+mstudio45.ESPLibrary:SetRenderLimit(240)
+mstudio45.ESPLibrary:SetFadeTime(0)
+mstudio45.ESPLibrary:SetTextSize(20)
+mstudio45.ESPLibrary:SetFont(Enum.Font.Highway)
+mstudio45.ESPLibrary:SetTracers(false)
+mstudio45.ESPLibrary:SetTracerSize(0.75)
+mstudio45.ESPLibrary:SetTracerOrigin("Bottom")
+mstudio45.ESPLibrary:SetArrows(false)
+mstudio45.ESPLibrary:SetArrowRadius(250)
+mstudio45.ESPLibrary:SetDistanceSizeRatio(0.8)
 
-Toggles.ESPRainbow:OnChanged(function(V)        Eternal.ESPLibrary:SetRainbow(V) end)
-Toggles.ESPShowDistance:OnChanged(function(V)   Eternal.ESPLibrary:SetShowDistance(V) end)
-Options.ESPFillTransparency:OnChanged(function(V)        Eternal.ESPLibrary:SetFillTransparency(V) end)
-Options.ESPOutlineTransparency:OnChanged(function(V)     Eternal.ESPLibrary:SetOutlineTransparency(V) end)
-Options.ESPTextTransparency:OnChanged(function(V)        Eternal.ESPLibrary:SetTextTransparency(V) end)
-Options.ESPTextOutlineTransparency:OnChanged(function(V) Eternal.ESPLibrary:SetTextOutlineTransparency(V) end)
-Options.ESPFadeTime:OnChanged(function(V)        Eternal.ESPLibrary:SetFadeTime(V) end)
-Options.ESPTextSize:OnChanged(function(V)        Eternal.ESPLibrary:SetTextSize(V) end)
-Options.ESPTextFont:OnChanged(function(V)        Eternal.ESPLibrary:SetFont(Enum.Font[V]) end)
-Toggles.ESPTracersToggle:OnChanged(function(V)   Eternal.ESPLibrary:SetTracers(V) end)
-Options.ESPTracersOrigin:OnChanged(function(V)   Eternal.ESPLibrary:SetTracerOrigin(V) end)
-Options.ESPTracerThickness:OnChanged(function(V) Eternal.ESPLibrary:SetTracerSize(V) end)
-Toggles.ESPArrowsToggle:OnChanged(function(V)    Eternal.ESPLibrary:SetArrows(V) end)
-Options.ESPArrowsRadius:OnChanged(function(V)    Eternal.ESPLibrary:SetArrowRadius(V) end)
+Toggles.ESPRainbow:OnChanged(function(V)        mstudio45.ESPLibrary:SetRainbow(V) end)
+Toggles.ESPShowDistance:OnChanged(function(V)   mstudio45.ESPLibrary:SetShowDistance(V) end)
+Options.ESPFillTransparency:OnChanged(function(V)        mstudio45.ESPLibrary:SetFillTransparency(V) end)
+Options.ESPOutlineTransparency:OnChanged(function(V)     mstudio45.ESPLibrary:SetOutlineTransparency(V) end)
+Options.ESPTextTransparency:OnChanged(function(V)        mstudio45.ESPLibrary:SetTextTransparency(V) end)
+Options.ESPTextOutlineTransparency:OnChanged(function(V) mstudio45.ESPLibrary:SetTextOutlineTransparency(V) end)
+Options.ESPFadeTime:OnChanged(function(V)        mstudio45.ESPLibrary:SetFadeTime(V) end)
+Options.ESPTextSize:OnChanged(function(V)        mstudio45.ESPLibrary:SetTextSize(V) end)
+Options.ESPTextFont:OnChanged(function(V)        mstudio45.ESPLibrary:SetFont(Enum.Font[V]) end)
+Toggles.ESPTracersToggle:OnChanged(function(V)   mstudio45.ESPLibrary:SetTracers(V) end)
+Options.ESPTracersOrigin:OnChanged(function(V)   mstudio45.ESPLibrary:SetTracerOrigin(V) end)
+Options.ESPTracerThickness:OnChanged(function(V) mstudio45.ESPLibrary:SetTracerSize(V) end)
+Toggles.ESPArrowsToggle:OnChanged(function(V)    mstudio45.ESPLibrary:SetArrows(V) end)
+Options.ESPArrowsRadius:OnChanged(function(V)    mstudio45.ESPLibrary:SetArrowRadius(V) end)
 
 Tabs.Floors:UpdateWarningBox({
 	Visible = true,
@@ -2265,24 +2720,161 @@ Tabs.Floors:UpdateWarningBox({
 	Text = "Features highlighted in red do not work in the current floor.",
 })
 
-Gb.Floors_Automation = Tabs.Floors:AddRightGroupbox("Automation")
-Gb.Floors_Automation:AddToggle("AutoSteerMinecart", {
-	Text = "Auto Minecart", Default = false, Tooltip = "Automatically completes the minecart chase.",
-	Disabled = not Functions.CC({"require"}), DisabledTooltip = Globals.IncompatibleMessage
+Floors_Automation = Tabs.Floors:AddRightGroupbox("Automation")
+Floors_Automation:AddToggle("MinecartTeleport", {
+    Text = "Minecart Teleport",
+    Default = false,
+    Tooltip = "Instantly completes the minecart chase.",
+    Disabled = (not Functions.CheckEnv("require")),
+    DisabledTooltip = (not getgenv().it)
+        and Global.PayedFeatueMessage
+        or (not Functions.CheckEnv("require"))
+        and Global.ExecutorIssueMessage
+        or "Unknown reason sorry dawg - george"
 })
 
-Gb.Floors_Completion = Tabs.Floors:AddRightGroupbox("Completion")
-Gb.Floors_Completion:AddButton({
+local Decode = require(Services.ReplicatedStorage.NodeObject.MinecartNodes).Decode
+local InstantMinecartTeleport = Toggles.MinecartTeleport
+
+local State = {
+    OldNamecall = nil,
+    MinecartPos = nil,
+}
+
+local function FindMinecartPos()
+    return game:FindFirstChild("MinecartPos", true)
+end
+
+local function GetLatestRoom()
+    return tonumber(tostring(LatestRoom.Value)) or 0
+end
+
+local function GetDoor()
+    local Room = workspace.CurrentRooms:FindFirstChild(GetLatestRoom())
+    return Room and Room:FindFirstChild("Door")
+end
+
+local function TeleportToDoor()
+    local Door = GetDoor()
+    if not Door then
+        return
+    end
+    local Pivot = Door:GetPivot()
+    local Rig = workspace.CurrentCamera and workspace.CurrentCamera:FindFirstChild("MinecartRig")
+    if Rig then
+        Rig:PivotTo(Pivot)
+    end
+    Door.ClientOpen:FireServer()
+    return Pivot
+end
+
+local function HookFunction(Fn, Replacement)
+    local Real = hookfunction or hook_function
+    return Real and Real(Fn, Replacement) or Replacement
+end
+
+local function RestoreFunction(Fn)
+    local Real = restorefunction or restore_function
+    if Real then return Real(Fn) end
+end
+
+local function IsFunctionHooked(Fn)
+    return isfunctionhooked and isfunctionhooked(Fn) or false
+end
+
+local function GetRawMetatable(Object)
+    return (getrawmetatable or get_raw_metatable)(Object)
+end
+
+local function SetReadonly(Object, Bool)
+    (setreadonly or set_read_only)(Object, Bool)
+end
+
+local function HookDecode()
+    local Hook
+    Hook = HookFunction(Decode, function(Nodes, Folder, Start)
+        if Folder and Folder.Parent and (tonumber(Folder.Parent.Name) or 0) < 49 then
+            return nil
+        end
+        return Hook(Nodes, Folder, Start)
+    end)
+end
+
+local function UnhookDecode()
+    if IsFunctionHooked(Decode) then
+        RestoreFunction(Decode)
+    end
+end
+
+local function HookNamecall()
+    if not State.MinecartPos then
+        return
+    end
+    local mt = GetRawMetatable(game)
+    local Original = mt.__namecall
+    SetReadonly(mt, false)
+    State.OldNamecall = Original
+    mt.__namecall = function(self, CFrame, ...)
+        if not checkcaller() and self == State.MinecartPos and getnamecallmethod() == "FireServer" then
+            if State.LatestRoom < 49 then
+                CFrame = TeleportToDoor() or CFrame
+            elseif State.OldNamecall == Original then
+                SetReadonly(mt, false)
+                mt.__namecall = Original
+                State.OldNamecall = nil
+                SetReadonly(mt, true)
+                UnhookDecode()
+            end
+        end
+        return Original(self, CFrame, ...)
+    end
+    SetReadonly(mt, true)
+end
+
+local function UnhookNamecall()
+    local mt = GetRawMetatable(game)
+    SetReadonly(mt, false)
+    if State.OldNamecall then
+        mt.__namecall = State.OldNamecall
+        State.OldNamecall = nil
+    end
+    SetReadonly(mt, true)
+end
+
+InstantMinecartTeleport:OnChanged(function(Value)
+    if Value then
+        State.MinecartPos = FindMinecartPos()
+        if not State.MinecartPos then
+            return
+        end
+        State.LatestRoom = GetLatestRoom()
+        Conns.LatestRoomChanged = LatestRoom:GetPropertyChangedSignal("Value"):Connect(function()
+            task.wait()
+            State.LatestRoom = GetLatestRoom()
+        end)
+        HookDecode()
+        HookNamecall()
+    else
+        if Conns.LatestRoomChanged then
+            Conns.LatestRoomChanged:Disconnect()
+            Conns.LatestRoomChanged = nil
+        end
+        UnhookNamecall()
+        UnhookDecode()
+    end
+end)
+Floors_Completion = Tabs.Floors:AddRightGroupbox("Completion")
+Floors_Completion:AddButton({
     Text = "Auto Complete Nest",
-    Tooltip = "Automatically teleports to and interacts with each water pump.",
+    Tooltip = "Automatically teleports to and solves with each anchor.",
     Func = function()
         if LatestRoom.Value < 50 or Floor ~= "Mines" then
-			Functions.Notify({ Title = "catpaint", Body = "You must be in Room 150 to do this"})
+			Functions.Notify({ Title = "Complete Nest", Body = "You must be in Room 150 to do this"})
             return
         end
 
-        if Globals.AnticheatDisabled ~= true then
-			Functions.Notify({ Title = "catpaint", Body = "Please Climb on the ladder to disable the anticheat"})
+        if Global.AnticheatDisabled ~= true then
+			Functions.Notify({ Title = "Disable Anticheat", Body = "Please Climb on the ladder to disable the anticheat"})
             return
         end
 
@@ -2297,13 +2889,13 @@ Gb.Floors_Completion:AddButton({
         local Running = true
 
         local function CreateTeleportPart(cf)
-            local old = workspace:FindFirstChild("EternalTeleportPart")
+            local old = workspace:FindFirstChild("mstudio45TeleportPart")
             if old then
                 old:Destroy()
             end
 
             local part = Instance.new("Part")
-            part.Name = "EternalTeleportPart"
+            part.Name = "mstudio45TeleportPart"
             part.Size = Vector3.new(2, 2, 2)
             part.Anchored = true
             part.CanCollide = false
@@ -2336,7 +2928,7 @@ Gb.Floors_Completion:AddButton({
 
                         Running = false
 
-						Functions.Notify({ Title = "catpaint", Body = "Successfully completed the nest, please interact with the button to proceed."})
+						Functions.Notify({ Title = "Complete Nest", Body = "Successfully completed the nest, please interact with the button to proceed."})
                     end
 
                     break
@@ -2365,7 +2957,7 @@ Gb.Floors_Completion:AddButton({
         end)
     end
 })
-Gb.Floors_Completion:AddButton({
+Floors_Completion:AddButton({
     Text = "Auto Complete Cringle",
     Tooltip = "Instantly completes the quest.",
     Func = function()
@@ -2375,12 +2967,12 @@ Gb.Floors_Completion:AddButton({
         end
     end
 })
-Gb.Floors_Completion:AddButton({
-    Text = "Auto Complete maze (Outdoors)",
+Floors_Completion:AddButton({
+    Text = "Auto Complete Maze (Outdoors)",
     Tooltip = "Instantly completes the maze.",
     Func = function()
         if LatestRoom.Value < 35 or Floor ~= "Garden" then
-            Functions.Notify({ Title = "catpaint", Body = "You must be in Room 35 to do this (Outdoors)"})
+            Functions.Notify({ Title = "Complete Maze", Body = "You must be in Room 35 to do this (Outdoors)"})
             return
         end
         local Maze = CurrentRooms:FindFirstChild("MazeContents", true)
@@ -2440,33 +3032,208 @@ Gb.Floors_Completion:AddButton({
         end
     end
 })
-Gb.Floors_Visuals = Tabs.Floors:AddLeftGroupbox("Visuals")
-Gb.Floors_Visuals:AddToggle("ShowSeekPathToggle", {
+Floors_Visuals = Tabs.Floors:AddLeftGroupbox("Visuals")
+Floors_Visuals:AddToggle("ShowSeekPathToggle", {
 	Text = "Show Seek Path", Default = false, Tooltip = "Shows you the correct path in seek chases.",
 	Risky = Floor ~= "Mines"
 })
 Toggles.ShowSeekPathToggle:AddColorPicker("ShowSeekPathColor", { Text = "Seek Path", Default = Color3.fromRGB(0, 255, 0), Transparency = 0 })
 
-Gb.Floors_Bypass = Tabs.Floors:AddLeftGroupbox("Bypass")
-Gb.Floors_Bypass:AddToggle("RemoveSeekTrigger", {
-	Text = "Delete Seek Trigger", Default = false, Tooltip = "Diables the 'Seek' chase trigger.",
-	Risky = not (Floor == "Fools" or Floor == "OldHotel"),
-	Disabled = not Functions.CC({"firetouchinterest"}), DisabledTooltip = Globals.IncompatibleMessage
+Floors_Bypass = Tabs.Floors:AddLeftGroupbox("Bypass")
+Floors_Bypass:AddToggle("RemoveSeekTrigger", {
+    Text = "Delete Seek Trigger",
+    Default = false,
+    Tooltip = "Diables the 'Seek' chase trigger.",
+    Risky = not (Floor == "Fools" or Floor == "OldHotel"),
+    Disabled = (not Functions.CheckEnv("firetouchinterest")),
+    DisabledTooltip = (not getgenv().it)
+        and Global.PayedFeatueMessage
+        or (not Functions.CheckEnv("firetouchinterest"))
+        and Global.ExecutorIssueMessage
+        or "Unknown reason sorry dawg - george"
 })
-Gb.Floors_Bypass:AddToggle("RemoveFigure", {
-	Text = "Delete Figure", Default = false, Tooltip = "Completely removes the entity 'Figure' (doesn't always work).",
-	Risky = not (Floor == "Fools" or Floor == "OldHotel" or Floor == "Mines"),
-	Disabled = not Functions.CC({"isnetworkowner"}), DisabledTooltip = Globals.IncompatibleMessage
+Floors_Bypass:AddToggle("RemoveFigure", {
+    Text = "Delete Figure",
+    Default = false,
+    Tooltip = "Completely removes the entity 'Figure' (doesn't always work).",
+    Risky = not (Floor == "Fools" or Floor == "OldHotel" or Floor == "Mines"),
+    Disabled = (not Functions.CheckEnv("isnetworkowner")),-- or (not getgenv().it),
+    DisabledTooltip = (not getgenv().it)
+        and Global.PayedFeatueMessage
+        or (not Functions.CheckEnv("isnetworkowner"))
+        and Global.ExecutorIssueMessage
+        or "Unknown reason sorry dawg - george"
 })
-Gb.Floors_Bypass:AddToggle("AutoRevive", {
+
+Floors_Bypass:AddToggle("AutoRevive", {
 	Text = "Infinite Revives", Default = false, Tooltip = "Automatically revives after dying, with unlimited respawns.",
 	Risky = not (Floor == "Fools" or Floor == "OldHotel")
 })
-Gb.Floors_Bypass:AddDivider()
-Gb.Floors_Bypass:AddToggle("RemoveBasementGate",  { Text = "Remove Basement Gate",   Default = false, Tooltip = "Removes the gate from basement rooms.",            Risky = not (Floor == "Fools" or Floor == "OldHotel") })
-Gb.Floors_Bypass:AddToggle("RemovePaintingsDoor", { Text = "Remove Paintings Door",  Default = false, Tooltip = "Removes the fireplace doors from painting rooms.", Risky = not (Floor == "Fools" or Floor == "OldHotel") })
-Gb.Floors_Bypass:AddToggle("RemoveSkeletonDoor",  { Text = "Remove Skeleton Door",   Default = false, Tooltip = "Removes the skeleton door from the infirmary.",    Risky = Floor ~= "Fools" })
+Floors_Bypass:AddDivider()
+Floors_Bypass:AddToggle("RemoveBasementGate",  { Text = "Remove Basement Gate",   Default = false, Tooltip = "Removes the gate from basement rooms.",            Risky = not (Floor == "Fools" or Floor == "OldHotel") })
+Floors_Bypass:AddToggle("RemovePaintingsDoor", { Text = "Remove Paintings Door",  Default = false, Tooltip = "Removes the fireplace doors from painting rooms.", Risky = not (Floor == "Fools" or Floor == "OldHotel") })
+Floors_Bypass:AddToggle("RemoveSkeletonDoor",  { Text = "Remove Skeleton Door",   Default = false, Tooltip = "Removes the skeleton door from the infirmary.",    Risky = Floor ~= "Fools" })
+Troll_Left = Tabs.Troll:AddLeftGroupbox("Trolling/Fun")
+		
+local TriggerFigureLooping = false
+local TriggerFigureThread
+local PlayersService = game:GetService("Players")
 
+Troll_Left:AddToggle("LoopTriggerFigure", {
+	Text = "Trigger Figure",
+	Default = false,
+	Tooltip = "Triggers Figure.",
+	Risky = true,
+	--Disabled = (not getgenv().it),
+	DisabledTooltip = Global.PayedFeatueMessage
+})
+Self_Misc:AddDivider()
+Troll_Left:AddDropdown("PlayerListToTrigger", {
+	Text = "Players",
+	Values = {},
+	Default = 0,
+	Multi = true,
+})
+
+local function GetSelectedNames()
+	local Selected = Options.PlayerListToTrigger.Value
+	local Names = {}
+	if type(Selected) == "table" then
+		for Name in pairs(Selected) do table.insert(Names, Name) end
+	elseif type(Selected) == "string" and Selected ~= "" then
+		table.insert(Names, Selected)
+	end
+	return Names
+end
+
+Toggles.LoopTriggerFigure:AddKeyPicker("LoopTriggerFigureKeyPicker", {
+	Text = "Trigger Figure", Default = "K", Mode = "Toggle", SyncToggleState = true
+})
+
+local function UpdatePlayerList()
+	local Names = {}
+	for _, Player in ipairs(PlayersService:GetPlayers()) do
+		local Character = Player.Character
+		if Character and Character:GetAttribute("Alive") == true then
+			table.insert(Names, Player.Name)
+		end
+	end
+
+	local Dropdown = Options.PlayerListToTrigger
+	if not Dropdown then return end
+
+	if Dropdown.SetValues then
+		pcall(function() Dropdown:SetValues(Names) end)
+	elseif Dropdown.UpdateOptions then
+		pcall(function() Dropdown:UpdateOptions(Names) end)
+	elseif Dropdown.Refresh then
+		pcall(function() Dropdown:Refresh(Names) end)
+	end
+end
+
+task.spawn(function()
+	while true do
+		UpdatePlayerList()
+		task.wait(1)
+	end
+end)
+
+local HiddenRemotes = game.Workspace:FindFirstChild("mstudio45_Folder")
+local TriggerFigureEvent = RemotesFolder:FindFirstChild("FootstepRemoteThatWeNeed")
+	or (HiddenRemotes and HiddenRemotes:FindFirstChild("FootstepRemoteThatWeNeed"))
+
+Toggles.LoopTriggerFigure:OnChanged(function(Value)
+	if Value then
+		if TriggerFigureLooping then return end
+		TriggerFigureLooping = true
+
+		if Floor ~= "Hotel" and Floor ~= "Mines" then
+			Functions.Notify({ Title = "Trigger Figure", Body = "This feature isn’t supported on this floor due to the absence of the required remote."})
+		else
+			Functions.Notify({ Title = "Trigger Figure", Body = "You can get banned from using this feature, its not our fault if you get banned."})
+		end
+
+		TriggerFigureThread = task.spawn(function()
+			local FireTimer = 0
+
+			while TriggerFigureLooping do
+				local Selected = Options.PlayerListToTrigger.Value
+				local Names = {}
+				if type(Selected) == "table" then
+					for Name in pairs(Selected) do table.insert(Names, Name) end
+				elseif type(Selected) == "string" and Selected ~= "" then
+					table.insert(Names, Selected)
+				end
+
+				local Character = PlayersService.LocalPlayer.Character
+				local MyHRP = Character and Character:FindFirstChild("HumanoidRootPart")
+
+				FireTimer += 1
+				if FireTimer >= 10 then
+					FireTimer = 0
+					if TriggerFigureEvent then
+						TriggerFigureEvent:FireServer()
+					end
+				end
+
+				for _, PlayerName in ipairs(Names) do
+					local Player = PlayersService:FindFirstChild(PlayerName)
+					if Player ~= PlayersService.LocalPlayer then
+						local HRP = Player and Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+						if HRP and MyHRP then
+							MyHRP.CFrame = HRP.CFrame + Vector3.new(0, 11, 0)
+							MyHRP.AssemblyLinearVelocity = Vector3.zero
+						end
+					end
+				end
+
+				task.wait()
+			end
+		end)
+	else
+		TriggerFigureLooping = false
+		TriggerFigureThread = nil
+	end
+end)
+		
+Troll_Left:AddToggle("BreakDoorsAnims", {
+	Text = "Break Doors Animation (FE)",
+	Default = false,
+	Tooltip = "Breaks Doors that are opened.",
+	DisabledTooltip = Global.PayedFeatueMessage
+})
+
+local BreakDoorsLooping = false
+
+Toggles.BreakDoorsAnims:OnChanged(function(Value)
+	if Value then
+		if BreakDoorsLooping then return end
+		BreakDoorsLooping = true
+
+		task.spawn(function()
+			while BreakDoorsLooping do
+				local RoomNumber = tostring(LatestRoom.Value - 1)
+				local Room = CurrentRooms:FindFirstChild(RoomNumber)
+				local Door = Room and Room:FindFirstChild("Door") and Room.Door:FindFirstChild("Door")
+
+				if Door then
+					local BV = Door:FindFirstChild("BodyVelocity")
+					if not BV then
+						BV = Instance.new("BodyVelocity")
+						BV.Parent = Door
+					end
+					BV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+					BV.Velocity = Vector3.new(0, 100, 0)
+				end
+
+				task.wait(0.2)
+			end
+			BreakDoorsLooping = false
+		end)
+	else
+		BreakDoorsLooping = false
+	end
+end)
 local ObstructionNames = { ThingToOpen = "RemoveBasementGate", MovingDoor = "RemovePaintingsDoor", Wax_Door = "RemoveSkeletonDoor" }
 for ObjName, ToggleName in ObstructionNames do
 	Toggles[ToggleName]:OnChanged(function(Value)
@@ -2480,24 +3247,24 @@ end
 
 local MainHook
 local OtherHook
-if Functions.CC({"hookmetamethod", "newcclosure", "getnamecallmethod"}) then
-	MainHook = Eternal.Environment.hookmetamethod(game, "__namecall", Eternal.Environment.newcclosure(function(Self, ...)
+if Functions.CheckEnv("hookmetamethod", "newcclosure", "getnamecallmethod") then
+	MainHook = mstudio45.Environment.hookmetamethod(game, "__namecall", mstudio45.Environment.newcclosure(function(Self, ...)
 		local Args = { ... }
-		if Eternal and Eternal.Environment then
-			local Method = Eternal.Environment.getnamecallmethod()
+		if mstudio45 and mstudio45.Environment then
+			local Method = mstudio45.Environment.getnamecallmethod()
 
 			if Self.Name == "Crouch" and Method == "FireServer" then
-				if Toggles.CrouchSpoof.Value or Toggles.PositionSpoof.Value then
+				if Toggles.AnitFigureHearing.Value or Toggles.PositionSpoof.Value then
 					Args[1] = true
 				end
 				Args[2] = true
 			end
 
 			if Self.Name == "MotorReplication" and Method == "FireServer" then
-				local DoBypass = (Toggles.BypassEyes.Value and Globals.IsEyes) or (Toggles.BypassLookman.Value and Globals.IsLookman)
+				local DoBypass = (Toggles.BypassEyes.Value and Global.IsEyes) or (Toggles.BypassLookman.Value and Global.IsLookman)
 				if DoBypass then
 					if Floor == "Fools" or Floor == "OldHotel" then
-						Args[1] = 0 Args[2] = (Globals.SpoofOffset == 200 and 65 or -65) Args[3] = 0 Args[4] = false
+						Args[1] = 0 Args[2] = (Global.SpoofOffset == 200 and 65 or -65) Args[3] = 0 Args[4] = false
 					else
 						Args[1] = -650
 					end
@@ -2529,22 +3296,24 @@ local CharacterOldConnectionKeys = {
 	"MainHandler", "JumpHandler", "SlideHandler", "LibraryCodeHandler1", "LibraryCodeHandler2",
 	"OxygenConnection", "AnimationHandler", "AutoHideConnection", "AutoReviveHandler",
 	"SHMFixer", "AnticheatDisabler", "AnticheatEnableDetector1", "AnticheatEnableDetector2",
-	"AutoSteerMinecartDuckHandler", "AutoSolveAnchorsConnection",
+	"AutoMinecartDuckHandler", "AutoSolveAnchorsConnection",
 }
 
-Globals.IsTyping = false
-Connections.TextBoxConnection1 = Services.UserInputService.TextBoxFocused:Connect(function()
-	Globals.IsTyping = true
+Global.IsTyping = false
+Conns.TextBoxConnection1 = Services.UserInputService.TextBoxFocused:Connect(function()
+	Global.IsTyping = true
 end)
-Connections.TextBoxConnection2 = Services.UserInputService.TextBoxFocusReleased:Connect(function()
-	Globals.IsTyping = false
+Conns.TextBoxConnection2 = Services.UserInputService.TextBoxFocusReleased:Connect(function()
+	Global.IsTyping = false
 end)
 
 Functions.HandleCharacter = function(NewCharacter)
-	for _, Key in CharacterOldConnectionKeys do
-		if Connections[Key] then
-			Connections[Key]:Disconnect()
-			Connections[Key] = nil
+	for i = 1, #CharacterOldConnectionKeys do
+		local k = CharacterOldConnectionKeys[i]
+		local c = Conns[k]
+		if c then
+			c:Disconnect()
+			Conns[k] = nil
 		end
 	end
 
@@ -2557,8 +3326,8 @@ Functions.HandleCharacter = function(NewCharacter)
 	RootPart = NewCharacter:FindFirstChild("HumanoidRootPart")
 	Camera   = Services.Workspace.CurrentCamera
 
-	Globals.OldCamera = Camera
-	Globals.MainUI = LocalPlayer.PlayerGui.MainUI
+	Global.OldCamera = Camera
+	Global.MainUI = LocalPlayer.PlayerGui.MainUI
 
 	Collision = NewCharacter:WaitForChild("Collision")
 	CollisionPart  = NewCharacter:FindFirstChild("CollisionPart") or NewCharacter:FindFirstChild("Collision")
@@ -2585,70 +3354,33 @@ Functions.HandleCharacter = function(NewCharacter)
 
 	if Toggles.EnableCharacterJump.Value  then Character:SetAttribute("CanJump",  true) end
 
-	if Functions.CC({"require"}) then
-		Main_Game = Eternal.Environment.require(Globals.MainUI.Initiator.Main_Game)
+	if Functions.CheckEnv("require") then
+		Main_Game = mstudio45.Environment.require(Global.MainUI.Initiator.Main_Game)
 	end
 
 	if Main_Game and Toggles.RemoveCameraBobbing.Value then
 		Main_Game.spring.Speed = 9e9
 	end
 
-	if Main_Game and Functions.CC({"require"}) then
-		local Controls = require(LocalPlayer.PlayerScripts.PlayerModule):GetControls()
-		local OriginalGetMoveVector = Controls.GetMoveVector
-		Globals.OriginalGetMoveVector = OriginalGetMoveVector
-		Controls.GetMoveVector = function(...)
-			if Toggles.AutoSteerMinecart.Value and Floor == "Mines" then
-				local Node = Globals.NearestTurnNode
-				if Node and Functions.GetMinecart() then
-					local Turn = Node:GetAttribute("Turn")
-					return Turn == "Left" and Vector3.new(-1, 0, 0) or Turn == "Right" and Vector3.new(1, 0, 0) or Vector3.zero
-				end
-			end
-			return OriginalGetMoveVector(...)
-		end
-	end
+	
+	Global.AnticheatDisabled = false
 
-	Globals.AutoMinecartDucked = false
-	Globals.LastDuck = tick()
-	Connections.AutoSteerMinecartDuckHandler = Services.RunService.Heartbeat:Connect(function()
-		if not Toggles.AutoSteerMinecart.Value or not Functions.GetMinecart() or tick() - Globals.LastDuck < 0.1 then return end
-		Globals.NearestTurnNode = Functions.GetNearestTurnNode()
+	local RL = Global.MainUI.Initiator.Main_Game:FindFirstChild("RemoteListener")
+	local UIModules = RL and RL:FindFirstChild("Modules")
+	local Holder = RL and RL:FindFirstChild(DISABLED_HOLDER_NAME)
+	Modules.A90             = FindRealModule(UIModules, Holder, "A90")
+	Modules.Screech         = FindRealModule(UIModules, Holder, "Screech")
+	Modules.Dread           = FindRealModule(UIModules, Holder, "Dread")
+	Modules.SpiderJumpscare = FindRealModule(UIModules, Holder, "SpiderJumpscare")
 
-		if not Globals.AutoMinecartDucked and Functions.GetNearestDuckBoard() then
-			Main_Game.crouch(true)
-			Globals.AutoMinecartDucked = true
-		elseif not Functions.GetNearestDuckBoard() and Globals.AutoMinecartDucked then
-			Main_Game.crouch(false)
-			Globals.AutoMinecartDucked = false
-		end
-		if Main_Game then
-			Main_Game.fovtarget = Options.FieldOfView.Value
-		else
-			Camera.FieldOfView = Options.FieldOfView.Value
-		end
-		Globals.LastDuck = tick()
-	end)
-
-	Globals.AnticheatDisabled = false
-
-	local UIModules = Globals.MainUI.Initiator.Main_Game.RemoteListener.Modules
-	Modules.A90             = UIModules:FindFirstChild("A90")
-	Modules.Screech         = UIModules.Screech
-	Modules.Dread           = UIModules:FindFirstChild("Dread")
-	Modules.SpiderJumpscare = UIModules.SpiderJumpscare
-
-	if Toggles.RemoveScreech.Value    then Modules.Screech.Name = "Screech_Disabled" end
-	if Toggles.RemoveA90.Value and Modules.A90   then Modules.A90.Name = "A90_Disabled" end
-	if Toggles.RemoveDread.Value and Modules.Dread then Modules.Dread.Name = "Dread_Disabled" end
-	if Toggles.DisableTimothyJumpscare.Value then Modules.SpiderJumpscare.Name = "SpiderJumpscare_Disabled" end
+	SyncEntityRemoval()
 
 	if Toggles.DisableHideVignette.Value then
-		local Vignette = Globals.MainUI:FindFirstChild("HideVignette") or Globals.MainUI.MainFrame:FindFirstChild("HideVignette")
+		local Vignette = Global.MainUI:FindFirstChild("HideVignette") or Global.MainUI.MainFrame:FindFirstChild("HideVignette")
 		if Vignette then Vignette.Image = "Disabled" end
 	end
 	if Toggles.DisableEntityJumpscares.Value then
-		local JS = Globals.MainUI.Initiator.Main_Game.RemoteListener:FindFirstChild("Jumpscares")
+		local JS = Global.MainUI.Initiator.Main_Game.RemoteListener:FindFirstChild("Jumpscares")
 		if JS then JS.Name = "Jumpscares_Disabled" end
 	end
 
@@ -2668,38 +3400,33 @@ Functions.HandleCharacter = function(NewCharacter)
 		end
 	end
 
-	Connections.LibraryCodeHandler1 = LocalPlayer.PlayerGui.PermUI.Hints.ChildAdded:Connect(function()
-		if Toggles.NotifyLibraryCode.Value then
-			local Code = Functions.GetLibraryCode()
-			if Code and not Code:find("_") and not Globals.LibraryCodeFound then
-				local Lock = Services.Workspace:FindFirstChild("Padlock", true)
-				Functions.Notify({ Title = "Padlock code found!", Body = "The code is: '" .. Code .. "'", Time = Toggles.NotifyKeepNotifications.Value and Lock or 15 })
-				Globals.LibraryCodeFound = true
-			end
+	local function TryNotifyLibraryCode()
+		if not Toggles.NotifyLibraryCode.Value or Global.LibraryCodeFound then return end
+		local Code = Functions.GetLibraryCode()
+		if Code and not Code:find("_") then
+			Global.LibraryCodeFound = true
+			local Lock = Services.Workspace:FindFirstChild("Padlock", true)
+			Functions.Notify({ Title = "Padlock code found!", Body = "The code is: '" .. Code .. "'", Time = Toggles.NotifyKeepNotifications.Value and Lock or 15 })
+		end
+	end
+
+	Conns.LibraryCodeHandler1 = LocalPlayer.PlayerGui.PermUI.Hints.ChildAdded:Connect(TryNotifyLibraryCode)
+	Conns.LibraryCodeHandler2 = Character.ChildAdded:Connect(function(Child)
+		if Child.Name == "LibraryHintPaper" or Child.Name == "LibraryHintPaperHard" then
+			TryNotifyLibraryCode()
 		end
 	end)
 
-	Connections.LibraryCodeHandler2 = Character.ChildAdded:Connect(function(Child)
-		if (Child.Name == "LibraryHintPaper" or Child.Name == "LibraryHintPaperHard") and Toggles.NotifyLibraryCode.Value then
-			local Code = Functions.GetLibraryCode()
-			if Code and not Code:find("_") and not Globals.LibraryCodeFound then
-				local Lock = Services.Workspace:FindFirstChild("Padlock", true)
-				Functions.Notify({ Title = "Padlock code found!", Body = "The code is: '" .. Code .. "'", Time = Toggles.NotifyKeepNotifications.Value and Lock or 15 })
-				Globals.LibraryCodeFound = true
-			end
-		end
-	end)
-
-	Globals.OldOxygen = Character:GetAttribute("Oxygen")
-	Connections.OxygenConnection = Character:GetAttributeChangedSignal("Oxygen"):Connect(function()
+	Global.OldOxygen = Character:GetAttribute("Oxygen")
+	Conns.OxygenConnection = Character:GetAttributeChangedSignal("Oxygen"):Connect(function()
 		local NewOxy = Character:GetAttribute("Oxygen")
-		if NewOxy < Globals.OldOxygen and Toggles.NotifyOxygen.Value then
+		if NewOxy < Global.OldOxygen and Toggles.NotifyOxygen.Value then
 			Functions.Caption(Functions.FormatOxygen(NewOxy), true)
 		end
-		Globals.OldOxygen = NewOxy
+		Global.OldOxygen = NewOxy
 	end)
 
-	Connections.AutoReviveHandler = LocalPlayer:GetAttributeChangedSignal("Alive"):Connect(function()
+	Conns.AutoReviveHandler = LocalPlayer:GetAttributeChangedSignal("Alive"):Connect(function()
 		if LocalPlayer:GetAttribute("Alive") == false and Toggles.AutoRevive.Value then
 			if Floor == "Fools" or Floor == "OldHotel" then
 				while LocalPlayer:GetAttribute("Alive") ~= true do
@@ -2710,40 +3437,40 @@ Functions.HandleCharacter = function(NewCharacter)
 		end
 	end)
 
-	Connections.SHMFixer = RootPart:GetPropertyChangedSignal("Anchored"):Connect(function()
+	Conns.SHMFixer = RootPart:GetPropertyChangedSignal("Anchored"):Connect(function()
 		task.wait()
 		if Floor == "Fools" and RootPart.Anchored and Character:GetAttribute("Hiding") ~= true then
 			RootPart.Anchored = false
 		end
 	end)
 
-	Connections.AnticheatDisabler = Character:GetAttributeChangedSignal("Climbing"):Connect(function()
-		if Character:GetAttribute("Climbing") == true and Toggles.DisableAnticheat.Value and not Globals.AnticheatDisabled then
+	Conns.AnticheatDisabler = Character:GetAttributeChangedSignal("Climbing"):Connect(function()
+		if Character:GetAttribute("Climbing") == true and Toggles.DisableAnticheat.Value and not Global.AnticheatDisabled then
 			task.wait(0.25)
 			Character:SetAttribute("Climbing", false)
-			Functions.Notify({ Title = "Successfully disabled the anticheat.", Body = "It will be re-enabled after a cutscene or halt room." })
-			Globals.AnticheatDisabled = true
+			Global.AnticheatDisabled = true
+			Functions.Notify({ Title = "Disable Anticheat", Body = "Successfully disabled the anticheat, It will be \nre-enabled after a cutscene or halt room." })
 		end
 	end)
 
-	Connections.AnticheatEnableDetector1 = RemotesFolder:WaitForChild("Cutscene").OnClientEvent:Connect(function(CutsceneName)
-		if Globals.AnticheatDisabled and not CutsceneName:find("SewerSeek") then
-			Globals.AnticheatDisabled = false
-			Functions.Notify({ Title = "The anticheat has been re-enabled.", Body = "Interact with a ladder to disable it again." })
+	Conns.AnticheatEnableDetector1 = RemotesFolder:WaitForChild("Cutscene").OnClientEvent:Connect(function(CutsceneName)
+		if Global.AnticheatDisabled and not CutsceneName:find("SewerSeek") then
+			Global.AnticheatDisabled = false
+			Functions.Notify({ Title = "Disable Anticheat", Body = "The anticheat has been re-enabled, Interact with a ladder to disable it again." })
 		end
 	end)
 
-	Connections.AnticheatEnableDetector2 = RemotesFolder:WaitForChild("UseEnemyModule").OnClientEvent:Connect(function(ModuleName)
+	Conns.AnticheatEnableDetector2 = RemotesFolder:WaitForChild("UseEnemyModule").OnClientEvent:Connect(function(ModuleName)
+		if (ModuleName == "Void" or ModuleName == "Glitch") and Global.AnticheatDisabled then
+			Global.AnticheatDisabled = false
+			Functions.Notify({ Title = "Disable Anticheat", Body = "The anticheat has been re-enabled, Interact with a ladder to disable it again." })
+		end
 		if ModuleName == "Void" or ModuleName == "Glitch" then
-			if Globals.AnticheatDisabled then
-				Globals.AnticheatDisabled = false
-				Functions.Notify({ Title = "The anticheat has been re-enabled.", Body = "Interact with a ladder to disable it again." })
-			end
 			LocalPlayer:SetAttribute("CurrentRoom", LatestRoom.Value)
 		end
 	end)
 
-	Connections.AnimationHandler = Character.ChildAdded:Connect(function()
+	Conns.AnimationHandler = Character.ChildAdded:Connect(function()
 		local ToolNames = { "Lockpick","Shears","SkeletonKey","Key","GeneratorFuse","KeyElectrical","KeyBackdoor","KeyIron", "Multitool" }
 		local Tool
 		for _, Name in ToolNames do
@@ -2756,17 +3483,17 @@ Functions.HandleCharacter = function(NewCharacter)
 		if UseAnim then
 			UseAnim = Humanoid:LoadAnimation(UseAnim)
 			UseAnim.Priority = Enum.AnimationPriority.Action4
-			Globals.UseAnimation = UseAnim
+			Global.UseAnimation = UseAnim
 		end
 		local UseAnimBreak = Tool:FindFirstChild("usefinish", true) or Tool:FindFirstChild("promptanimend", true) or Tool:FindFirstChild("lockpickuse", true)
 		if UseAnimBreak then
 			UseAnimBreak = Humanoid:LoadAnimation(UseAnimBreak)
 			UseAnimBreak.Priority = Enum.AnimationPriority.Action4
-			Globals.UseAnimationBreak = UseAnimBreak
+			Global.UseAnimationBreak = UseAnimBreak
 		end
 	end)
 
-	Connections.JumpHandler = Character:GetAttributeChangedSignal("CanJump"):Connect(function()
+	Conns.JumpHandler = Character:GetAttributeChangedSignal("CanJump"):Connect(function()
 		local Val = Character:GetAttribute("CanJump")
 		if Toggles.EnableCharacterJump.Value and Val ~= true or not Toggles.EnableCharacterJump.Value then
 			OldJump = Val
@@ -2774,57 +3501,57 @@ Functions.HandleCharacter = function(NewCharacter)
 		if Toggles.EnableCharacterJump.Value then Character:SetAttribute("CanJump", true) end
 	end)
 
-	Globals.SpoofOffset = 0
+	Global.SpoofOffset = 0
 
-	Globals.LastAutoAnchor = tick()
-	Connections.AutoSolveAnchorsConnection = Services.RunService.Heartbeat:Connect(function()
+	Global.LastAutoAnchor = tick()
+	Conns.AutoSolveAnchorsConnection = Services.RunService.Heartbeat:Connect(function()
 		if not Toggles.AutoSolveAnchors.Value then return end
-		if not Globals.MainUI:FindFirstChild("AnchorHintFrame") then return end
-		if tick() - Globals.LastAutoAnchor <= 0.1 then return end
+		if not Global.MainUI:FindFirstChild("AnchorHintFrame") then return end
+		if tick() - Global.LastAutoAnchor <= 0.1 then return end
 		local Anchor = Functions.GetCurrentAnchor()
 		if Anchor and LocalPlayer:DistanceFromCharacter(Anchor.PrimaryPart.Position) < Anchor.ActivateEventPrompt.MaxActivationDistance and not Anchor:GetAttribute("Activated") then
-			Anchor:WaitForChild("AnchorRemote"):InvokeServer(Globals.MainUI.AnchorHintFrame.Code.Text)
+			Anchor:WaitForChild("AnchorRemote"):InvokeServer(Global.MainUI.AnchorHintFrame.Code.Text)
 		end
-		Globals.LastAutoAnchor = tick()
+		Global.LastAutoAnchor = tick()
 	end)
 
-	Globals.ManipulateBody = Instance.new("BodyVelocity")
-	Globals.ManipulateBody.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+	Global.ManipulateBody = Instance.new("BodyVelocity")
+	Global.ManipulateBody.MaxForce = Vector3.new(9e9, 9e9, 9e9)
 
-	Globals.FlyBody = Instance.new("BodyVelocity")
-	Globals.FlyBody.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+	Global.FlyBody = Instance.new("BodyVelocity")
+	Global.FlyBody.MaxForce = Vector3.new(9e9, 9e9, 9e9)
 
-	Globals.SelfKilled = false
-	Globals.ThirdPersonParts = {}
+	Global.SelfKilled = false
+	Global.ThirdPersonParts = {}
 	for _, Object in Character:GetDescendants() do
 		if Object:IsA("Accessory") and Object:FindFirstChild("Handle") then
-			table.insert(Globals.ThirdPersonParts, Object.Handle)
+			table.insert(Global.ThirdPersonParts, Object.Handle)
 		end
 	end
-	table.insert(Globals.ThirdPersonParts, Character:WaitForChild("Head"))
+	table.insert(Global.ThirdPersonParts, Character:WaitForChild("Head"))
 
-	Globals.LastAnimationCheck = tick()
-	Globals.LastCrouchFire = tick()
-	Globals.OriginalC1 = Character.LowerTorso.Root.C1
+	Global.LastAnimationCheck = tick()
+	Global.LastCrouchFire = tick()
+	Global.OriginalC1 = Character.LowerTorso.Root.C1
 
 	local RayParams = RaycastParams.new()
 	RayParams.FilterType = Enum.RaycastFilterType.Exclude
 
-	Connections.MainHandler = Services.RunService.RenderStepped:Connect(function()
+	Conns.MainHandler = Services.RunService.RenderStepped:Connect(function()
 		if Services.Workspace:FindFirstChild("Camera") then
 			Camera = Services.Workspace:FindFirstChild("Camera")
 		end
 
-		if Toggles.SpeedBoostToggle.Value then
-			Humanoid.WalkSpeed = Functions.GetCurrentSpeed() + Options.SpeedBoostSlider.Value
+		if Toggles.WalkSpeedToggle.Value then
+			Humanoid.WalkSpeed = Functions.GetCurrentSpeed() + Options.WalkSpeedSlider.Value
 		end
 
-		if Globals.Lagging or (Options.SpeedBoostSlider.Value <= 6 and Options.FlySpeed.Value <= 21) then
+		if Global.Lagging or (Options.WalkSpeedSlider.Value <= 6 and Options.FlySpeed.Value <= 21) then
 			CollisionPartClone.Massless = true
 		end
 
-		Globals.IsEyes    = Services.Workspace:FindFirstChild("Eyes") ~= nil or Services.Workspace:FindFirstChild("Lookman") ~= nil
-		Globals.IsLookman = Services.Workspace:FindFirstChild("BackdoorLookman") ~= nil
+		Global.IsEyes    = Services.Workspace:FindFirstChild("Eyes") ~= nil or Services.Workspace:FindFirstChild("Lookman") ~= nil
+		Global.IsLookman = Services.Workspace:FindFirstChild("BackdoorLookman") ~= nil
 
 		if Toggles.AmbientToggle.Value then
 			Services.TweenService:Create(Services.Lighting, TweenInfo.new(0.2, Enum.EasingStyle.Exponential), { Ambient = Options.AmbientColor.Value }):Play()
@@ -2834,11 +3561,11 @@ Functions.HandleCharacter = function(NewCharacter)
 			if Toggles.RemoveCameraShake.Value     then Main_Game.csgo = CFrame.new() end
 		end
 
-		if Globals.SelfKilled and Globals.MainUI:FindFirstChild("Statistics") then
-			Globals.MainUI.Statistics.Death.Text = "Died to nigger shit 67"
+		if Global.SelfKilled and Global.MainUI:FindFirstChild("Statistics") then
+			Global.MainUI.Statistics.Death.Text = "Died to mstudio45"
 		end
 
-		local MainFrame = Globals.MainUI:FindFirstChild("MainFrame")
+		local MainFrame = Global.MainUI:FindFirstChild("MainFrame")
 		if MainFrame then
 			local Effects = MainFrame.Healthbar:FindFirstChild("Effects")
 			if Effects and Effects:FindFirstChild("Crouching") then
@@ -2846,8 +3573,8 @@ Functions.HandleCharacter = function(NewCharacter)
 			end
 		end
 
-		if (Toggles.CrouchSpoof.Value or Toggles.PositionSpoof.Value) and RemotesFolder:FindFirstChild("Crouch") then
-			RemotesFolder.Crouch:FireServer(true, true)
+		if (Toggles.AnitFigureHearing.Value or Toggles.PositionSpoof.Value) and RemotesFolder:FindFirstChild("Crouch") then
+			RemotesFolder.Crouch:FireServer(true)
 		end
 
 		if Floor ~= "Fools" and Floor ~= "OldHotel" and not Camera:FindFirstChild("MinecartRig") then
@@ -2863,8 +3590,8 @@ Functions.HandleCharacter = function(NewCharacter)
 		end
 
 		if Floor == "OldHotel" or Floor == "Fools" then
-			local SpoofOffset = Toggles.PositionSpoof.Value and Functions.GetNearestEntity() and 20 or 0
-			Globals.SpoofOffset = SpoofOffset
+			local SpoofOffset = Toggles.PositionSpoof.Value and Functions.GetNearestEntity() and 200 or 0
+			Global.SpoofOffset = SpoofOffset
 			Collision.Position = RootPart.Position + Vector3.new(0, SpoofOffset, 0)
 			Collision.CanCollide = false
 			if Floor == "Fools" then
@@ -2885,7 +3612,7 @@ Functions.HandleCharacter = function(NewCharacter)
 			end
 
 			if Character:FindFirstChild("LowerTorso") and Character.LowerTorso:FindFirstChild("Root") then
-				Character.LowerTorso.Root.C1 = Globals.OriginalC1 * CFrame.new(0, Toggles.PositionSpoof.Value and -2.346 or 0, 0)
+				Character.LowerTorso.Root.C1 = Global.OriginalC1 * CFrame.new(0, Toggles.PositionSpoof.Value and -2.346 or 0, 0)
 			end
 
 			local SpoofY = Toggles.PositionSpoof.Value and 2.328 or 0.18
@@ -2906,10 +3633,10 @@ Functions.HandleCharacter = function(NewCharacter)
 		CollisionClone.Position = RootPart.Position + Vector3.new(0, Toggles.PositionSpoof.Value and 1.75 or 0.18, 0)
 
 		if Toggles.TeleportManipulationToggle.Value and Options.TeleportManipulationMode.Value == "Velocity" then
-			Globals.ManipulateBody.Parent = RootPart
-			Globals.ManipulateBody.Velocity = RootPart.CFrame.LookVector * 2.25
+			Global.ManipulateBody.Parent = RootPart
+			Global.ManipulateBody.Velocity = RootPart.CFrame.LookVector * 2.25
 		else
-			Globals.ManipulateBody.Parent = nil
+			Global.ManipulateBody.Parent = nil
 		end
 
 		if Toggles.TeleportManipulationToggle.Value and Options.TeleportManipulationMode.Value == "Pivot" and Floor ~= "Fools" and Floor ~= "OldHotel" then
@@ -2917,41 +3644,41 @@ Functions.HandleCharacter = function(NewCharacter)
 		end
 
 		if Toggles.FlyToggle.Value then
-			Globals.FlyBody.Parent = RootPart
-			Globals.FlyBody.Velocity = Functions.GetFlyVelocity() * Options.FlySpeed.Value
+			Global.FlyBody.Parent = RootPart
+			Global.FlyBody.Velocity = Functions.GetFlyVelocity() * Options.FlySpeed.Value
 		else
-			Globals.FlyBody.Parent = nil
+			Global.FlyBody.Parent = nil
 		end
 
-		local DoEyesBypass = (Toggles.BypassEyes.Value and Globals.IsEyes) or (Toggles.BypassLookman.Value and Globals.IsLookman)
+		local DoEyesBypass = (Toggles.BypassEyes.Value and Global.IsEyes) or (Toggles.BypassLookman.Value and Global.IsLookman)
 		if DoEyesBypass then
 			if Floor == "Fools" or Floor == "OldHotel" then
-				RemotesFolder.MotorReplication:FireServer(0, (Globals.SpoofOffset == 200 and 65 or -65), 0, false)
+				RemotesFolder.MotorReplication:FireServer(0, (Global.SpoofOffset == 200 and 65 or -65), 0, false)
 			else
 				RemotesFolder.MotorReplication:FireServer(-650)
 			end
 		end
 
-		if RemotesFolder:FindFirstChild("Crouch") and tick() - Globals.LastCrouchFire > 0.1 then
+		if RemotesFolder:FindFirstChild("Crouch") and tick() - Global.LastCrouchFire > 0.1 then
 			local IsCrouch = Functions.IsCrouching()
-			if Toggles.CrouchSpoof.Value or Toggles.PositionSpoof.Value then IsCrouch = true end
+			if Toggles.AnitFigureHearing.Value or Toggles.PositionSpoof.Value then IsCrouch = true end
 			RemotesFolder.Crouch:FireServer(IsCrouch, true)
-			Globals.LastCrouchFire = tick()
+			Global.LastCrouchFire = tick()
 		end
 
-		if tick() - Globals.LastAnimationCheck > 0.1 then
+		if tick() - Global.LastAnimationCheck > 0.1 then
 			local Sliding = false
 			for _, Anim in Humanoid:GetPlayingAnimationTracks() do
 				if Anim.Name == "Slide" then Sliding = true break end
 			end
-			Globals.Sliding = Sliding
-			Globals.LastAnimationCheck = tick()
+			Global.Sliding = Sliding
+			Global.LastAnimationCheck = tick()
 		end
 
-		Character:SetAttribute("Sliding", Globals.Sliding)
-if Character:GetAttribute("Crouching") ~= Functions.IsCrouching() then
-    Character:SetAttribute("Crouching", Functions.IsCrouching())
-end
+		Character:SetAttribute("Sliding", Global.Sliding)
+		if Character:GetAttribute("Crouching") ~= Functions.IsCrouching() then
+			Character:SetAttribute("Crouching", Functions.IsCrouching())
+		end
 
 
 		RayParams.FilterDescendantsInstances = { Character }
@@ -2968,14 +3695,13 @@ end
 			end
 		end
 
-		for _, Part in Globals.ThirdPersonParts do
+		for _, Part in Global.ThirdPersonParts do
 			Part.Transparency = Toggles.ThirdPersonToggle.Value and 0 or 1
 			Part.LocalTransparencyModifier = Toggles.ThirdPersonToggle.Value and 0 or 1
 		end
 
-		if Main_Game then
-			task.wait()
-			Main_Game.fovtarget = Options.FieldOfView.Value
+		if type(Main_Game) == "table" or typeof(Main_Game) == "Instance" then
+			pcall(function() Main_Game.fovtarget = Options.FieldOfView.Value end)
 		else
 			Camera.FieldOfView = Options.FieldOfView.Value
 		end
@@ -3014,10 +3740,10 @@ end
 		RemotesFolder.Crouch:FireServer(true, true)
 	end
 
-	local Jam = Globals.MainUI.Initiator.Main_Game.Health:FindFirstChild("Jam")
+	local Jam = Global.MainUI.Initiator.Main_Game.Health:FindFirstChild("Jam")
 	if Jam and Toggles.RemoveJamminMusic.Value then
 		Jam.Volume = 0
-		Globals.JamMuffle.Enabled = false
+		Global.JamMuffle.Enabled = false
 	end
 end
 
@@ -3040,11 +3766,11 @@ Functions.HandleHidingTransparency = function(Model)
 					end
 				end
 			end)
-			table.insert(Connections, HideConn)
+			table.insert(Conns, HideConn)
 			Model.Destroying:Once(function()
 				HideConn:Disconnect()
-				local Pos = table.find(Connections, HideConn)
-				if Pos then table.remove(Connections, Pos) end
+				local Pos = table.find(Conns, HideConn)
+				if Pos then table.remove(Conns, Pos) end
 			end)
 		end
 	end
@@ -3089,8 +3815,7 @@ Functions.HandleObject = function(Object)
 		task.spawn(function()
 			task.wait(0.5)
 			if Object.Parent then
-				Object:SetAttribute("AddTime", Object.TakeTimer.TextLabel.Text == "01:00" and 60 or 30)
-				if Toggles.ObjectiveESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Time Lever [+" .. Object:GetAttribute("AddTime") .. "s]", Color = Options.ObjectiveESPColor.Value }, true) end
+				if Toggles.ObjectiveESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Time Lever", Color = Options.ObjectiveESPColor.Value }, true) end
 				Object:WaitForChild("Main").SoundToPlay.Played:Once(function()
 					Functions.RemoveESP(Object)
 					Functions.BlacklistESP(Object)
@@ -3099,7 +3824,7 @@ Functions.HandleObject = function(Object)
 			end
 		end)
 	elseif Name == "LiveHintBook" then
-		if Toggles.ObjectiveESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Hint Book", Color = Options.ObjectiveESPColor.Value }, true) end
+		if Toggles.ObjectiveESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Book", Color = Options.ObjectiveESPColor.Value }, true) end
 		table.insert(Objects.Objectives, Object)
 	elseif Name == "LiveBreakerPolePickup" then
 		if Toggles.ObjectiveESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Fuse Breaker", Color = Options.ObjectiveESPColor.Value }, true) end
@@ -3110,7 +3835,7 @@ Functions.HandleObject = function(Object)
 		end
 		table.insert(Objects.Objectives, Object)
 	elseif Name == "LibraryHintPaper" or Name == "PickupItem" then
-		if Toggles.ObjectiveESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Hint Paper", Color = Options.ObjectiveESPColor.Value }, true) end
+		if Toggles.ObjectiveESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Paper", Color = Options.ObjectiveESPColor.Value }, true) end
 		table.insert(Objects.Objectives, Object)
 	elseif Name == "MinesAnchor" then
 		if Toggles.ObjectiveESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Anchor [" .. Object:WaitForChild("Sign").TextLabel.Text .. "]", Color = Options.ObjectiveESPColor.Value }, true) end
@@ -3122,8 +3847,6 @@ Functions.HandleObject = function(Object)
 	elseif Name == "WaterPump" then
 		if Toggles.ObjectiveESPToggle.Value then Functions.AddESP({ Object = Object:WaitForChild("Wheel"), Text = "Water Pump", Color = Options.ObjectiveESPColor.Value }, true) end
 		Object:WaitForChild("Wheel").Sound.Played:Once(function()
-			Object:SetAttribute("Eternal_Completed", true)
-
 			Functions.RemoveESP(Object.Wheel)
 			Functions.BlacklistESP(Object.Wheel)
 		end)
@@ -3146,27 +3869,27 @@ Functions.HandleObject = function(Object)
 			Functions.BlacklistESP(Object)
 		end)
 		table.insert(Objects.Objectives, Object)
-elseif Name == "MandrakeLive" then
-    local Mandrake = Object:FindFirstChild("Mandrake")
-    if Mandrake then
-        local Root = Mandrake:FindFirstChild("Root")
-        if Root then
-            if Toggles.ObjectiveESPToggle.Value and Options.EntityESPOptions.Value["Mandrake Hole"] then
-                Functions.AddESP({ Object = Object.Hole, Text = "Mandrake Hole", Color = Options.EntityESPColor.Value }, true)
-            end
-            table.insert(Objects.Entities, Object.Hole)
-            table.insert(Objects.Entities, Root)
-            if Toggles.BypassMandrake.Value then
-                local BF = Root:FindFirstChild("AntiMandrakeForce")
-                if not BF then
-                    BF = Instance.new("BodyForce")
-                    BF.Name = "AntiMandrakeForce"
-                    BF.Parent = Root
-                end
-                BF.Force = Vector3.new(100000, -99999999, 100000)
-            end
-        end
-end
+	elseif Name == "MandrakeLive" then
+		local Mandrake = Object:FindFirstChild("Mandrake")
+		if Mandrake then
+			local Root = Mandrake:FindFirstChild("Root")
+			if Root then
+				if Toggles.ObjectiveESPToggle.Value and Options.EntityESPOptions.Value["Mandrake Hole"] then
+					Functions.AddESP({ Object = Object.Hole, Text = "Mandrake Hole", Color = Options.EntityESPColor.Value }, true)
+				end
+				table.insert(Objects.Entities, Object.Hole)
+				table.insert(Objects.Entities, Root)
+				if Toggles.BypassMandrake.Value then
+					local BF = Root:FindFirstChild("AntiMandrakeForce")
+					if not BF then
+						BF = Instance.new("BodyForce")
+						BF.Name = "AntiMandrakeForce"
+						BF.Parent = Root
+					end
+					BF.Force = Vector3.new(-49999, -49999, -49999)
+				end
+			end
+		end
 	elseif Name == "MinesGenerator" then
 		task.spawn(function()
 			task.wait(0.75)
@@ -3202,6 +3925,7 @@ end
 		table.insert(Objects.Objectives, Object)
 	elseif Name == "Ladder" then
 		if Toggles.LadderESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Ladder", Color = Options.LadderESPColor.Value }, true) end
+		if Toggles.NotifyLadder.Value then Functions.Notify({ Title = "Ladder Notify", Body = "Ladder has spawned in Room " .. (Object:GetAttribute("ParentRoom") or "(sorry this is a bug)") .. "." }) end
 		table.insert(Objects.Ladders, Object)
 	elseif Name == "Door" and Object.Parent and tonumber(Object.Parent.Name) then
 		local DoorParts = {}
@@ -3219,7 +3943,7 @@ end
 
 			for _, DoorPart in DoorParts do
 				local HP = Instance.new("Part", HighlightModel)
-				HP.Transparency = 0.999
+				HP.Transparency = 0.99
 				HP.Size = DoorPart.Size
 				HP.CanCollide = false
 				HP.CFrame = DoorPart.CFrame
@@ -3230,11 +3954,13 @@ end
 				W.Part0 = HP W.Part1 = DoorPart W.Enabled = true
 			end
 			table.insert(Objects.Doors, HighlightModel)
-			if Toggles.DoorESPToggle.Value then Functions.AddESP({ Object = HighlightModel, Text = "Door [" .. Functions.GetDoorNumber(Object) .. "]", Color = Options.DoorESPColor.Value }, true) end
+			if Toggles.DoorESPToggle.Value then Functions.AddESP({ Object = HighlightModel, Text = GetDoorText(Object), Color = Options.DoorESPColor.Value }, true) end
+
+			KeepDoorTextSynced(Object, HighlightModel)
 		else
 			local Root = Object:WaitForChild("Door", 9e9)
 			local HP = Instance.new("Part", Object)
-			HP.Transparency = 0.999
+			HP.Transparency = 0.99
 			HP.Size = Root.Size
 			HP.CanCollide = false
 			HP.CFrame = Root.CFrame
@@ -3245,26 +3971,10 @@ end
 			W.Part0 = HP W.Part1 = Root W.Enabled = true
 			Instance.new("Humanoid", Object).Name = "HighlightHumanoid"
 			table.insert(Objects.Doors, HP)
-			if Toggles.DoorESPToggle.Value then Functions.AddESP({ Object = HP, Text = "Door [" .. Functions.GetDoorNumber(Object) .. "]", Color = Options.DoorESPColor.Value }, true) end
+			if Toggles.DoorESPToggle.Value then Functions.AddESP({ Object = HP, Text = GetDoorText(Object), Color = Options.DoorESPColor.Value }, true) end
+
+			KeepDoorTextSynced(Object, HP)
 		end
-
-		local LastDoorFire = tick()
-		local DoorConn = Services.RunService.Heartbeat:Connect(function()
-			if Object:FindFirstChild("Door") and Object:FindFirstChild("ClientOpen") then
-				if LocalPlayer:DistanceFromCharacter(Object.Door.Position) < 75
-					and tick() - LastDoorFire > 0.1
-					and (Toggles.DoorReachToggle.Value or Functions.GetMinecart())
-				then
-					Object.ClientOpen:FireServer()
-					LastDoorFire = tick()
-				end
-			end
-		end)
-		Object:WaitForChild("Door"):WaitForChild("Open").Played:Once(function()
-			DoorConn:Disconnect()
-		end)
-		table.insert(Connections, DoorConn)
-
 	elseif Name == "PathLights" then
 		local ObjectsToHighlight = {}
 		local PLConn = Object.ChildAdded:Connect(function(Child)
@@ -3281,7 +3991,7 @@ end
 			local NewNode = Instance.new("Part")
 			NewNode.Size = Vector3.one
 			NewNode.Transparency = 1
-			NewNode.Parent = Globals.SeekNodesFolder
+			NewNode.Parent = Global.SeekNodesFolder
 			NewNode.Anchored = true
 			NewNode.CFrame = Light.CFrame
 			NewNode.CanCollide = false
@@ -3301,7 +4011,7 @@ end
 			Beam.Enabled = true
 			local Vis = Toggles.ShowSeekPathToggle.Value and 0 or 1
 			Beam.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, Vis), NumberSequenceKeypoint.new(1, Vis) })
-			Beam.Parent = Globals.SeekNodesFolder
+			Beam.Parent = Global.SeekNodesFolder
 			local A0 = Instance.new("Attachment", NewNode)
 			local A1 = Instance.new("Attachment", PrevNode2)
 			Beam.Attachment0 = A0
@@ -3316,23 +4026,23 @@ end
 			end
 		end)
 
-		table.insert(Connections, PLConn)
+		table.insert(Conns, PLConn)
 		table.insert(Objects.PathLights, Object)
-		Object.Destroying:Once(function() PLConn:Disconnect() end)
+		Object.Destroying:Once(function() if PLConn then PLConn:Disconnect() end end)
 	elseif Name == "SeekMovingNewClone" then
 		local Connection = Object.Destroying:Connect(function()
 			for _, Folder in pairs(Objects.PathLights) do
 				Folder:ClearAllChildren()
 			end
-			Globals.SeekNodesFolder:ClearAllChildren()
+			Global.SeekNodesFolder:ClearAllChildren()
 		end)
-		table.insert(Connections, Connection)
+		table.insert(Conns, Connection)
 	elseif Name == "Bridge" then
 		for _, Child in Object:GetChildren() do
 			if Child.Name == "PlayerBarrier" and Child.Size.Y == 2.75 and (Child.Rotation.X == 0 or Child.Rotation.X == 180) then
 				local NewBridge = Child:Clone()
 				NewBridge.CFrame = NewBridge.CFrame * CFrame.new(0, 0, -5)
-				NewBridge.Name = Eternal.ESPLibrary:GenerateRandomString()
+				NewBridge.Name = mstudio45.ESPLibrary:GenerateRandomString()
 				NewBridge.Size = Vector3.new(NewBridge.Size.X, NewBridge.Size.Y, 11)
 				NewBridge.Parent = Object
 				NewBridge.CanCollide = Toggles.BypassSeekObstructions.Value
@@ -3344,7 +4054,7 @@ end
 			task.wait()
 		end
     elseif Name == "MinecartRig" then
-        Globals.Minecart = Object
+        Global.Minecart = Object
 	elseif Name == "RunnerNodes" then
 		local function IsBehind(Part1, Part2)
 			local P1 = (Part1.CFrame + Part1.CFrame.LookVector).Position
@@ -3427,25 +4137,45 @@ end
                     end
                 end)
 
-                table.insert(Connections, Connection1)
-                table.insert(Connections, Connection2)
+                table.insert(Conns, Connection1)
+                table.insert(Conns, Connection2)
             end
 		end
 		table.insert(Objects.Obstructions, Object)
 	elseif Name == "ChestBox" or Name == "ChestBoxLocked" then
 		if Toggles.ChestESPToggle.Value then Functions.AddESP({ Object = Object, Text = Object:GetAttribute("Locked") and "Locked Chest" or "Chest", Color = Options.ChestESPColor.Value }, true) end
+			Object:WaitForChild("Main").Open.Played:Once(function()
+			Functions.RemoveESP(Object)
+			Functions.BlacklistESP(Object)
+		end)
 		table.insert(Objects.Chests, Object)
 	elseif Name == "Toolbox" or Name == "Toolbox_Locked" then
 		if Toggles.ChestESPToggle.Value then Functions.AddESP({ Object = Object, Text = Object:GetAttribute("Locked") and "Locked Toolbox" or "Toolbox", Color = Options.ChestESPColor.Value }, true) end
+			Object:WaitForChild("Main").Open.Played:Once(function()
+			Functions.RemoveESP(Object)
+			Functions.BlacklistESP(Object)
+		end)
 		table.insert(Objects.Chests, Object)
 	elseif Name == "Chest_Vine" then
 		if Toggles.ChestESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Vine Chest", Color = Options.ChestESPColor.Value }, true) end
+			Object:WaitForChild("Main").Open.Played:Once(function()
+			Functions.RemoveESP(Object)
+			Functions.BlacklistESP(Object)
+		end)
 		table.insert(Objects.Chests, Object)
 	elseif Name == "Toolshed_Small" then
 		if Toggles.ChestESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Toolshed", Color = Options.ChestESPColor.Value }, true) end
+			Object:WaitForChild("Main").Open.Played:Once(function()
+			Functions.RemoveESP(Object)
+			Functions.BlacklistESP(Object)
+		end)
 		table.insert(Objects.Chests, Object)
 	elseif Name == "Locker_Small_Locked" then
 		if Toggles.ChestESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Locked Item Locker", Color = Options.ChestESPColor.Value }, true) end
+			Object:WaitForChild("Main").Open.Played:Once(function()
+			Functions.RemoveESP(Object)
+			Functions.BlacklistESP(Object)
+		end)
 		table.insert(Objects.Chests, Object)
 	elseif Name == "MouseHole" then
 		if Toggles.ChestESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Mouse", Color = Options.ChestESPColor.Value }, true) end
@@ -3454,7 +4184,7 @@ end
 		if Toggles.ItemESPToggle.Value then Functions.AddESP({ Object = Object, Text = ItemNames[Name], Color = Options.ItemESPColor.Value }, Object:GetAttribute("ParentRoom") ~= nil) end
 		if Name == "LotusHolder" or Name == "LotusPetalPickup" then
 			Object.Handle:GetPropertyChangedSignal("LocalTransparencyModifier"):Connect(function()
-				Eternal.ESPLibrary:RemoveESP(Object)
+				mstudio45.ESPLibrary:RemoveESP(Object)
 				Functions.BlacklistESP(Object)
 			end)
 		end
@@ -3488,17 +4218,17 @@ end
 			Functions.AddESP({ Object = Object, Text = "Gloombat Eggs", Color = Options.EntityESPColor.Value })
 		end
 
-		table.insert(Connections, Connection)
+		table.insert(Conns, Connection)
 		table.insert(Objects.Entities, Object)
-	elseif Name == "TriggerEventCollision" and Functions.CC({"firetouchinterest"}) then
+	elseif Name == "TriggerEventCollision" and Functions.CheckEnv("firetouchinterest") then
 		if (Floor == "Fools" or Floor == "OldHotel") and Toggles.RemoveSeekTrigger.Value then
 			task.spawn(function()
 				while Object:IsDescendantOf(game) do
 					for _, Part in Object:GetChildren() do
 						if Part:IsA("BasePart") then
-							Eternal.Environment.firetouchinterest(RootPart, Part, 0)
+							mstudio45.Environment.firetouchinterest(RootPart, Part, 0)
 							task.wait()
-							Eternal.Environment.firetouchinterest(RootPart, Part, 1)
+							mstudio45.Environment.firetouchinterest(RootPart, Part, 1)
 						end
 					end
 					task.wait()
@@ -3532,7 +4262,7 @@ end
 		local Connection = Object.DescendantAdded:Connect(function(Part)
 			if Part:IsA("BasePart") then Part.CanTouch = not Toggles.BypassSnare.Value end
 		end)
-		table.insert(Connections, Connection)
+		table.insert(Conns, Connection)
 		table.insert(Objects.Entities, Object)
 
 		if Object:FindFirstChild("Snare") then
@@ -3557,21 +4287,21 @@ end
 				Object.CanCollide = Toggles.BypassSeekObstructions.Value
 			end
 		end)
-		Object.Destroying:Once(function() FloodConn:Disconnect() end)
+		Object.Destroying:Once(function() if FloodConn then FloodConn:Disconnect() end end)
 		table.insert(Objects.SeekObstructions, Object)
 	elseif Object:GetAttribute("RawName") and Object:GetAttribute("RawName"):find("Halt") or Object:GetAttribute("Shade") == true then
 		if Toggles.NotifyEntities.Value and Options.EntityList.Value["Halt"] then
-			Functions.Notify({ Title = "Entity 'Halt' will spawn in the next room.", Image = EntityIcons["Halt"] })
+			Functions.Notify({ Title = "Entity 'Halt' will spawn in the next room.", Body = "", Image = EntityIcons["Halt"] })
 			if Toggles.EntityChatToggle.Value then Functions.SendChat("Halt next room!") end
 		end
 		local HaltLogConn
 		HaltLogConn = Services.LogService.MessageOut:Connect(function(Message)
 			if Message == "client teleporting" then
-				if Globals.AnticheatDisabled then
-					Globals.AnticheatDisabled = false
-					Functions.Notify({ Title = "The anticheat has been re-enabled.", Body = "Interact with a ladder to disable it again." })
+				if Global.AnticheatDisabled then
+					Global.AnticheatDisabled = false
+					Functions.Notify({ Title = "Disable Anticheat", Body = "The anticheat has been re-enabled, Interact with a ladder to disable it again." })
 				end
-				HaltLogConn:Disconnect()
+				if HaltLogConn then HaltLogConn:Disconnect() end
 			end
 		end)
 	elseif Name == "BananaPeel" then
@@ -3605,13 +4335,14 @@ end
 		end
 		if Toggles.EntityESPToggle.Value and Options.EntityESPOptions.Value["Figure"] then Functions.AddESP({ Object = Object, Text = "Figure", Color = Options.EntityESPColor.Value }, true) end
 		table.insert(Objects.Entities, Object)
-		if Toggles.RemoveFigure.Value and Functions.CC({"isnetworkowner"}) then
+		if Toggles.RemoveFigure.Value and Functions.CheckEnv("isnetworkowner") then
 			if Floor == "Mines" then
 				for _, Part in Object:GetDescendants() do
 					if Part:IsA("BasePart") then
 						task.spawn(function()
-							if Eternal.Environment.isnetworkowner(Part) then
+							if mstudio45.Environment.isnetworkowner(Part) then
 								Part.Position = Vector3.new(-49999, -49999, -49999)
+								Functions.Notify({ Title = "Delete Figure", Body = "Successfully deleted figure"})
 							end
 						end)
 					end
@@ -3622,7 +4353,7 @@ end
 					if Part:IsA("BasePart") then
 						Part.CanCollide = false
 						task.spawn(function()
-							while Eternal.Environment.isnetworkowner(Part) do
+							while mstudio45.Environment.isnetworkowner(Part) do
 								Part.Position = Vector3.new(math.random(-29999,29999), math.random(-29999,29999), math.random(-29999,29999))
 								task.wait()
 							end
@@ -3641,28 +4372,28 @@ end
 		end
 		table.insert(Objects.Obstructions, Object)
 	elseif Name == "ElevatorBreaker" then
-		if Toggles.AutoBreakerBox.Value and not Globals.BreakerBoxNotified then
-			Functions.Notify({ Title = "Interact with the breaker box.", Body = "It will be automatically solved." })
-			Globals.BreakerBoxNotified = true
+		if Toggles.AutoBreakerBox.Value and not Global.BreakerBoxNotified then
+			Functions.Notify({ Title = "Auto Breaker Box", Body = "Interact with the breaker box, It will be automatically solved." })
+			Global.BreakerBoxNotified = true
 		end
-		Connections.BreakerConnection = Object:WaitForChild("SurfaceGui").Frame.Code:GetPropertyChangedSignal("Text"):Connect(function()
+		Conns.BreakerConnection = Object:WaitForChild("SurfaceGui").Frame.Code:GetPropertyChangedSignal("Text"):Connect(function()
 			if Toggles.AutoBreakerBox.Value then
-				if not Globals.BreakerBoxStartNotified and (Floor == "Fools" or Floor == "OldHotel") then
-					Functions.Notify({ Title = "Attempting to solve the breaker box.", Body = "Please wait." })
-					Globals.BreakerBoxStartNotified = true
+				if not Global.BreakerBoxStartNotified and (Floor == "Fools" or Floor == "OldHotel") then
+					Functions.Notify({ Title = "Auto Breaker Box", Body = "Attempting to solve the breaker box, Please wait." })
+					Global.BreakerBoxStartNotified = true
 				end
 				RemotesFolder.EBF:FireServer()
 			end
-			Globals.BreakerBoxInteracted = true
+			Global.BreakerBoxInteracted = true
 		end)
 	elseif Name == "ElevatorCar" then
 		local ElevConn = Object.DescendantAdded:Connect(function(Desc)
-			if Toggles.AutoBreakerBox.Value and Desc.Name == "TouchInterest" and not Globals.BreakerBoxFinishedNotified then
-				Functions.Notify({ Title = "Successfully solved the breaker box.", Body = "Try going to the elevator!" })
-				Globals.BreakerBoxFinishedNotified = true
+			if Toggles.AutoBreakerBox.Value and Desc.Name == "TouchInterest" and not Global.BreakerBoxFinishedNotified then
+				Functions.Notify({ Title = "Auto Breaker Box", Body = "Successfully solved the breaker box, Try going to the elevator!" })
+				Global.BreakerBoxFinishedNotified = true
 			end
 		end)
-		Object.Destroying:Once(function() ElevConn:Disconnect() end)
+		Object.Destroying:Once(function() if ElevConn then ElevConn:Disconnect() end end)
 	elseif Object.ClassName == "ProximityPrompt" and not Object:GetAttribute("FakePrompt") then
 		if Object:HasTag("DisableWhenEnabledOnClient") then Object:RemoveTag("DisableWhenEnabledOnClient") end
 
@@ -3676,7 +4407,7 @@ end
 
 		local LockPromptNames = { UnlockPrompt=true, SkullPrompt=true, LockPrompt=true, ThingToEnable=true, FusesPrompt=true }
 
-		if Functions.CC({"fireproximityprompt"}) and Floor ~= "OldHotel" and Floor ~= "Fools" then
+		if Functions.CheckEnv("fireproximityprompt") and Floor ~= "OldHotel" and Floor ~= "Fools" then
 			local IsLockPrompt = LockPromptNames[Object.Name]
 				or (Object.Parent and Object.Parent:GetAttribute("Locked") == true)
 				or (Object.Parent and Object.Parent.Parent and Object.Parent.Parent.Name == "Locker_Small_Locked" and Object.Name == "ActivateEventPrompt")
@@ -3700,21 +4431,21 @@ end
 				FakePrompt.MaxActivationDistance = FakePrompt:GetAttribute("MaxActivationDistance_Old") * Options.PromptReachSlider.Value
 
 				FakePrompts[FakePrompt] = Object
-				pcall(function() Object.Parent = Globals.PromptContainer end)
+				pcall(function() Object.Parent = Global.PromptContainer end)
 
 				local FPEnabledConn = Object:GetPropertyChangedSignal("Enabled"):Connect(function()
 					FakePrompt.Enabled = Object.Enabled
 				end)
 				Object:GetPropertyChangedSignal("ActionText"):Once(function()
-					Object.Parent = FakePrompt.Parent
+					pcall(function() Object.Parent = FakePrompt.Parent end)
 					FakePrompt:Destroy()
-					FPEnabledConn:Disconnect()
+					if FPEnabledConn then FPEnabledConn:Disconnect() end
 				end)
 				Object.Destroying:Once(function()
 					FakePrompt:Destroy()
-					FPEnabledConn:Disconnect()
+					if FPEnabledConn then FPEnabledConn:Disconnect() end
 				end)
-				table.insert(Connections, FPEnabledConn)
+				table.insert(Conns, FPEnabledConn)
 				table.insert(Objects.Prompts, FakePrompt)
 
 				FakePrompt.Enabled = false
@@ -3724,7 +4455,7 @@ end
 		end
 		table.insert(Objects.Prompts, Object)
 	elseif Name == "Padlock" then
-		Connections.PadlockConnection = Services.RunService.Heartbeat:Connect(function()
+		Conns.PadlockConnection = Services.RunService.Heartbeat:Connect(function()
 			if Object.PrimaryPart then
 				local Distance = LocalPlayer:DistanceFromCharacter(Object.PrimaryPart.Position)
 				if Toggles.AutoUnlockPadlockToggle.Value then
@@ -3736,51 +4467,74 @@ end
 			end
 		end)
 		Object.Destroying:Once(function()
-			if Connections.PadlockConnection then
-				Connections.PadlockConnection:Disconnect()
-				Connections.PadlockConnection = nil
+			if Conns.PadlockConnection then
+				Conns.PadlockConnection:Disconnect()
+				Conns.PadlockConnection = nil
 			end
 		end)
 	end
 end
 
-Connections.PromptAnimationFixer1 = Services.ProximityPromptService.PromptButtonHoldBegan:Connect(function(Object)
-	if not Object:GetAttribute("FakePrompt") then return end
-	local ToolNames = { "Lockpick","Shears","SkeletonKey","Key","GeneratorFuse","KeyElectrical","KeyBackdoor","KeyIron", "Multitool" }
-	local AnimateToolNames = { "Lockpick","Shears","SkeletonKey","Key","KeyElectrical","KeyBackdoor","KeyIron", "Multitool" }
-	local Tool
-	for _, N in ToolNames do Tool = Character:FindFirstChild(N) if Tool then break end end
+local ToolNames = { "Lockpick","Shears","SkeletonKey","Key","GeneratorFuse","KeyElectrical","KeyBackdoor","KeyIron","Multitool" }
+local AnimateToolNames = { "Lockpick","Shears","SkeletonKey","Key","KeyElectrical","KeyBackdoor","KeyIron","Multitool" }
+local LockPromptNames = { UnlockPrompt=true, SkullPrompt=true, LockPrompt=true, ThingToEnable=true, FusesPrompt=true }
+local KeyItems = { "Key","GeneratorFuse","KeyBackdoor","KeyElectrical","KeyIron","Lockpick","SkeletonKey","Shears","Multitool" }
+local OffhandKeyItems = { "Key","GeneratorFuse","KeyElectrical","KeyIron" }
+local VineParentNames = { CuttableVines=true, Chest_Vine=true, Cellar=true }
 
-	local Prompt = Object
-	local LockPromptNames = { UnlockPrompt=true, SkullPrompt=true, LockPrompt=true, ThingToEnable=true, FusesPrompt=true }
-	local IsLockPrompt = LockPromptNames[Object.Name]
-		or (Object.Parent and Object.Parent:GetAttribute("Locked") == true)
-		or (Object.Parent and Object.Parent.Parent and Object.Parent.Parent.Name == "Locker_Small_Locked" and Object.Name == "ActivateEventPrompt")
-	if IsLockPrompt then
-		if Options.AutoInteractIgnoreList.Value["Locks"] then return end
-		local KeyItems = { "Key","GeneratorFuse","KeyBackdoor","KeyElectrical","KeyIron","Lockpick","SkeletonKey","Shears","Multitool" }
-		local OffhandKeyItems = { "Key","GeneratorFuse","KeyElectrical","KeyIron" }
-		local HasKey = false
-		for _, K in KeyItems do if Functions.HasItem(K, true) then HasKey = true break end end
-		for _, K in OffhandKeyItems do if Functions.HasItem(K) then HasKey = true break end end
-		if not HasKey then return end
+local function GetCharacterTool()
+	for _, N in ToolNames do
+		local Tool = Character:FindFirstChild(N)
+		if Tool then return Tool end
 	end
+	return nil
+end
 
-	if Prompt.Parent.Name == "CuttableVines" and not Functions.HasItem("Shears", true) and not Functions.HasItem("Multitool", true) or Prompt.Parent.Name == "Chest_Vine" and not Functions.HasItem("Shears", true) and not Functions.HasItem("Multitool", true) or Prompt.Parent.Name == "Cellar" and not Functions.HasItem("Shears", true) and not Functions.HasItem("Multitool", true) then return end
-	if Prompt.Parent.Name == "SkullLock" and not Functions.HasItem("SkeletonKey", true) then return end
-	if Prompt.Parent.Name == "Lock1" and not Functions.HasItem("Lockpick", true) and not Functions.HasItem("Multitool", true) or Prompt.Parent.Name == "Lock2" and not Functions.HasItem("Lockpick", true) and not Functions.HasItem("Multitool", true) then return end
-	if Functions.HasItem("Shears", true) and IsLockPrompt and Prompt.Parent.Name ~= "CuttableVines" and Prompt.Parent.Name ~= "Chest_Vine" and Prompt.Parent.Name ~= "Cellar" then return end
-	
-	if Tool and table.find(AnimateToolNames, Tool.Name) and Globals.UseAnimation then
-		Globals.UseAnimationBreak:Stop()
-		Globals.UseAnimation:Stop()
-		Globals.UseAnimation:Play()
+local function IsLockPrompt(Prompt)
+	if LockPromptNames[Prompt.Name] then return true end
+	if Prompt.Parent and Prompt.Parent:GetAttribute("Locked") == true then return true end
+	local grandparent = Prompt.Parent and Prompt.Parent.Parent
+	return grandparent and grandparent.Name == "Locker_Small_Locked" and Prompt.Name == "ActivateEventPrompt"
+end
+
+local function HasRequiredKey()
+	for _, k in KeyItems do if Functions.HasItem(k, true) then return true end end
+	for _, k in OffhandKeyItems do if Functions.HasItem(k) then return true end end
+	return false
+end
+
+local function ShouldBlockPrompt(Prompt)
+	if not Prompt or not Prompt.Parent then return true end
+	local pname = Prompt.Parent.Name
+	local locked = IsLockPrompt(Prompt)
+	if locked and (Options.AutoInteractIgnoreList.Value["Locks"] or not HasRequiredKey()) then
+		return true
+	end
+	local cutters = Functions.HasItem("Shears", true) or Functions.HasItem("Multitool", true)
+	if VineParentNames[pname] and not cutters then return true end
+	if pname == "SkullLock" and not Functions.HasItem("SkeletonKey", true) then return true end
+	if (pname == "Lock1" or pname == "Lock2") and not Functions.HasItem("Lockpick", true) and not cutters then
+		return true
+	end
+	if cutters and locked and not VineParentNames[pname] then return true end
+	return false
+end
+
+Conns.PromptAnimationFixer1 = Services.ProximityPromptService.PromptButtonHoldBegan:Connect(function(Object)
+	if not Object:GetAttribute("FakePrompt") then return end
+	local Tool = GetCharacterTool()
+	if ShouldBlockPrompt(Object) then return end
+
+	if Tool and table.find(AnimateToolNames, Tool.Name) and Global.UseAnimation then
+		Global.UseAnimationBreak:Stop()
+		Global.UseAnimation:Stop()
+		Global.UseAnimation:Play()
 		if Tool.Name == "Shears" then Tool:WaitForChild("Handle"):WaitForChild("sound_prompt"):Play() end
 	end
 end)
 
-Globals.ObjectQueue = {}
-local AllowedInstances = {
+Global.ObjectQueue = {}
+local TrackedObjects = {
 	Lava=true, GoldPile=true, KeyObtain=true, Drakobloxxer=true, FuseObtain=true,
 	MinesGenerator=true, JeffTheKiller=true, Snare=true, FakeDoor=true, DoorFake=true, SideroomSpace=true,
 	ChestBox=true, ChestBoxLocked=true, Chest_Vine=true, Locker_Small_Locked=true, Toolbox=true,
@@ -3801,15 +4555,15 @@ local AllowedInstances = {
 }
 
 Functions.QueueObject = function(Object)
-	if not AllowedInstances[Object.Name] and Object.ClassName ~= "ProximityPrompt" and Object.Parent ~= CurrentRooms and not ItemNames[Object.Name] then
+	if not TrackedObjects[Object.Name] and Object.ClassName ~= "ProximityPrompt" and Object.Parent ~= CurrentRooms and not ItemNames[Object.Name] then
 		return
 	end
-	table.insert(Globals.ObjectQueue, Object)
+	table.insert(Global.ObjectQueue, Object)
 end
 
-Globals.QueueDone = true
-Connections.QueueConnection = Services.RunService.RenderStepped:Connect(function()
-	local Object = table.remove(Globals.ObjectQueue, 1)
+Global.QueueDone = true
+Conns.QueueConnection = Services.RunService.RenderStepped:Connect(function()
+	local Object = table.remove(Global.ObjectQueue, 1)
 	if Object then
 		Functions.HandleObject(Object)
 	end
@@ -3819,7 +4573,7 @@ for _, Object in Services.Workspace:GetDescendants() do
 	task.spawn(function() Functions.QueueObject(Object) end)
 end
 
-Connections.InstanceHandler = Services.Workspace.DescendantAdded:Connect(function(Object)
+Conns.InstanceHandler = Services.Workspace.DescendantAdded:Connect(function(Object)
 	Functions.QueueObject(Object)
 end)
 
@@ -3838,16 +4592,16 @@ for _, Player in Services.Players:GetPlayers() do
 				Functions.RemoveESP(Player.Character)
 			end
 		end)
-		table.insert(Connections, CharConn)
-		table.insert(Connections, DeadConn)
+		table.insert(Conns, CharConn)
+		table.insert(Conns, DeadConn)
 		Player.Destroying:Once(function()
-			CharConn:Disconnect()
-			DeadConn:Disconnect()
+			if CharConn then CharConn:Disconnect() end
+			if DeadConn then DeadConn:Disconnect() end
 		end)
 	end
 end
 
-Connections.PlayerHandler = Services.Players.PlayerAdded:Connect(function(Player)
+Conns.PlayerHandler = Services.Players.PlayerAdded:Connect(function(Player)
 	if Player == LocalPlayer then return end
 	if Player.Character and Toggles.PlayerESPToggle.Value then
 		Functions.AddESP({ Object = Player.Character, Text = Player.Name, Color = Options.PlayerESPColor.Value })
@@ -3862,19 +4616,19 @@ Connections.PlayerHandler = Services.Players.PlayerAdded:Connect(function(Player
 			Functions.RemoveESP(Player.Character)
 		end
 	end)
-	table.insert(Connections, CharConn)
-	table.insert(Connections, DeadConn)
+	table.insert(Conns, CharConn)
+	table.insert(Conns, DeadConn)
 	Player.Destroying:Once(function()
-		CharConn:Disconnect()
-		DeadConn:Disconnect()
+		if CharConn then CharConn:Disconnect() end
+		if DeadConn then DeadConn:Disconnect() end
 	end)
 end)
 
 local PromptsToFire = {}
 local PromptCooldown = {}
 
-Functions.FirePrompt      = Eternal.Environment.fireproximityprompt
-Functions.ForceFirePrompt = Eternal.Environment.fireproximityprompt
+Functions.FirePrompt      = mstudio45.Environment.fireproximityprompt
+Functions.ForceFirePrompt = mstudio45.Environment.fireproximityprompt
 
 if not Functions.FirePrompt then
 	Functions.FirePrompt = function(Prompt)
@@ -3940,8 +4694,8 @@ if not Functions.FirePrompt then
 			task.wait()
 			PromptCooldown[Prompt] = nil
 			TempPart:Destroy()
-			ShownConn:Disconnect()
-			FiredConn:Disconnect()
+			if ShownConn then ShownConn:Disconnect() end
+			if FiredConn then FiredConn:Disconnect() end
 		end
 	end)
 end
@@ -3949,89 +4703,94 @@ end
 local AutoInteractBlacklist = {
 	HidePrompt=true, RiftPrompt=true, StarRiftPrompt=true, InteractPrompt=true, ClimbPrompt=true,
 	DonatePrompt=true, DialoguePrompt=true, RevivePrompt=true, EnterPrompt=true, AnimatePrompt=true,
-	ToolEventPrompt=true, Prompt=true, PropPrompt=true
+	ToolEventPrompt=true, Prompt=true, PropPrompt=true, SitPrompt=true, SeatPrompt=true, ChairPrompt=true,
+	BenchPrompt=true, StoolPrompt=true, SofaPrompt=true
 }
 
 local TriggerDebounce = false
 
 Functions.TriggerPrompt = function(Prompt)
-	if AutoInteractBlacklist[Prompt.Name] then return end
-	if not Prompt or not Prompt.Parent then return end
 	if TriggerDebounce then return end
+	if not Prompt or not Prompt.Parent then return end
+	if AutoInteractBlacklist[Prompt.Name] then return end
+	if Prompt:GetAttribute("AutoInteractIgnore") then return end
+	if ShouldBlockPrompt(Prompt) then return end
 
-	local ParentItem = Functions.HasItem(Prompt.Parent.Name)
-	if ParentItem and ParentItem:GetAttribute("Durability") and ParentItem:GetAttribute("DurabilityMax")
-		and ParentItem:GetAttribute("Durability") >= ParentItem:GetAttribute("DurabilityMax")
-	then return end
+	-- Block sitting on chairs, benches, seats, etc.
+	local lowerPromptName = Prompt.Name:lower()
+	local lowerActionText = (Prompt.ActionText or ""):lower()
+	if lowerPromptName:find("sit") or lowerPromptName:find("seat") or lowerPromptName:find("chair") or lowerPromptName:find("bench") then return end
+	if lowerActionText:find("sit") or lowerActionText:find("сесть") or lowerActionText:find("присесть") then return end
 
-	local LockPromptNames = { UnlockPrompt=true, SkullPrompt=true, LockPrompt=true, ThingToEnable=true, FusesPrompt=true }
-	local IsLockPrompt = LockPromptNames[Prompt.Name]
-		or (Prompt.Parent and Prompt.Parent:GetAttribute("Locked") == true)
-		or (Prompt.Parent and Prompt.Parent.Parent and Prompt.Parent.Parent.Name == "Locker_Small_Locked" and Prompt.Name == "ActivateEventPrompt")
-
-	if IsLockPrompt then
-		if Options.AutoInteractIgnoreList.Value["Locks"] then return end
-		local KeyItems = { "Key","GeneratorFuse","KeyBackdoor","KeyElectrical","KeyIron","Lockpick","SkeletonKey","Shears","Multitool" }
-		local OffhandKeyItems = { "Key","GeneratorFuse","KeyElectrical","KeyIron" }
-		local HasKey = false
-		for _, K in KeyItems do if Functions.HasItem(K, true) then HasKey = true break end end
-		for _, K in OffhandKeyItems do if Functions.HasItem(K) then HasKey = true break end end
-		if not HasKey then return end
+	if Prompt.Parent then
+		local pClass = Prompt.Parent.ClassName
+		local parentName = Prompt.Parent.Name:lower()
+		if pClass == "Seat" or pClass == "VehicleSeat" then return end
+		if parentName:find("chair") or parentName:find("seat") or parentName:find("bench") or parentName:find("stool") or parentName:find("sofa") or parentName:find("couch") or parentName:find("armchair") then return end
+		if Prompt.Parent.Parent then
+			local grandName = Prompt.Parent.Parent.Name:lower()
+			if grandName:find("chair") or grandName:find("seat") or grandName:find("bench") or grandName:find("stool") or grandName:find("sofa") or grandName:find("couch") then return end
+		end
 	end
 
-	if Prompt.Parent.Name == "CuttableVines" and not Functions.HasItem("Shears", true) and not Functions.HasItem("Multitool", true) or Prompt.Parent.Name == "Chest_Vine" and not Functions.HasItem("Shears", true) and not Functions.HasItem("Multitool", true) or Prompt.Parent.Name == "Cellar" and not Functions.HasItem("Shears", true) and not Functions.HasItem("Multitool", true) then return end
-	if Prompt.Parent.Name == "SkullLock" and not Functions.HasItem("SkeletonKey", true) then return end
-	if Prompt.Parent.Name == "Lock1" and not Functions.HasItem("Lockpick", true) and not Functions.HasItem("Multitool", true) or Prompt.Parent.Name == "Lock2" and not Functions.HasItem("Lockpick", true) and not Functions.HasItem("Multitool", true) then return end
-	if Functions.HasItem("Shears", true) and IsLockPrompt and Prompt.Parent.Name ~= "CuttableVines" and Prompt.Parent.Name ~= "Chest_Vine" and Prompt.Parent.Name ~= "Cellar" then return end
+	local pName = Prompt.Parent.Name
 
-	if Prompt.Parent.Name == "GlitchCube" and Options.AutoInteractIgnoreList.Value["Glitch Fragments"] then return end
-
-	if (Prompt.Parent.Name == "KeyObtain" and (Functions.HasItem("Key") or Functions.HasItem("KeyBackdoor")))
-		or (Prompt.Parent.Name == "ElectricalKeyObtain" and Functions.HasItem("KeyElectrical"))
+	local worn = Functions.HasItem(pName)
+	if worn and worn:GetAttribute("Durability") and worn:GetAttribute("DurabilityMax")
+		and worn:GetAttribute("Durability") >= worn:GetAttribute("DurabilityMax")
 	then return end
 
+	if pName == "GlitchCube" and Options.AutoInteractIgnoreList.Value["Glitch Fragments"] then return end
+	if pName == "KeyObtain" and (Functions.HasItem("Key") or Functions.HasItem("KeyBackdoor")) then return end
+	if pName == "ElectricalKeyObtain" and Functions.HasItem("KeyElectrical") then return end
 	if Prompt:IsDescendantOf(Drops) and Options.AutoInteractIgnoreList.Value["Dropped Items"] then return end
-	if Prompt.Parent.Name == "TrackLever" then return end
-	if Prompt.Name == "ActivateEventPrompt" and (Prompt.ActionText == "Close"
-		or Prompt.Parent.Name == "ElevatorBreaker"
-		or (Prompt.Parent.Parent and Prompt.Parent.Parent.Name == "IndustrialGate"))
-	then return end
-	if Prompt.Name == "ActivateEventPrompt" and (Prompt.Parent.Name == "Padlock" or Prompt.Parent.Name == "MinesAnchor") then return end
+	if pName == "TrackLever" then return end
+	if Prompt.Name == "PushPrompt" and Options.AutoInteractIgnoreList.Value["Minecarts"] then return end
+	if Prompt.Parent:GetAttribute("JeffShop") and Options.AutoInteractIgnoreList.Value["Jeff Items"] then return end
+	if (pName == "GoldPile" or pName == "StardustPickup") and Options.AutoInteractIgnoreList.Value["Currency"] then return end
+	if pName == "KeyObtainFake" or pName == "TithingPlate" then return end
+
+	-- Block terminal and vending machines from AutoInteract
+	if pName:find("ArchivesTerminal") or pName:find("ShakelightVendingMachine") or pName:find("Vendor") then return end
+	if Prompt.Parent.Parent then
+		local gpName = Prompt.Parent.Parent.Name
+		if gpName:find("ArchivesTerminal") or gpName:find("ShakelightVendingMachine") or gpName:find("Vendor") then return end
+	end
+
+	if Prompt.Name == "ActivateEventPrompt" then
+		local skipClose = Prompt.ActionText == "Close" or pName == "ElevatorBreaker"
+		local skipGate = Prompt.Parent.Parent and Prompt.Parent.Parent.Name == "IndustrialGate"
+		local skipPad = pName == "Padlock" or pName == "MinesAnchor"
+		if skipClose or skipGate or skipPad then return end
+	end
+
 	if Prompt.Parent.Name == "LeverForGate" and Prompt:GetAttribute("Interactions") then return end
 	if Prompt.Parent.Parent and (Prompt.Parent.Parent.Name == "DoorFake" or Prompt.Parent.Parent.Name == "FakeDoor") then return end
-	if Prompt.Parent:GetAttribute("JeffShop") and Options.AutoInteractIgnoreList.Value["Jeff Items"] then return end
-	if Prompt:GetAttribute("AutoInteractIgnore") then return end
-	if Prompt.Name == "PushPrompt" and Options.AutoInteractIgnoreList.Value["Minecarts"] then return end
-	if (Prompt.Parent.Name == "GoldPile" or Prompt.Parent.Name == "StardustPickup") and Options.AutoInteractIgnoreList.Value["Currency"] then return end
 
-	if Prompt.Parent.Name == "Bandage" then
-		local BPack = Functions.HasItem("BandagePack")
-		if Humanoid.Health >= Humanoid.MaxHealth and not BPack then return end
-		if BPack and BPack:GetAttribute("Durability") >= BPack:GetAttribute("DurabilityMax") then return end
-	end
-
-	if Prompt.Parent.Name == "Battery" then
-		local Tool = Character:FindFirstChildOfClass("Tool")
-		local BPack = Functions.HasItem("BatteryPack")
-		if not Tool and not BPack then return end
-		if Tool and Tool:GetAttribute("LightSource") then
-			if Tool:GetAttribute("Durability") and Tool:GetAttribute("DurabilityMax")
-				and Tool:GetAttribute("Durability") > Tool:GetAttribute("DurabilityMax")
+	if pName == "Bandage" then
+		local bp = Functions.HasItem("BandagePack")
+		if Humanoid.Health >= Humanoid.MaxHealth and not bp then return end
+		if bp and bp:GetAttribute("Durability") >= bp:GetAttribute("DurabilityMax") then return end
+	elseif pName == "Battery" then
+		local tool = Character:FindFirstChildOfClass("Tool")
+		local bp = Functions.HasItem("BatteryPack")
+		if not tool and not bp then return end
+		if tool and tool:GetAttribute("LightSource") then
+			if tool:GetAttribute("Durability") and tool:GetAttribute("DurabilityMax")
+				and tool:GetAttribute("Durability") > tool:GetAttribute("DurabilityMax")
 			then return end
-		elseif not BPack then
+		elseif not bp then
 			return
 		end
-		if BPack and BPack:GetAttribute("Durability") >= BPack:GetAttribute("DurabilityMax") then return end
+		if bp and bp:GetAttribute("Durability") >= bp:GetAttribute("DurabilityMax") then return end
+	elseif pName == "HerbPrompt" then
+		local fx = Global.MainUI.MainFrame.Healthbar:FindFirstChild("Effects")
+		if fx and fx.HerbGreenEffect.Visible then return end
+	elseif (pName == "LibraryHintPaper" or pName == "PickupItem") then
+		if Functions.HasItem("LibraryHintPaper") or Functions.HasItem("LibraryHintPaperHard") then return end
+	elseif pName == "AlarmClock" and Functions.HasItem("AlarmClock") then
+		return
 	end
-
-	if Prompt.Name == "HerbPrompt" then
-		local Effects = Globals.MainUI.MainFrame.Healthbar:FindFirstChild("Effects")
-		if Effects and Effects.HerbGreenEffect.Visible then return end
-	end
-
-	if (Prompt.Parent.Name == "LibraryHintPaper" or Prompt.Parent.Name == "PickupItem") and (Functions.HasItem("LibraryHintPaper") or Functions.HasItem("LibraryHintPaperHard")) then return end
-	if Prompt.Parent.Name == "AlarmClock" and Functions.HasItem("AlarmClock") then return end
-	if Prompt.Parent.Name == "KeyObtainFake" or Prompt.Parent.Name == "TithingPlate" then return end
 
 	Functions.FirePrompt(Prompt)
 	TriggerDebounce = true
@@ -4039,11 +4798,11 @@ Functions.TriggerPrompt = function(Prompt)
 	TriggerDebounce = false
 end
 
-Globals.LastAutoInteractFire = tick()
-Connections.AutoInteract = Services.RunService.Heartbeat:Connect(function()
+Global.LastAutoInteractFire = tick()
+Conns.AutoInteract = Services.RunService.Heartbeat:Connect(function()
 	local Active = Toggles.AutoInteractToggle.Value or Options.AutoInteractKeybind:GetState()
     if not Active then return end
-    if tick() - Globals.LastAutoInteractFire < 1/60 then return end
+    if tick() - Global.LastAutoInteractFire < 1/60 then return end
 
 	for _, Prompt in Objects.Prompts do
         if Prompt:GetAttribute("ParentRoom") and tonumber(Prompt:GetAttribute("ParentRoom")) ~= tonumber(LocalPlayer:GetAttribute("CurrentRoom")) then continue end
@@ -4060,41 +4819,99 @@ Connections.AutoInteract = Services.RunService.Heartbeat:Connect(function()
 			end
 		end
 	end
-    Globals.LastAutoInteractFire = tick()
+    Global.LastAutoInteractFire = tick()
 end)
 
-Connections.InfiniteItemsHandler = Services.ProximityPromptService.PromptTriggered:Connect(function(Object)
+InfCrucifixRange = {
+	["RushMoving"] = 49,
+	["AmbushMoving"] = 50,
+	["A60"] = 49
+}
+
+local function DrawBeamBetween(A, B)
+	local dist = (A - B).Magnitude
+	if dist <= 0 then return end
+	local bar = Instance.new("Part")
+	bar.Anchored = true
+	bar.CanCollide = false bar.CanQuery = false
+	bar.Material = Enum.Material.Neon
+	bar.Color = Color3.fromRGB(255, 0, 0)
+	bar.Size = Vector3.new(0.2, 0.2, dist)
+	bar.CFrame = CFrame.lookAt(A, B) * CFrame.new(0, 0, -dist / 2)
+	bar.Parent = workspace
+	local tw = TweenService:Create(bar, TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Transparency = 1 })
+	tw:Play()
+	tw.Completed:Once(function() bar:Destroy() end)
+end
+
+local function ScanForTargetEntity()
+	for tag in pairs(InfCrucifixRange) do
+		local obj = workspace:FindFirstChild(tag) or workspace:FindFirstChild(tag, true)
+		if obj and (obj:IsA("BasePart") or obj:IsA("Model")) then
+			return obj, tag
+		end
+	end
+end
+
+local function IsTargetInRange()
+	local ent, tag = ScanForTargetEntity()
+	local hrp = Character and Character:FindFirstChild("HumanoidRootPart")
+	if not ent or not hrp then return false end
+	return (ent:GetPivot().Position - hrp.Position).Magnitude < InfCrucifixRange[tag]
+end
+
+local function LocateDroppedCrucifix(hrp)
+	for _, obj in Drops:GetChildren() do
+		if obj.Name == "Crucifix" then return obj end
+	end
+	for _, obj in workspace:GetDescendants() do
+		if obj:IsA("Model") and obj.Name == "Crucifix" and not obj:IsDescendantOf(Character) then
+			if (obj:GetPivot().Position - hrp.Position).Magnitude < 25 then return obj end
+		end
+	end
+end
+
+spawn(function()
+	while task.wait(0.1) do
+		local AnyTool = Character and Character:FindFirstChildOfClass("Tool")
+		if AnyTool and AnyTool.Name == "Crucifix"
+			and Toggles.InfiniteItemsToggle.Value
+			and Options.InfiniteItemsList.Value["Crucifix"]
+			and IsTargetInRange() then
+			local HRP = Character:FindFirstChild("HumanoidRootPart")
+			local Entity = ScanForTargetEntity()
+			if HRP and Entity and Floor ~= "Rooms" then
+				DrawBeamBetween(HRP.Position, Entity:GetPivot().Position)
+				Functions.Notify({ Title = "Infinite Items", Body = "Dropping Crucifix on the floor."})
+				RemotesFolder.DropItem:FireServer(AnyTool)
+				task.wait(0.1)
+				local Dropped = nil
+				for _ = 1, 40 do
+					Dropped = LocateDroppedCrucifix(HRP)
+					if Dropped then break end
+					task.wait(0.1)
+				end
+				if Dropped then
+					task.wait(0.4)
+					local Prompt = Dropped:FindFirstChildOfClass("ProximityPrompt", true)
+						or Dropped:FindFirstChild("ModulePrompt", true)
+					if Prompt then Functions.FirePrompt(Prompt) end
+				end
+			end
+			task.wait(2)
+		end
+	end
+end)
+Conns.InfiniteItemsHandler = Services.ProximityPromptService.PromptTriggered:Connect(function(Object)
 	if not Object:GetAttribute("FakePrompt") then return end
 
-	local ToolNames = { "Lockpick","Shears","SkeletonKey","Key","GeneratorFuse","KeyElectrical","KeyBackdoor","KeyIron", "Multitool" }
-	local AnimateToolNames = { "Lockpick","Shears","SkeletonKey","Key","KeyElectrical","KeyBackdoor","KeyIron", "Multitool" }
-	local Tool
-	for _, N in ToolNames do Tool = Character:FindFirstChild(N) if Tool then break end end
+	local Tool = GetCharacterTool()
+	if ShouldBlockPrompt(Object) then return end
 
-	local Prompt = Object
-	local LockPromptNames = { UnlockPrompt=true, SkullPrompt=true, LockPrompt=true, ThingToEnable=true, FusesPrompt=true }
-	local IsLockPrompt = LockPromptNames[Object.Name]
-		or (Object.Parent and Object.Parent:GetAttribute("Locked") == true)
-		or (Object.Parent and Object.Parent.Parent and Object.Parent.Parent.Name == "Locker_Small_Locked" and Object.Name == "ActivateEventPrompt")
-	if IsLockPrompt then
-		if Options.AutoInteractIgnoreList.Value["Locks"] then return end
-		local KeyItems = { "Key","GeneratorFuse","KeyBackdoor","KeyElectrical","KeyIron","Lockpick","SkeletonKey","Shears","Multitool" }
-		local OffhandKeyItems = { "Key","GeneratorFuse","KeyElectrical","KeyIron" }
-		local HasKey = false
-		for _, K in KeyItems do if Functions.HasItem(K, true) then HasKey = true break end end
-		for _, K in OffhandKeyItems do if Functions.HasItem(K) then HasKey = true break end end
-		if not HasKey then return end
-	end
-
-	if Prompt.Parent.Name == "CuttableVines" and not Functions.HasItem("Shears", true) and not Functions.HasItem("Multitool", true) or Prompt.Parent.Name == "Chest_Vine" and not Functions.HasItem("Shears", true) and not Functions.HasItem("Multitool", true) or Prompt.Parent.Name == "Cellar" and not Functions.HasItem("Shears", true) and not Functions.HasItem("Multitool", true) then return end
-	if Prompt.Parent.Name == "SkullLock" and not Functions.HasItem("SkeletonKey", true) then return end
-	if Prompt.Parent.Name == "Lock1" and not Functions.HasItem("Lockpick", true) and not Functions.HasItem("Multitool", true) or Prompt.Parent.Name == "Lock2" and not Functions.HasItem("Lockpick", true) and not Functions.HasItem("Multitool", true) then return end
-	if Functions.HasItem("Shears", true) and IsLockPrompt and Prompt.Parent.Name ~= "CuttableVines" and Prompt.Parent.Name ~= "Chest_Vine" and Prompt.Parent.Name ~= "Cellar" then return end
-
-	if Tool and table.find(AnimateToolNames, Tool.Name) and Globals.UseAnimation and Globals.UseAnimationBreak then
-		Globals.UseAnimation:Stop()
-		Globals.UseAnimationBreak:Stop()
-		Globals.UseAnimationBreak:Play()
+	if Tool and table.find(AnimateToolNames, Tool.Name) and Global.UseAnimation and Global.UseAnimationBreak then
+		Global.UseAnimation:Stop()
+		Global.UseAnimationBreak:Stop()
+		Global.UseAnimationBreak:Play()
 		if Tool.Name == "Shears" then Tool:WaitForChild("Handle"):WaitForChild("sound_prompt"):Play() end
 	end
 
@@ -4116,11 +4933,9 @@ Connections.InfiniteItemsHandler = Services.ProximityPromptService.PromptTrigger
 		Functions.FirePrompt(RealPrompt)
 	end
 end)
-
-Connections.FloorReplicatedHandler = FloorReplicated.DescendantAdded:Connect(function(Object)
+Conns.FloorReplicatedHandler = FloorReplicated.DescendantAdded:Connect(function(Object)
 	if Object.Name == "GlitchScreech" then
 		Modules.GlitchScreech = Object
-		if Toggles.RemoveScreech.Value then Object.Name = "GlitchScreech_Disabled" end
 	end
 	if Object.Name:find("Jumpscare") and Object:IsA("ModuleScript")
 		and not Object.Name:find("Eyestalk") and not Object.Name:find("Groundskeeper") and not Object.Name:find("Monument")
@@ -4132,21 +4947,21 @@ Connections.FloorReplicatedHandler = FloorReplicated.DescendantAdded:Connect(fun
 end)
 
 if FloorReplicated:FindFirstChild("DigitalTimer") then
-	Connections.HasteTimerConnection = FloorReplicated.DigitalTimer:GetPropertyChangedSignal("Value"):Connect(function()
+	Conns.HasteTimerConnection = FloorReplicated.DigitalTimer:GetPropertyChangedSignal("Value"):Connect(function()
 		if Toggles.NotifyHasteTime.Value then Functions.Caption(Functions.GetHasteTime(), true) end
 	end)
 end
 
-Connections.FogHandler = Services.Lighting:GetPropertyChangedSignal("FogEnd"):Connect(function()
+Conns.FogHandler = Services.Lighting:GetPropertyChangedSignal("FogEnd"):Connect(function()
 	if Services.Lighting.FogEnd ~= 10000000 then
-		Globals.OldFog = Services.Lighting.FogEnd
+		Global.OldFog = Services.Lighting.FogEnd
 	end
 	if Toggles.RemoveCameraFog.Value then
 		Services.Lighting.FogEnd = 10000000
 	end
 end)
 
-Connections.FogHandler2 = Services.Lighting.DescendantAdded:Connect(function(Object)
+Conns.FogHandler2 = Services.Lighting.DescendantAdded:Connect(function(Object)
 	if not Object:IsA("Atmosphere") then return end
 	Object:SetAttribute("Density_Old", Object.Density)
 	if Toggles.RemoveCameraFog.Value then Object.Density = 0 end
@@ -4155,14 +4970,14 @@ Connections.FogHandler2 = Services.Lighting.DescendantAdded:Connect(function(Obj
 		if Object.Density ~= 0 then Object:SetAttribute("Density_Old", Object.Density) end
 		if Toggles.RemoveCameraFog.Value then Object.Density = 0 end
 	end)
-	Object.Destroying:Once(function() AtmoConn2:Disconnect() end)
-	table.insert(Connections, AtmoConn2)
-	table.insert(Globals.FogInstances, Object)
+	Object.Destroying:Once(function() if AtmoConn2 then AtmoConn2:Disconnect() end end)
+	table.insert(Conns, AtmoConn2)
+	table.insert(Global.FogInstances, Object)
 end)
 
-local RusherNamees = { Rush=true, Ambush=true, Eyes=true, Lookman=true, Blitz=true, ["A-60"]=true, ["A-120"]=true, AR0xMBUSH=true, ["RNIUSHCG=="]=true, ["Custom Entity"]=true }
+local RusherNames = { Rush=true, Ambush=true, Eyes=true, Lookman=true, Blitz=true, ["A-60"]=true, ["A-120"]=true, AR0xMBUSH=true, ["RNIUSHCG=="]=true, ["Custom Entity"]=true }
 
-Connections.EntityHandler = Services.Workspace.ChildAdded:Connect(function(Entity)
+Conns.EntityHandler = Services.Workspace.ChildAdded:Connect(function(Entity)
 	local EntityData = Entities[Entity.Name]
 	if not EntityData then return end
 
@@ -4207,10 +5022,10 @@ Connections.EntityHandler = Services.Workspace.ChildAdded:Connect(function(Entit
 		table.insert(Objects.Entities, Entity)
 	end
 
-	if RusherNamees[EntityData.Name] then
+	if RusherNames[EntityData.Name] then
 		Instance.new("Humanoid", Entity).Name = "HighlightHumanoid"
 		local Root = Entity.PrimaryPart
-		if Root then Root.Transparency = 0.999 Root.Material = Enum.Material.Plastic end
+		if Root then Root.Transparency = 0.99 Root.Material = Enum.Material.Plastic end
 	end
 
 	if Entity.Name == "Lookman" then
@@ -4221,7 +5036,7 @@ Connections.EntityHandler = Services.Workspace.ChildAdded:Connect(function(Entit
 end)
 
 local LastClean = tick()
-Connections.Cleaner = Services.RunService.Heartbeat:Connect(function()
+Conns.Cleaner = Services.RunService.Heartbeat:Connect(function()
 	if tick() - LastClean <= 0.5 then return end
 	LastClean = tick()
 
@@ -4231,12 +5046,12 @@ Connections.Cleaner = Services.RunService.Heartbeat:Connect(function()
 			local Object = Array[I]
 			if Object == nil or not Object:IsDescendantOf(Services.Workspace) then
 				table.remove(Array, I)
-				local Conn = ESPConnections[Object]
+				local Conn = ESPConns[Object]
 				if Conn then
 					Conn:Disconnect()
-					ESPConnections[Object] = nil
-					local Pos = table.find(Connections, Conn)
-					if Pos then table.remove(Connections, Pos) end
+					ESPConns[Object] = nil
+					local Pos = table.find(Conns, Conn)
+					if Pos then table.remove(Conns, Pos) end
 				end
 			end
 			I -= 1
@@ -4245,7 +5060,7 @@ Connections.Cleaner = Services.RunService.Heartbeat:Connect(function()
 end)
 
 local LastPromptFix = tick()
-Connections.PromptFixer = Services.RunService.Heartbeat:Connect(function()
+Conns.PromptFixer = Services.RunService.Heartbeat:Connect(function()
 	if tick() - LastPromptFix <= 0.5 then return end
 	LastPromptFix = tick()
 	for _, Prompt in Objects.Prompts do
@@ -4260,24 +5075,45 @@ if LocalPlayer.Character then
 end
 
 LocalPlayer.CharacterAdded:Connect(function(NewCharacter)
-	if Connections.MainHandler then
-		Connections.MainHandler:Disconnect()
-		Connections.MainHandler = nil
+	if Conns.MainHandler then
+		Conns.MainHandler:Disconnect()
+		Conns.MainHandler = nil
 	end
 	task.wait(0.5)
 	Functions.HandleCharacter(NewCharacter)
 end)
 
 Library:OnUnload(function()
-	for Key, Connection in Connections do
-		if type(Key) == "string" then
-			pcall(function() Connection:Disconnect() end)
-		else
-			pcall(function() Key:Disconnect() end)
-			pcall(function() Connection:Disconnect() end)
-		end
+	for _, v in pairs(Conns) do
+		pcall(function() v:Disconnect() end)
 	end
 
+	if MainHook and mstudio45 and mstudio45.Environment then
+		pcall(function()
+			mstudio45.Environment.hookmetamethod(game, "__namecall", MainHook)
+		end)
+		MainHook = nil
+	end
+
+	if track then
+		track:Stop()
+	end
+	gui.Enabled = false
+	gui:Destroy()
+	if LolhaxGui then
+		LolhaxGui:Destroy()
+	end
+	if Container then
+		Container:Destroy()
+	end
+	if Global.PromptContainer then
+		Global.PromptContainer:Destroy()
+	end
+	TriggerFigureLooping = false
+	TriggerFigureThread = nil
+	BreakDoorsLooping = false
+	RestoreAllModules()
+	RestoreRequireHook()
 	for _, Object in Objects.Entities do
 		if Object.Name == "Snare" or Object.Name == "GiggleCeiling" then
 			local Hitbox = Object:FindFirstChild("Hitbox")
@@ -4302,12 +5138,12 @@ Library:OnUnload(function()
 
 	for _, Object in Objects.SeekBridges do Object:Destroy() end
 
-	for _, Fog in Globals.FogInstances do
+	for _, Fog in Global.FogInstances do
 		Fog.Density = Fog:GetAttribute("Density_Old")
 	end
-	Services.Lighting.FogEnd = Globals.OldFog
+	Services.Lighting.FogEnd = Global.OldFog
 
-	local Vignette = Globals.MainUI:FindFirstChild("HideVignette") or Globals.MainUI.MainFrame:FindFirstChild("HideVignette")
+	local Vignette = Global.MainUI:FindFirstChild("HideVignette") or Global.MainUI.MainFrame:FindFirstChild("HideVignette")
 	if Vignette then Vignette.Image = "rbxassetid://6100076320" end
 
 	local ModuleRestores = {
@@ -4332,17 +5168,34 @@ Library:OnUnload(function()
 		FakeEvents.Surge_Real.Parent = RemotesFolder
 	end
 
-	Globals.SeekNodesFolder:Destroy()
-	Globals.RoomsNodesFolder:Destroy()
-	Globals.ManipulateBody:Destroy()
+	if FakeEvents.Figure_Real then
+		FakeEvents.Figure:Destroy()
+		FakeEvents.Figure_Real.Parent = RemotesFolder
+	end
 
-	local OldAmbient = CurrentRooms:FindFirstChild(tostring(LocalPlayer:GetAttribute("CurrentRoom"))):GetAttribute("Ambient")
-	Services.TweenService:Create(Services.Lighting, TweenInfo.new(0.2, Enum.EasingStyle.Exponential), { Ambient = OldAmbient }):Play()
+	if HiddenRemotes then
+		HiddenRemotes:Destroy()
+	end
+
+	Global.SeekNodesFolder:Destroy()
+	Global.RoomsNodesFolder:Destroy()
+	Global.ManipulateBody:Destroy()
+
+	if DoorReachConnection then
+		DoorReachConnection:Disconnect()
+		DoorReachConnection = nil
+	end
+
+	local CurrentRoomObj = CurrentRooms and CurrentRooms:FindFirstChild(tostring(LocalPlayer:GetAttribute("CurrentRoom") or ""))
+	if CurrentRoomObj then
+		local OldAmbient = CurrentRoomObj:GetAttribute("Ambient")
+		Services.TweenService:Create(Services.Lighting, TweenInfo.new(0.2, Enum.EasingStyle.Exponential), { Ambient = OldAmbient }):Play()
+	end
 
 	for _, Prompt in Objects.Prompts do
 		if FakePrompts[Prompt] then
-			FakePrompts[Prompt].Parent = Prompt.Parent
-			Prompt:Destroy()
+			pcall(function() FakePrompts[Prompt].Parent = Prompt.Parent end)
+			pcall(function() Prompt:Destroy() end)
 		end
 		if Prompt.Parent then
 			Prompt.HoldDuration = Prompt:GetAttribute("HoldDuration_Old") or Prompt.HoldDuration
@@ -4367,7 +5220,7 @@ Library:OnUnload(function()
 	CollisionPartClone.Position = RootPart.Position + Vector3.new(0, BaseY, 0)
 
 	if Character:FindFirstChild("LowerTorso") and Character.LowerTorso:FindFirstChild("Root") then
-		Character.LowerTorso.Root.C1 = Globals.OriginalC1
+		Character.LowerTorso.Root.C1 = Global.OriginalC1
 	end
 	if Collision:FindFirstChild("CollisionCrouch") then
 		Collision.CollisionCrouch.Position = RootPart.Position + Vector3.new(0, -0.982, 0)
@@ -4375,23 +5228,23 @@ Library:OnUnload(function()
 
 	CollisionClone:Destroy()
 	CollisionPartClone:Destroy()
-	Eternal.ESPLibrary:Unload()
+	mstudio45.ESPLibrary:Unload()
 
 	if Main_Game then
 		Main_Game.fovtarget   = 70
 		Main_Game.spring.Speed = 8
-		Main_Game.tooloffset   = Vector3.zero
 	end
 
-	if Globals.OriginalGetMoveVector then 
+	if Global.OriginalGetMoveVector then 
 		local Controls = require(LocalPlayer.PlayerScripts.PlayerModule):GetControls()
-		Controls.GetMoveVector = Globals.OriginalGetMoveVector
+		Controls.GetMoveVector = Global.OriginalGetMoveVector
 	end
 
-	getgenv().Eternal = nil
+	getgenv().mstudio45 = nil
 end)
 end
 
-while not Globals.MainUI do task.wait() end
-Eternal.Interface.ApplySettingsTab(Window)
-Functions.Notify({ Title = "Successfully loaded", Body = "Press Right Shift to Close/Open the menu"})
+while not Global.MainUI do task.wait() end
+
+if type(SyncEntityRemoval) == "function" then pcall(SyncEntityRemoval) end
+Functions.Notify({ Title = "Successfully loaded", Body = "Press RightControl to Close/Open the menu"})
