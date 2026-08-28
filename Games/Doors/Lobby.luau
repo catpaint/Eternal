@@ -85,6 +85,50 @@ local Tabs = {
     Settings = Window:AddTab("Settings", "settings"),
 }
 
+local MenuGroup = Tabs.Settings:AddLeftGroupbox("Menu")
+MenuGroup:AddToggle("KeybindMenuOpen", {
+	Default = Library.KeybindFrame and Library.KeybindFrame.Visible or false,
+	Text = "Open Keybind Menu",
+	Callback = function(value)
+		if Library.KeybindFrame then Library.KeybindFrame.Visible = value end
+	end,
+})
+MenuGroup:AddToggle("ShowCustomCursor", {
+	Text = "Custom Cursor",
+	Default = false,
+	Callback = function(Value)
+		Library.ShowCustomCursor = Value
+	end,
+})
+MenuGroup:AddToggle("AlwaysOnTop", {
+	Text = "Always On Top",
+	Default = Window.AlwaysOnTop or false,
+	Callback = function(Value)
+		if Window.SetAlwaysOnTop then Window:SetAlwaysOnTop(Value) end
+	end,
+})
+MenuGroup:AddDivider()
+MenuGroup:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightControl", NoUI = true, Text = "Menu keybind" })
+MenuGroup:AddButton("Copy Discord Invite", function()
+	if toclipboard then toclipboard("https://dsc.gg/mstudio45") end
+	Library:Notify("Discord invite copied.")
+end)
+MenuGroup:AddButton("Unload", function()
+	Library:Unload()
+end)
+
+pcall(function()
+	if ThemeManager and SaveManager then
+		ThemeManager:SetLibrary(Library)
+		SaveManager:SetLibrary(Library)
+		SaveManager:IgnoreThemeSettings()
+		ThemeManager:SetFolder("mstudio45")
+		SaveManager:SetFolder("mstudio45/Doors")
+		SaveManager:BuildConfigSection(Tabs.Settings)
+		ThemeManager:ApplyToTab(Tabs.Settings)
+	end
+end)
+
 Functions.CheckCompatability = function(Array)
     local Valid = true
     for Index, Name in pairs(Array) do
@@ -161,14 +205,14 @@ function NotificationLibrary:Notify(TitleText, Desc, Delay)
 		local Description = Instance.new("TextLabel")
 
 		Notification.Name = "Notification"
-		Notification.BackgroundColor3 = Library.Scheme.BackgroundColor
+		Notification.BackgroundColor3 = (Library.Scheme and Library.Scheme.BackgroundColor) or Color3.fromRGB(25, 25, 25)
 		Notification.BackgroundTransparency = 0.4
 		Notification.BorderSizePixel = 0
 		Notification.Size = UDim2.new(NotifyScaleX, 0, 0, 50)
 
 		Line.Name = "Line"
 		Line.Parent = Notification
-		Line.BackgroundColor3 = Library.Scheme.AccentColor
+		Line.BackgroundColor3 = (Library.Scheme and Library.Scheme.AccentColor) or Color3.fromRGB(0, 120, 255)
 		Line.BorderSizePixel = 0
 		Line.Position = UDim2.new(0, 0, 1, -3)
 		Line.Size = UDim2.new(0, 0, 0, 3)
@@ -180,7 +224,7 @@ function NotificationLibrary:Notify(TitleText, Desc, Delay)
 		Warning.Position = UDim2.new(0, 10, 0.5, 0)
 		Warning.Size = UDim2.new(0, 40, 0, 40)
 		Warning.Image = "rbxassetid://3944668821"
-		Warning.ImageColor3 = Library.Scheme.AccentColor
+		Warning.ImageColor3 = (Library.Scheme and Library.Scheme.AccentColor) or Color3.fromRGB(0, 120, 255)
 		Warning.ScaleType = Enum.ScaleType.Fit
 
 		UICorner.CornerRadius = UDim.new(0, 20)
@@ -196,7 +240,7 @@ function NotificationLibrary:Notify(TitleText, Desc, Delay)
 		Title.Position = UDim2.new(0, TextOffset, 0.125, 0)
 		Title.Size = UDim2.new(0, TextWidth, 0, 18)
 		Title.Text = TitleText or "..."
-		Title.TextColor3 = Library.Scheme.FontColor
+		Title.TextColor3 = (Library.Scheme and Library.Scheme.FontColor) or Color3.fromRGB(255, 255, 255)
 		Title.TextSize = 10
 		Title.TextWrapped = true
 		Title.TextStrokeTransparency = 0.75
@@ -209,7 +253,7 @@ function NotificationLibrary:Notify(TitleText, Desc, Delay)
 		Description.Position = UDim2.new(0, TextOffset, 0.4, 0)
 		Description.Size = UDim2.new(0, TextWidth, 0, 18)
 		Description.Text = Desc or "..."
-		Description.TextColor3 = Library.Scheme.FontColor
+		Description.TextColor3 = (Library.Scheme and Library.Scheme.FontColor) or Color3.fromRGB(200, 200, 200)
 		Description.TextTransparency = 0.1
 		Description.TextSize = 10
 		Description.TextWrapped = true
@@ -298,6 +342,7 @@ Functions.Notify = function(Settings)
             Settings.Body,
             Settings.Time or 5
         )
+
 end
 
 Library.Notify = function(Data, Body, Time)
@@ -788,7 +833,7 @@ General_CreateElevator:AddButton({
 	end
 })
 Library:OnUnload(function()
-    if Con.MainConnection then Con.MainConnection:Disconnect() end
+    Con.MainConnection:Disconnect()
         if track then
             track:Stop()
         end
