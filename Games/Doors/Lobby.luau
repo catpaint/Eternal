@@ -1,16 +1,16 @@
 local LoadStart = tick()
-Eternal.SavePath = "Doors/Lobby"
+mstudio45.SavePath = "Doors/Lobby"
 
-local Library = Eternal.Interface.Library
-local SaveManager = Eternal.Interface.SaveManager
-local ThemeManager = Eternal.Interface.ThemeManager
+local Library = mstudio45.Interface.Library
+local SaveManager = mstudio45.Interface.SaveManager
+local ThemeManager = mstudio45.Interface.ThemeManager
 
 local Toggles = Library.Toggles
 local Options = Library.Options
 
 local function CloneReference(Object)
-    if Eternal and Eternal.Environment.cloneref then
-        return Eternal.Environment.cloneref(Object)
+    if mstudio45 and mstudio45.Environment.cloneref then
+        return mstudio45.Environment.cloneref(Object)
     else
         return Object
     end
@@ -22,22 +22,19 @@ local Services = setmetatable({}, {
     end
 })
 
-local Groupboxes = {}
 local Globals = {}
-local Connections = {}
+local Con = {}
 local Functions = {}
 
 local LocalPlayer = Services.Players.LocalPlayer
 local RemotesFolder = Services.ReplicatedStorage:WaitForChild("RemotesFolder")
 
-while not LocalPlayer.Character do
-    task.wait()
-end
-task.wait(1)
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 
 local Window = Library:CreateWindow({
-    Title = "catpaint",
-    Footer = "dsc.gg/PB9AHh6sub",
+    Title = "mstudio45 V4",
+    Footer = "Game: DOORS LOBBY | dsc.gg/mstudio45",
+    Icon = 77196040991392,
     NotifySide = "Right",
     ShowCustomCursor = false,
     AutoShow = true,
@@ -47,41 +44,7 @@ local Window = Library:CreateWindow({
     CornerRadius = 2,
 })
 
-Library:SetWatermarkVisibility(true)
-Library:SetWatermark("catpaint | Loading...")
-
-local FrameTimer = tick()
-local FrameCounter = 0
-local FPS = 60
-
-local WatermarkConnection = game:GetService("RunService").RenderStepped:Connect(function()
-	FrameCounter += 1
-
-	if (tick() - FrameTimer) >= 1 then
-		FPS = FrameCounter
-		FrameTimer = tick()
-		FrameCounter = 0
-	end
-
-	local ping = "N/A"
-	local stats = game:GetService("Stats")
-	if stats and stats:FindFirstChild("Network") and stats.Network:FindFirstChild("ServerStatsItem") then
-		local dataPing = stats.Network.ServerStatsItem:FindFirstChild("Data Ping")
-		if dataPing then
-			ping = math.floor(dataPing:GetValue())
-		end
-	end
-
-	Library:SetWatermark(("catpaint | %s fps | %s ms"):format(math.floor(FPS), tostring(ping)))
-end)
-
-Library:OnUnload(function()
-	if WatermarkConnection then
-		WatermarkConnection:Disconnect()
-	end
-end)
-
-Eternal.Interface.ApplyInfoTab(Window)
+mstudio45.Interface.ApplyInfoTab(Window)
 local Tabs = {
     General = Window:AddTab("General", "house"),
 }
@@ -89,7 +52,7 @@ local Tabs = {
 Functions.CheckCompatability = function(Array)
     local Valid = true
     for Index, Name in pairs(Array) do
-        if not Eternal.Environment[Name] then
+        if not mstudio45.Environment[Name] then
             Valid = false
         end
     end
@@ -98,7 +61,7 @@ end
 
 local function GetHiddenContainer()
 	if Functions.CheckCompatability({"gethui"}) then
-		return Eternal.Environment.gethui()
+		return mstudio45.Environment.gethui()
 	else
 		return Services.CoreGui
 	end
@@ -110,7 +73,7 @@ local NotificationLibrary = {
 }
 
 local Container = Instance.new("ScreenGui")
-Container.Name = Eternal.ESPLibrary:GenerateRandomString()
+Container.Name = mstudio45.ESPLibrary:GenerateRandomString()
 Container.Parent = GetHiddenContainer()
 Container.DisplayOrder = 32767
 Container.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -122,26 +85,50 @@ if not Library.Scheme then
         end
     })
 end
-
 function NotificationLibrary:Notify(TitleText, Desc, Delay)
 	task.spawn(function()
+		local TextService = game:GetService("TextService")
+		local ViewportSize = workspace.CurrentCamera.ViewportSize
+
+		local NotifyScaleX = 0.25
+		local TextOffset = 60
+		local Spacing = 10
+		local BaseY = 5
+		local NotifyWidth = ViewportSize.X * NotifyScaleX
+		local SlideX = NotifyWidth + 12
+		local TextWidth = math.max(NotifyWidth - TextOffset - 30, 150)
+
+		local function Reflow()
+			local Y = BaseY
+			for _, Object in Container:GetChildren() do
+				if Object.Name == "Notification" and Object:GetAttribute("Destroying") ~= true then
+					local Cur = Object:GetAttribute("CurrentPosition")
+					if not Cur or Cur.Y.Offset ~= Y then
+						Services.TweenService:Create(
+							Object,
+							TweenInfo.new(0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out),
+							{ Position = UDim2.new(1, -SlideX, 0, Y) }
+						):Play()
+					end
+					Object:SetAttribute("CurrentPosition", UDim2.new(1, -SlideX, 0, Y))
+					Y += Object.Size.Y.Offset + Spacing
+				end
+			end
+		end
+
 		local Notification = Instance.new("Frame")
 		local Line = Instance.new("Frame")
 		local Warning = Instance.new("ImageLabel")
 		local UICorner = Instance.new("UICorner")
-        local UICorner2 = Instance.new("UICorner")
+		local UICorner2 = Instance.new("UICorner")
 		local Title = Instance.new("TextLabel")
 		local Description = Instance.new("TextLabel")
 
 		Notification.Name = "Notification"
-		Notification.Parent = Container
 		Notification.BackgroundColor3 = Library.Scheme.BackgroundColor
 		Notification.BackgroundTransparency = 0.4
 		Notification.BorderSizePixel = 0
-		Notification.Position = UDim2.new(1, 5, 0, 60 + (60 * NotificationLibrary.LiveNotifications))
-		Notification.Size = UDim2.new(0, 420, 0, 50)
-        Notification:SetAttribute("ID", NotificationLibrary.Notifications)
-        Notification:SetAttribute("CurrentPosition", Notification.Position)
+		Notification.Size = UDim2.new(NotifyScaleX, 0, 0, 50)
 
 		Line.Name = "Line"
 		Line.Parent = Notification
@@ -153,7 +140,8 @@ function NotificationLibrary:Notify(TitleText, Desc, Delay)
 		Warning.Name = "Warning"
 		Warning.Parent = Notification
 		Warning.BackgroundTransparency = 1
-		Warning.Position = UDim2.new(0, 10, 0, 5)
+		Warning.AnchorPoint = Vector2.new(0, 0.5)
+		Warning.Position = UDim2.new(0, 10, 0.5, 0)
 		Warning.Size = UDim2.new(0, 40, 0, 40)
 		Warning.Image = "rbxassetid://3944668821"
 		Warning.ImageColor3 = Library.Scheme.AccentColor
@@ -162,72 +150,119 @@ function NotificationLibrary:Notify(TitleText, Desc, Delay)
 		UICorner.CornerRadius = UDim.new(0, 20)
 		UICorner.Parent = Warning
 
-        UICorner2.CornerRadius = UDim.new(0, 4)
-        UICorner2.Parent = Notification
+		UICorner2.CornerRadius = UDim.new(0, 4)
+		UICorner2.Parent = Notification
 
 		Title.Name = "Title"
 		Title.Parent = Notification
 		Title.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-		Title.BackgroundTransparency = 1.000
-		Title.Position = UDim2.new(0, 60, 0.155, 0)
-		Title.Size = UDim2.new(0, 205, 0, 15)
+		Title.BackgroundTransparency = 1
+		Title.Position = UDim2.new(0, TextOffset, 0.125, 0)
+		Title.Size = UDim2.new(0, TextWidth, 0, 18)
 		Title.Text = TitleText or "..."
 		Title.TextColor3 = Library.Scheme.FontColor
 		Title.TextSize = 10
+		Title.TextWrapped = true
 		Title.TextStrokeTransparency = 0.75
 		Title.TextXAlignment = Enum.TextXAlignment.Left
 
 		Description.Name = "Description"
 		Description.Parent = Notification
 		Description.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-		Description.BackgroundTransparency = 1.000
-		Description.Position = UDim2.new(0, 60, 0.483, 0)
-		Description.Size = UDim2.new(0, 205, 0, 18)
+		Description.BackgroundTransparency = 1
+		Description.Position = UDim2.new(0, TextOffset, 0.4, 0)
+		Description.Size = UDim2.new(0, TextWidth, 0, 18)
 		Description.Text = Desc or "..."
 		Description.TextColor3 = Library.Scheme.FontColor
-        Description.TextTransparency = 0.1
+		Description.TextTransparency = 0.1
 		Description.TextSize = 10
+		Description.TextWrapped = true
 		Description.TextStrokeTransparency = 0.75
 		Description.TextXAlignment = Enum.TextXAlignment.Left
-		
-		NotificationLibrary.LiveNotifications = NotificationLibrary.LiveNotifications + 1
-        NotificationLibrary.Notifications = NotificationLibrary.Notifications + 1
-		Services.TweenService:Create(Notification, TweenInfo.new(1, Enum.EasingStyle.Exponential), {Position = UDim2.new(1, -370, 0, Notification.Position.Y.Offset)}):Play()
+
+		local Params = Instance.new("GetTextBoundsParams")
+		Params.Text = Description.Text
+		Params.RichText = true
+		Params.Font = Description.FontFace
+		Params.Size = Description.TextSize
+		Params.Width = TextWidth
+		local Bounds = TextService:GetTextBoundsAsync(Params)
+
+		local DescHeight = math.max(math.ceil(Bounds.Y) + 4, 18)
+		local Height = 50 + (DescHeight - 18)
+
+		Description.Size = UDim2.new(0, TextWidth, 0, DescHeight)
+		Notification.Size = UDim2.new(NotifyScaleX, 0, 0, Height)
+
+		local StackY = BaseY
+		for _, Object in Container:GetChildren() do
+			if Object.Name == "Notification" and Object:GetAttribute("Destroying") ~= true then
+				StackY += Object.Size.Y.Offset + Spacing
+			end
+		end
+
+		Notification.Parent = Container
+		Notification.Position = UDim2.new(1, 5, 0, StackY)
+		Notification:SetAttribute("ID", NotificationLibrary.Notifications)
+		Notification:SetAttribute("CurrentPosition", UDim2.new(1, -SlideX, 0, StackY))
+
+		NotificationLibrary.LiveNotifications += 1
+		NotificationLibrary.Notifications += 1
+
+		Services.TweenService:Create(
+			Notification,
+			TweenInfo.new(1, Enum.EasingStyle.Exponential),
+			{ Position = UDim2.new(1, -SlideX, 0, Notification.Position.Y.Offset) }
+		):Play()
 
 		task.wait(0.25)
-		Services.TweenService:Create(Line, TweenInfo.new(Delay - 0.25, Enum.EasingStyle.Linear), {Size = UDim2.new(0, 400, 0, 3)}):Play()
-		task.wait(Delay - 0.25)
+		if typeof(Delay) == "Instance" then
+			Delay.Destroying:Wait()
+		else
+			Services.TweenService:Create(
+				Line,
+				TweenInfo.new(Delay - 0.25, Enum.EasingStyle.Linear),
+				{ Size = UDim2.new(1, -10, 0, 3) }
+			):Play()
+			task.wait(Delay - 0.25)
+		end
 
-        Notification:SetAttribute("Destroying", true)
-		Services.TweenService:Create(Notification, TweenInfo.new(0.75, Enum.EasingStyle.Exponential, Enum.EasingDirection.In), {Position = UDim2.new(1, 5, 0, Notification.Position.Y.Offset)}):Play()
-		NotificationLibrary.LiveNotifications = NotificationLibrary.LiveNotifications - 1
-        
-        for Index, Object in pairs(Container:GetChildren()) do
-            if Object.Name == "Notification" and Object:GetAttribute("ID") and Object:GetAttribute("ID") > Notification:GetAttribute("ID") and Object:GetAttribute("Destroying") ~= true and Object.Position.Y.Offset ~= 60 then
-                Object:SetAttribute("CurrentPosition", UDim2.new(1, -450, 0, Object:GetAttribute("CurrentPosition").Y.Offset - 60))
-                Services.TweenService:Create(Object, TweenInfo.new(1, Enum.EasingStyle.Exponential, Enum.EasingDirection.InOut), {Position = UDim2.new(1, -370, 0, Object:GetAttribute("CurrentPosition").Y.Offset)}):Play()
-            end
-        end
-        task.wait(0.75)
+		Notification:SetAttribute("Destroying", true)
+
+		Services.TweenService:Create(
+			Notification,
+			TweenInfo.new(0.3, Enum.EasingStyle.Exponential, Enum.EasingDirection.In),
+			{ Position = UDim2.new(1, 5, 0, Notification.Position.Y.Offset) }
+		):Play()
+
+		NotificationLibrary.LiveNotifications -= 1
+
+		task.wait(0.3)
 		Notification:Destroy()
+		Reflow()
 	end)
 end
-
 Functions.Notify = function(Settings)
     local Container
     if Functions.CheckCompatability({"gethui"}) then
-        Container = Eternal.Environment.gethui()
+        Container = mstudio45.Environment.gethui()
     else
         Container = Services.CoreGui
     end
 
-    local Sound = Instance.new("Sound", Container)
-    Sound.SoundId = "rbxassetid://8784885431"
-    Sound.Volume = 3
-    Sound.PlayOnRemove = true
-    Sound:Destroy()
+		local Sound = Instance.new("Sound")
+		Sound.SoundId = "rbxassetid://8784885431"
+		Sound.Volume = 3
+		Sound.PlayOnRemove = true
+		Sound.Parent = Container
+		Sound:Destroy()
 
-    NotificationLibrary:Notify(Settings.Title, Settings.Body, Settings.Time or 5)
+        NotificationLibrary:Notify(
+            Settings.Title,
+            Settings.Body,
+            Settings.Time or 5
+        )
+
 end
 
 Library.Notify = function(Data, Body, Time)
@@ -289,30 +324,54 @@ Globals.CodesList = {
 }
 Globals.UnlockedBadges = {}
 
-Groupboxes.General_Self = Tabs.General:AddLeftGroupbox("Self")
+General_Character = Tabs.General:AddLeftGroupbox("Character")
 
-Groupboxes.General_Self:AddToggle("AutoJoinElevator", {
+General_Character:AddToggle("AutoJoinElevator", {
     Text = "Auto Join Elevator",
     Default = false,
     Tooltip = "Automatically joins the selected player's elevator."
 })
 
-Groupboxes.General_Self:AddDropdown("AutoJoinElevatorTarget", {
+General_Character:AddDropdown("AutoJoinElevatorTarget", {
     Text = "Target",
     SpecialType = "Player",
     ExcludeLocalPlayer = true,
     Searchable = true
 })
+General_Character:AddDivider()
+General_Character:AddToggle("TwerkDance", { 
+    Text = "Twerk", 
+    Default = false, 
+    Tooltip = "just Twerk." 
+})
+local track
 
-Groupboxes.General_Automation = Tabs.General:AddLeftGroupbox("Automation")
+Toggles.TwerkDance:OnChanged(function(Value)
+    if Value then
 
-Groupboxes.General_Automation:AddToggle("CycleAchievements", {
+        local anim = Instance.new("Animation")
+        anim.AnimationId = "rbxassetid://12874447851"
+
+		local hum = Character:FindFirstChildOfClass("Humanoid")
+        track = hum:LoadAnimation(anim)
+        track.Looped = true
+        track:Play()
+
+    else
+        if track then
+            track:Stop()
+        end
+    end
+end)
+General_Automation = Tabs.General:AddLeftGroupbox("Automation")
+
+General_Automation:AddToggle("CycleAchievements", {
     Text = "Cycle Achievements",
     Default = false,
     Tooltip = "Rapidly equips a random badge."
 })
 
-Groupboxes.General_Automation:AddSlider("CycleAchievementsDelay", {
+General_Automation:AddSlider("CycleAchievementsDelay", {
     Text = "Cycle Delay",
     Min = 0,
     Max = 1,
@@ -321,9 +380,9 @@ Groupboxes.General_Automation:AddSlider("CycleAchievementsDelay", {
     Compact = true
 })
 
-Groupboxes.General_Automation:AddDivider()
+General_Automation:AddDivider()
 
-Groupboxes.General_Automation:AddButton("Redeem All Codes", function()
+General_Automation:AddButton("Redeem All Codes", function()
     if Globals.RedeemingCodes then
         return
     end
@@ -342,7 +401,7 @@ for Index, Frame in pairs(LocalPlayer.PlayerGui.MainUI.LobbyFrame.Achievements.L
 	end
 end
 
-Connections.BadgeAddedConnection = LocalPlayer.PlayerGui.MainUI.LobbyFrame.Achievements.List.ChildAdded:Connect(function(Frame)
+Con.BadgeAddedConnection = LocalPlayer.PlayerGui.MainUI.LobbyFrame.Achievements.List.ChildAdded:Connect(function(Frame)
 	Services.RunService.Heartbeat:Wait()
 	if Frame:IsA("ImageButton") and Frame.ImageTransparency == 0 then
 		table.insert(Globals.UnlockedBadges, Frame.Name)
@@ -351,7 +410,7 @@ end)
 
 Globals.LastBadgeChange = tick()
 Globals.LastElevatorCheck = tick()
-Connections.MainConnection = Services.RunService.Heartbeat:Connect(function()
+Con.MainConnection = Services.RunService.Heartbeat:Connect(function()
 	if tick() - Globals.LastElevatorCheck > 0.25 then
     	Functions.CheckElevators()
 		Globals.LastElevatorCheck = tick()
@@ -381,9 +440,17 @@ Connections.MainConnection = Services.RunService.Heartbeat:Connect(function()
 	end
 end)
 
-Groupboxes.General_QuickPlay = Tabs.General:AddRightGroupbox("Quick Play")
-
-Groupboxes.General_QuickPlay:AddButton({
+General_CreateElevator = Tabs.General:AddRightGroupbox("Create Elavotr")
+General_CreateElevator:AddSlider("AmountOfPlayers", {
+    Text = "Amount Of Players",
+    Min = 1,
+    Max = 50,
+    Default = 1,
+    Rounding = 0,
+    Compact = true
+})
+General_CreateElevator:AddLabel("With Progress", true)
+General_CreateElevator:AddButton({
 	Text = "The Hotel",
 	DoubleClick = false,
 	Func = function()
@@ -392,12 +459,12 @@ Groupboxes.General_QuickPlay:AddButton({
         	Settings = {},
         	Destination = "Hotel",
         	FriendsOnly = false,
-        	MaxPlayers = "1"
+        	MaxPlayers = Options.AmountOfPlayers.Value
     	})
 	end
 })
 
-Groupboxes.General_QuickPlay:AddButton({
+General_CreateElevator:AddButton({
 	Text = "The Mines",
 	DoubleClick = false,
 	Func = function()
@@ -406,12 +473,12 @@ Groupboxes.General_QuickPlay:AddButton({
         	Settings = {},
         	Destination = "Mines",
         	FriendsOnly = false,
-        	MaxPlayers = "1"
+        	MaxPlayers = Options.AmountOfPlayers.Value
     	})
 	end
 })
 
-Groupboxes.General_QuickPlay:AddButton({
+General_CreateElevator:AddButton({
 	Text = "The Backdoor",
 	DoubleClick = false,
 	Func = function()
@@ -420,12 +487,12 @@ Groupboxes.General_QuickPlay:AddButton({
         	Settings = {},
         	Destination = "Backdoor",
         	FriendsOnly = false,
-        	MaxPlayers = "1"
+        	MaxPlayers = Options.AmountOfPlayers.Value
     	})
 	end
 })
 
-Groupboxes.General_QuickPlay:AddButton({
+General_CreateElevator:AddButton({
 	Text = "The Rooms",
 	DoubleClick = false,
 	Func = function()
@@ -434,12 +501,12 @@ Groupboxes.General_QuickPlay:AddButton({
         	Settings = {},
         	Destination = "Rooms",
         	FriendsOnly = false,
-        	MaxPlayers = "1"
+        	MaxPlayers = Options.AmountOfPlayers.Value
     	})
 	end
 })
 
-Groupboxes.General_QuickPlay:AddButton({
+General_CreateElevator:AddButton({
 	Text = "The Outdoors",
 	DoubleClick = false,
 	Func = function()
@@ -448,14 +515,42 @@ Groupboxes.General_QuickPlay:AddButton({
         	Settings = {},
         	Destination = "Garden",
         	FriendsOnly = false,
-        	MaxPlayers = "1"
+        	MaxPlayers = Options.AmountOfPlayers.Value
     	})
 	end
 })
 
-Groupboxes.General_QuickPlay:AddDivider()
+General_CreateElevator:AddLabel("Visuals", true)
 
-Groupboxes.General_QuickPlay:AddButton({
+General_CreateElevator:AddButton({
+	Text = "Daily Run",
+	DoubleClick = false,
+	Func = function()
+		RemotesFolder.CreateElevator:FireServer({
+			Mods = {},
+			Settings = {},
+			Destination = "Daily",
+			FriendsOnly = false,
+			MaxPlayers = Options.AmountOfPlayers.Value
+		})
+	end
+})
+
+General_CreateElevator:AddButton({
+	Text = "Cringles Workshop",
+	DoubleClick = false,
+	Func = function()
+		RemotesFolder.CreateElevator:FireServer({
+        	Mods = {},
+        	Settings = {},
+        	Destination = "CringlesWorkshop",
+        	FriendsOnly = false,
+        	MaxPlayers = Options.AmountOfPlayers.Value
+    	})
+	end
+})
+
+General_CreateElevator:AddButton({
 	Text = "Battle Mode",
 	DoubleClick = false,
 	Func = function()
@@ -464,12 +559,12 @@ Groupboxes.General_QuickPlay:AddButton({
         	Settings = {},
         	Destination = "Party",
         	FriendsOnly = false,
-        	MaxPlayers = "1"
+        	MaxPlayers = Options.AmountOfPlayers.Value
     	})
 	end
 })
 
-Groupboxes.General_QuickPlay:AddButton({
+General_CreateElevator:AddButton({
 	Text = "Retro Mode",
 	DoubleClick = false,
 	Func = function()
@@ -478,12 +573,12 @@ Groupboxes.General_QuickPlay:AddButton({
         	Settings = {},
         	Destination = "Retro",
         	FriendsOnly = false,
-        	MaxPlayers = "1"
+        	MaxPlayers = Options.AmountOfPlayers.Value
     	})
 	end
 })
 
-Groupboxes.General_QuickPlay:AddButton({
+General_CreateElevator:AddButton({
 	Text = "Rush Mode",
 	DoubleClick = false,
 	Func = function()
@@ -492,28 +587,12 @@ Groupboxes.General_QuickPlay:AddButton({
         	Settings = {},
         	Destination = "Fools26",
         	FriendsOnly = false,
-        	MaxPlayers = "1"
+        	MaxPlayers = Options.AmountOfPlayers.Value
     	})
 	end
 })
 
-Groupboxes.General_QuickPlay:AddDivider()
-
-Groupboxes.General_QuickPlay:AddButton({
-	Text = "Halloween",
-	DoubleClick = false,
-	Func = function()
-		RemotesFolder.CreateElevator:FireServer({
-        	Mods = {},
-        	Settings = {},
-        	Destination = "Halloween25",
-        	FriendsOnly = false,
-        	MaxPlayers = "1"
-    	})
-	end
-})
-
-Groupboxes.General_QuickPlay:AddButton({
+General_CreateElevator:AddButton({
 	Text = "Hotel-",
 	DoubleClick = false,
 	Func = function()
@@ -522,12 +601,12 @@ Groupboxes.General_QuickPlay:AddButton({
         	Settings = {},
         	Destination = "BeforePlus",
         	FriendsOnly = false,
-        	MaxPlayers = "1"
+        	MaxPlayers = Options.AmountOfPlayers.Value
     	})
 	end
 })
 
-Groupboxes.General_QuickPlay:AddButton({
+General_CreateElevator:AddButton({
 	Text = "Super Hard Mode",
 	DoubleClick = false,
 	Func = function()
@@ -536,15 +615,15 @@ Groupboxes.General_QuickPlay:AddButton({
         	Settings = {},
         	Destination = "SuperHardMode",
         	FriendsOnly = false,
-        	MaxPlayers = "1"
+        	MaxPlayers = Options.AmountOfPlayers.Value
     	})
 	end
 })
 
-Groupboxes.General_QuickPlay:AddDivider()
+General_CreateElevator:AddLabel("Without Progress", true)
 
-Groupboxes.General_QuickPlay:AddButton({
-	Text = "The Rooms [Free, No Progress]",
+General_CreateElevator:AddButton({
+	Text = "The Rooms",
 	DoubleClick = false,
 	Func = function()
 		RemotesFolder.CreateElevator:FireServer({
@@ -554,13 +633,13 @@ Groupboxes.General_QuickPlay:AddButton({
         	Settings = {},
         	Destination = "Rooms",
         	FriendsOnly = false,
-        	MaxPlayers = "1"
+        	MaxPlayers = Options.AmountOfPlayers.Value
     	})
 	end
 })
 
-Groupboxes.General_QuickPlay:AddButton({
-	Text = "The Outdoors [Free, No Progress]",
+General_CreateElevator:AddButton({
+	Text = "The Outdoors",
 	DoubleClick = false,
 	Func = function()
 		RemotesFolder.CreateElevator:FireServer({
@@ -570,15 +649,116 @@ Groupboxes.General_QuickPlay:AddButton({
         	Settings = {},
         	Destination = "Garden",
         	FriendsOnly = false,
-        	MaxPlayers = "1"
+        	MaxPlayers = Options.AmountOfPlayers.Value
     	})
 	end
 })
 
+General_CreateElevator:AddLabel("Challenges", true)
+General_CreateElevator:AddButton({
+	Text = "Hotel Hell",
+	DoubleClick = false,
+	Func = function()
+		RemotesFolder.CreateElevator:FireServer({
+        Mods = {
+            "PlayerHealthLess",
+            "Gloombat",
+            "RoomsA90",
+            "EntitiesMost",
+            "EyesLevel2",
+            "DupeMost",
+            "BackdoorVacuum",
+            "BackdoorLookman",
+            "NoKeySound",
+            "BackdoorRush",
+            "EyesMore",
+            "Dread",
+            "FigureFaster",
+            "RushMore",
+            "LockMost",
+            "FiredampMost"
+        },
+        	Settings = {},
+        	Destination = "Hotel",
+        	FriendsOnly = false,
+        	MaxPlayers = Options.AmountOfPlayers.Value
+    	})
+	end
+})
+General_CreateElevator:AddButton({
+	Text = "Not Five Stars",
+	DoubleClick = false,
+	Func = function()
+		RemotesFolder.CreateElevator:FireServer({
+        Mods = {
+            "PlayerHealthLess",
+            "Gloombat",
+            "NoKeySound",
+            "PlayerLessSlots",
+            "GoldSpawnNone",
+            "LockMost"
+        },
+        	Settings = {},
+        	Destination = "Hotel",
+        	FriendsOnly = false,
+        	MaxPlayers = Options.AmountOfPlayers.Value
+    	})
+	end
+})
+General_CreateElevator:AddButton({
+	Text = "A hard Place",
+	DoubleClick = false,
+	Func = function()
+		RemotesFolder.CreateElevator:FireServer({
+        	Mods = {
+            "PlayerHealthLess",
+            "PlayerLeastSlots",
+            "RoomsA90",
+            "EntitiesMost",
+            "DupeMost",
+            "BackdoorVacuum",
+            "BackdoorLookman",
+            "NoKeySound",
+            "Dread",
+            "GoldSpawnNone",
+            "FigureFaster",
+            "RushQuiet",
+            "RushMore",
+            "FiredampMost"
+			},
+        	Settings = {},
+        	Destination = "Mines",
+        	FriendsOnly = false,
+        	MaxPlayers = Options.AmountOfPlayers.Value
+    	})
+	end
+})
+General_CreateElevator:AddButton({
+	Text = "Rocky Road",
+	DoubleClick = false,
+	Func = function()
+		RemotesFolder.CreateElevator:FireServer({
+        	Mods = {
+			"PlayerHealthLess",
+            "PlayerLessSlots",
+            "GoldSpawnNone",
+            "RushQuiet",
+            "FiredampMost"
+			},
+        	Settings = {},
+        	Destination = "Mines",
+        	FriendsOnly = false,
+        	MaxPlayers = Options.AmountOfPlayers.Value
+    	})
+	end
+})
 Library:OnUnload(function()
-    Connections.MainConnection:Disconnect()
-	getgenv().Eternal = nil
+    Con.MainConnection:Disconnect()
+        if track then
+            track:Stop()
+        end
+	getgenv().mstudio45 = nil
 end)
 
-Eternal.Interface.ApplySettingsTab(Window)
-Functions.Notify({ Title = "Successfully loaded in " .. math.floor((tick() - LoadStart) * 1000) / 1000 .. " seconds." , Body = "Press '" .. tostring(Options.MenuKeybind.Value) .. "' to toggle the UI."})
+mstudio45.Interface.ApplySettingsTab(Window)
+Functions.Notify({ Title = "Successfully loaded", Body = "Press Right Shift to Close/Open the menu"})
