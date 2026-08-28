@@ -316,9 +316,18 @@ local function GetHiddenContainer()
 	return game:GetService("CoreGui") or LocalPlayer:WaitForChild("PlayerGui")
 end
 
+local targetContainer = GetHiddenContainer()
+if targetContainer then
+	for _, child in ipairs(targetContainer:GetChildren()) do
+		if child.Name == "mstudio45_UI" or child:FindFirstChild("Main") or child:FindFirstChild("Window") then
+			pcall(function() child:Destroy() end)
+		end
+	end
+end
+
 local Container = Instance.new("ScreenGui")
 Container.Name = (mstudio45.ESPLibrary and type(mstudio45.ESPLibrary.GenerateRandomString) == "function" and mstudio45.ESPLibrary:GenerateRandomString()) or "mstudio45_UI"
-Container.Parent = GetHiddenContainer()
+Container.Parent = targetContainer
 Container.DisplayOrder = 32767
 Container.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
