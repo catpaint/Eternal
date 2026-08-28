@@ -1,4 +1,36 @@
 local LoadStart = tick()
+
+getgenv().it = true
+getgenv().mstudio45 = getgenv().mstudio45 or {}
+getgenv().mstudio45.Legit = false
+getgenv().mstudio45.Paid = true
+
+if not mstudio45.Environment then
+    local gethuiFunc = gethui or function() return Services and Services.CoreGui or game:GetService("CoreGui") end
+    mstudio45.Environment = setmetatable({
+        cloneref = function(obj) return obj end,
+        gethui = gethuiFunc,
+        GenerateRandomString = function(len)
+            local str = ""
+            for i = 1, (len or 10) do str = str .. string.char(math.random(97, 122)) end
+            return str
+        end
+    }, {
+        __index = function(_, k)
+            if getgenv()[k] then return getgenv()[k] end
+            return nil
+        end
+    })
+end
+
+if not mstudio45.Interface or type(mstudio45.Interface) ~= "table" or not mstudio45.Interface.Library then
+    local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/refs/heads/main/"
+    local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
+    local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
+    local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
+    mstudio45.Interface = { Library = Library, SaveManager = SaveManager, ThemeManager = ThemeManager }
+end
+
 mstudio45.SavePath = "Doors/Lobby"
 
 local Library = mstudio45.Interface.Library
@@ -44,9 +76,13 @@ local Window = Library:CreateWindow({
     CornerRadius = 2,
 })
 
-mstudio45.Interface.ApplyInfoTab(Window)
+if mstudio45.Interface and type(mstudio45.Interface.ApplyInfoTab) == "function" then
+    pcall(function() mstudio45.Interface.ApplyInfoTab(Window) end)
+end
+
 local Tabs = {
-    General = Window:AddTab("General", "house"),
+    General  = Window:AddTab("General", "house"),
+    Settings = Window:AddTab("Settings", "settings"),
 }
 
 Functions.CheckCompatability = function(Array)
@@ -73,7 +109,7 @@ local NotificationLibrary = {
 }
 
 local Container = Instance.new("ScreenGui")
-Container.Name = mstudio45.ESPLibrary:GenerateRandomString()
+Container.Name = (mstudio45.ESPLibrary and type(mstudio45.ESPLibrary.GenerateRandomString) == "function" and mstudio45.ESPLibrary:GenerateRandomString()) or "mstudio45_Lobby_UI"
 Container.Parent = GetHiddenContainer()
 Container.DisplayOrder = 32767
 Container.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -760,5 +796,20 @@ Library:OnUnload(function()
 	getgenv().mstudio45 = nil
 end)
 
-mstudio45.Interface.ApplySettingsTab(Window)
-Functions.Notify({ Title = "Successfully loaded", Body = "Press Right Shift to Close/Open the menu"})
+if Options.MenuKeybind then
+	Options.MenuKeybind:OnClick(function()
+		Library:Toggle()
+	end)
+end
+
+Services.UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.RightControl or input.KeyCode == Enum.KeyCode.RightShift then
+		Library:Toggle()
+	end
+end)
+
+if mstudio45.Interface and type(mstudio45.Interface.ApplySettingsTab) == "function" then
+    pcall(function() mstudio45.Interface.ApplySettingsTab(Window) end)
+end
+Functions.Notify({ Title = "Successfully loaded", Body = "Press RightControl to Close/Open the menu"})
