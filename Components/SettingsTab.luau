@@ -1,7 +1,7 @@
 return function(Window)
 	local function CloneReference(Object)
-		if Eternal and Eternal.Environment.cloneref then
-			return Eternal.Environment.cloneref(Object)
+		if mstudio45 and mstudio45.Environment.cloneref then
+			return mstudio45.Environment.cloneref(Object)
 		else
 			return Object
 		end
@@ -13,9 +13,9 @@ return function(Window)
 		end
 	})
 
-	local Library = Eternal.Interface.Library
-	local SaveManager = Eternal.Interface.SaveManager
-	local ThemeManager = Eternal.Interface.ThemeManager
+	local Library = mstudio45.Interface.Library
+	local SaveManager = mstudio45.Interface.SaveManager
+	local ThemeManager = mstudio45.Interface.ThemeManager
 	
 	local Toggles = Library.Toggles
 	local Options = Library.Options
@@ -30,14 +30,6 @@ return function(Window)
 			Library.KeybindFrame.Visible = value
 		end,
 	})
-
-	MenuGroup:AddToggle("WatermarkVisible", {
-		Text = "Show Watermark",
-		Default = true,
-		Callback = function(Value)
-			Library:SetWatermarkVisibility(Value)
-		end,
-	})
 	MenuGroup:AddToggle("ShowCustomCursor", {
 		Text = "Custom Cursor",
 		Default = false,
@@ -46,24 +38,34 @@ return function(Window)
 		end,
 	})
 
+	MenuGroup:AddToggle("AlwaysOnTop", {
+		Text = "Always On Top",
+		Default = Window.AlwaysOnTop,
+		Callback = function(Value)
+			Window:SetAlwaysOnTop(Value)
+		end,
+	})
+
+	MenuGroup:AddDivider()
+
 	MenuGroup:AddDropdown("UILibrary", {
 		Text = "UI Style",
 		Values = {
 			"Obsidian",
 			"Linoria"
 		},
-		Default = (Eternal.UILibrary == "Linoria" and 2 or 1),
+		Default = (mstudio45.UILibrary == "Linoria" and 2 or 1),
 		Callback = function(Value)
-			if Eternal.Environment.writefile and Eternal.Environment.readfile then
-				if not Eternal.Environment.isfile("Eternal/UserData.json") then
+			if mstudio45.Environment.writefile and mstudio45.Environment.readfile then
+				if not mstudio45.Environment.isfile("mstudio45/UserData.json") then
 					local Data = {
 						TotalExecutions = 0,
 						UILibrary = "Obsidian"
 					}
-					Eternal.Environment.writefile("Eternal/UserData.json", Services.HttpService:JSONEncode(Data))
+					mstudio45.Environment.writefile("mstudio45/UserData.json", Services.HttpService:JSONEncode(Data))
 				end
 
-				local UserData = Eternal.Environment.readfile("Eternal/UserData.json")
+				local UserData = mstudio45.Environment.readfile("mstudio45/UserData.json")
 				local Decoded = Services.HttpService:JSONDecode(UserData)
 				Decoded.UILibrary = Value
 
@@ -71,10 +73,10 @@ return function(Window)
 					Decoded.UILibrary = "Obsidian"
 				end
 
-				Eternal.TotalExecutions = Decoded.TotalExecutions
-				Eternal.UILibrary = Decoded.UILibrary
+				mstudio45.TotalExecutions = Decoded.TotalExecutions
+				mstudio45.UILibrary = Decoded.UILibrary
 
-				Eternal.Environment.writefile("Eternal/UserData.json", Services.HttpService:JSONEncode(Decoded))
+				mstudio45.Environment.writefile("mstudio45/UserData.json", Services.HttpService:JSONEncode(Decoded))
 			end
 		end
 	})
@@ -96,7 +98,7 @@ return function(Window)
 	MenuGroup:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", { Default = "RightShift", NoUI = true, Text = "Menu keybind" })
 	
 	MenuGroup:AddButton("Copy Discord Invite", function()
-		toclipboard("https://dsc.gg/PB9AHh6sub")
+		toclipboard("https://dsc.gg/mstudio45")
 		Library:Notify("Discord invite copied.")
 	end)
 	
@@ -110,8 +112,8 @@ return function(Window)
 	SaveManager:SetLibrary(Library)
 	SaveManager:IgnoreThemeSettings()
 	SaveManager:SetIgnoreIndexes({"UILibrary"})
-	ThemeManager:SetFolder("Eternal")
-	SaveManager:SetFolder("Eternal/" .. Eternal.SavePath)
+	ThemeManager:SetFolder("mstudio45")
+	SaveManager:SetFolder("mstudio45/" .. mstudio45.SavePath)
 	SaveManager:BuildConfigSection(SettingsTab)
 	ThemeManager:ApplyToTab(SettingsTab)
 	SaveManager:LoadAutoloadConfig()
