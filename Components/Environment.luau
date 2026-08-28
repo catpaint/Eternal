@@ -147,7 +147,7 @@ end)
 
 RunTest("request", function()
 	local Response = Global.request({
-		Url = "https://raw.githubusercontent.com/catpaint/Eternal/refs/heads/main/Components/Environment.luau",
+		Url = "https://raw.githubusercontent.com/mstudio45/mstudio45/refs/heads/main/Components/Environment.luau",
 		Method = "GET",
 	})
 	assert(Response.StatusCode == 200, "Status code should be 200")
@@ -423,50 +423,50 @@ RunTest("Drawing.Fonts", function()
 end, "Drawing_Fonts")
 
 RunTest("writefile", function()
-	Global.writefile("Eternal_Test_File", "example")
-	assert(Global.isfile("Eternal_Test_File") == true, "Failed to create a file")
-	assert(Global.readfile("Eternal_Test_File") == "example", "File does not contain expected data")
+	Global.writefile("mstudio45_Test_File", "example")
+	assert(Global.isfile("mstudio45_Test_File") == true, "Failed to create a file")
+	assert(Global.readfile("mstudio45_Test_File") == "example", "File does not contain expected data")
 end)
 
 RunTest("isfile", function()
-	assert(Global.isfile("Eternal_Test_File") == true, "Did not return true for a valid file")
+	assert(Global.isfile("mstudio45_Test_File") == true, "Did not return true for a valid file")
 end)
 
 RunTest("readfile", function()
-	assert(Global.readfile("Eternal_Test_File") == "example", "Did not return the expected data")
+	assert(Global.readfile("mstudio45_Test_File") == "example", "Did not return the expected data")
 end)
 
 RunTest("appendfile", function()
-	Global.appendfile("Eternal_Test_File", "_appended")
-	assert(Global.readfile("Eternal_Test_File") == "example_appended", "Failed to append content to a file")
+	Global.appendfile("mstudio45_Test_File", "_appended")
+	assert(Global.readfile("mstudio45_Test_File") == "example_appended", "Failed to append content to a file")
 end)
 
 RunTest("loadfile", function()
-	Global.writefile("Eternal_Test_Load", [[return 25]])
-	assert(Global.loadfile("Eternal_Test_Load")() == 25, "Failed to load and execute a file")
+	Global.writefile("mstudio45_Test_Load", [[return 25]])
+	assert(Global.loadfile("mstudio45_Test_Load")() == 25, "Failed to load and execute a file")
 end)
 
 RunTest("delfile", function()
-	Global.delfile("Eternal_Test_File")
-	Global.delfile("Eternal_Test_Load")
-	assert(Global.isfile("Eternal_Test_File") == false, "Failed to delete a file")
+	Global.delfile("mstudio45_Test_File")
+	Global.delfile("mstudio45_Test_Load")
+	assert(Global.isfile("mstudio45_Test_File") == false, "Failed to delete a file")
 end)
 
 RunTest("makefolder", function()
-	Global.makefolder("Eternal_Test_Folder")
-	assert(Global.isfolder("Eternal_Test_Folder") == true, "Failed to create a folder")
+	Global.makefolder("mstudio45_Test_Folder")
+	assert(Global.isfolder("mstudio45_Test_Folder") == true, "Failed to create a folder")
 end)
 
 RunTest("delfolder", function()
-	Global.delfolder("Eternal_Test_Folder")
-	assert(Global.isfolder("Eternal_Test_Folder") == false, "Failed to delete a folder")
+	Global.delfolder("mstudio45_Test_Folder")
+	assert(Global.isfolder("mstudio45_Test_Folder") == false, "Failed to delete a folder")
 end)
 
 RunTest("listfiles", function()
-	Global.makefolder("Eternal_ListFiles_Test")
-	Global.writefile("Eternal_ListFiles_Test/Test1", "test 1")
-	Global.writefile("Eternal_ListFiles_Test/Test2", "test 2")
-	local FilesList = Global.listfiles("Eternal_ListFiles_Test")
+	Global.makefolder("mstudio45_ListFiles_Test")
+	Global.writefile("mstudio45_ListFiles_Test/Test1", "test 1")
+	Global.writefile("mstudio45_ListFiles_Test/Test2", "test 2")
+	local FilesList = Global.listfiles("mstudio45_ListFiles_Test")
 	local Found1 = false
 	local Found2 = false
 	assert(#FilesList == 2, "Did not return the correct number of files")
@@ -478,16 +478,16 @@ RunTest("listfiles", function()
 			Found2 = true
 		end
 	end
-	Global.delfolder("Eternal_ListFiles_Test")
+	Global.delfolder("mstudio45_ListFiles_Test")
 	assert(Found1 == true, "Did not return the first file")
 	assert(Found2 == true, "Did not return the second file")
 end)
 
 RunTest("getcustomasset", function()
 	assert(Environment.writefile, "writefile is required to test")
-	local Content = game:HttpGet("https://raw.githubusercontent.com/catpaint/Eternal/refs/heads/main/Assets/Check.png")
-	Global.writefile("Eternal_Test_Image", Content)
-	local Asset = Global.getcustomasset("Eternal_Test_Image")
+	local Content = game:HttpGet("https://raw.githubusercontent.com/mstudio45/mstudio45/refs/heads/main/Assets/Check.png")
+	Global.writefile("mstudio45_Test_Image", Content)
+	local Asset = Global.getcustomasset("mstudio45_Test_Image")
 	local TestImage = Instance.new("ImageLabel", Services.CoreGui.RobloxGui)
 	TestImage.Image = Asset
 	local Tries = 0
@@ -497,7 +497,7 @@ RunTest("getcustomasset", function()
 	end
 	local IsLoaded = TestImage.IsLoaded
 	TestImage:Destroy()
-	Global.delfile("Eternal_Test_Image")
+	Global.delfile("mstudio45_Test_Image")
 	assert(string.find(Asset, "rbxasset://"), "Should return an rbxasset id")
 	assert(IsLoaded == true, "Failed to load a PNG image")
 end)
