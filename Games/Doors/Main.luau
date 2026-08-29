@@ -23,10 +23,31 @@ if not mstudio45.Environment then
     })
 end
 
-if not mstudio45.ESPLibrary then
-    local s, lib = pcall(function()
-        return loadstring(game:HttpGet("https://raw.githubusercontent.com/mstudio45/Abysall/refs/heads/main/Components/ESP.luau"))()
-    end)
+if not mstudio45.ESPLibrary or type(mstudio45.ESPLibrary.AddESP) ~= "function" then
+    local s, lib = false, nil
+    if isfile then
+        local paths = {
+            "mstudio45.xyz/Components/ESPLibrary.luau",
+            "Eternal/Components/ESPLibrary.luau",
+            "Components/ESPLibrary.luau",
+            "ESPLibrary.luau"
+        }
+        for _, p in ipairs(paths) do
+            if isfile(p) then
+                local code = readfile(p)
+                local fn = loadstring(code)
+                if fn then
+                    s, lib = pcall(fn)
+                    if s and lib then break end
+                end
+            end
+        end
+    end
+    if not s or not lib then
+        s, lib = pcall(function()
+            return loadstring(game:HttpGet("https://raw.githubusercontent.com/catpaint/Eternal/refs/heads/main/Components/ESPLibrary.luau"))()
+        end)
+    end
     mstudio45.ESPLibrary = (s and lib) or setmetatable({}, {
         __index = function() return function() end end
     })
@@ -275,7 +296,32 @@ local ItemNames = {
 	["AloeVera"]          = "Aloe Vera",
 	["Donut"]             = "Donut",
 	["Lotus"]             = "Lotus",
-	["BoxingGloves"]      = "Boxing Gloves"
+	["BoxingGloves"]      = "Boxing Gloves",
+	["Leftovers"]         = "Leftovers",
+	["LeftoversItem"]     = "Leftovers",
+	["Leftover"]          = "Leftovers",
+	["LeftoverFood"]      = "Leftovers",
+	["PaperPlan"]         = "Paper Plane",
+	["PaperPlane"]        = "Paper Plane",
+	["Paper_Plan"]        = "Paper Plane",
+	["Paper_Plane"]       = "Paper Plane",
+	["Plan"]              = "Paper Plane",
+	["PaperPlanItem"]     = "Paper Plane",
+	["PaperPlaneItem"]    = "Paper Plane",
+	["Briefcase"]         = "Briefcase",
+	["BriefcaseItem"]     = "Briefcase",
+	["BriefCase"]         = "Briefcase",
+	["Suitcase"]          = "Briefcase",
+	["Pizza"]             = "Pizza",
+	["PizzaItem"]         = "Pizza",
+	["PizzaSlice"]        = "Pizza",
+	["PizzaBox"]          = "Pizza",
+	["JournalWorldRig"]   = "Journal",
+	["Journal"]           = "Journal",
+	["JournalItem"]       = "Journal",
+	["JournalRig"]        = "Journal",
+	["Notebook"]          = "Journal",
+	["Diary"]             = "Journal"
 }
 
 local Character
@@ -1149,18 +1195,30 @@ Global.PromptContainer.Parent = GetHiddenContainer()
 
 local ESPBlacklist = {}
 
+local function GetRoomNum(val)
+	if not val then return 0 end
+	if tonumber(val) then return tonumber(val) end
+	local n = tostring(val):match("%d+")
+	return tonumber(n) or 0
+end
+
 Functions.AddESP = function(ESPOptions, RoomBased)
 	local Object = ESPOptions.Object
+	if not Object then return end
 
 	if table.find(ESPBlacklist, Object) then
 		return
 	end
 
 	if RoomBased then
-		local CurrentRoom = tonumber(LocalPlayer:GetAttribute("CurrentRoom"))
-		local ObjectRoom = tonumber(Object:GetAttribute("ParentRoom"))
+		local CurrentRoom = GetRoomNum(LocalPlayer:GetAttribute("CurrentRoom"))
+		local ObjectRoom = GetRoomNum(Object:GetAttribute("ParentRoom"))
 
-		if ObjectRoom == CurrentRoom or (table.find(Objects.Doors, Object) and ObjectRoom == CurrentRoom + 1) then
+		local isDoor = table.find(Objects.Doors, Object) or Object.Name == "HighlightModel" or Object.Name == "HighlightPart"
+		local isNextDoor = isDoor and (ObjectRoom == CurrentRoom or ObjectRoom == CurrentRoom + 1)
+		local shouldShow = (ObjectRoom == CurrentRoom) or (isDoor and isNextDoor)
+
+		if shouldShow then
 			mstudio45.ESPLibrary:AddESP(ESPOptions)
 		end
 
@@ -1169,10 +1227,11 @@ Functions.AddESP = function(ESPOptions, RoomBased)
 				ESPOptions.Color = mstudio45.ESPLibrary.ColorTable[Object]
 			end
 
-			local NewCurrentRoom = tonumber(LocalPlayer:GetAttribute("CurrentRoom"))
-			local ObjRoom = tonumber(Object:GetAttribute("ParentRoom"))
+			local NewCurrentRoom = GetRoomNum(LocalPlayer:GetAttribute("CurrentRoom"))
+			local ObjRoom = GetRoomNum(Object:GetAttribute("ParentRoom"))
 
-			if ObjRoom == NewCurrentRoom or (table.find(Objects.Doors, Object) and ObjRoom == NewCurrentRoom + 1) then
+			local okNext = isDoor and (ObjRoom == NewCurrentRoom or ObjRoom == NewCurrentRoom + 1)
+			if ObjRoom == NewCurrentRoom or okNext then
 				mstudio45.ESPLibrary:AddESP(ESPOptions)
 			else
 				mstudio45.ESPLibrary:RemoveESP(Object)
@@ -1215,7 +1274,13 @@ Functions.GetAttributeOpened = function(Object)
 end
 
 local function GetDoorText(Object)
-	return "Door " .. (Functions.GetAttributeOpened(Object) or "")
+	local roomName = Object and Object.Parent and Object.Parent.Name or ""
+	local opened = Functions.GetAttributeOpened(Object) or ""
+	if opened ~= "" then opened = " " .. opened end
+	if roomName ~= "" then
+		return "Door " .. roomName .. opened
+	end
+	return "Door" .. opened
 end
 
 local function RefreshDoorESP(Door, ESPObj)
@@ -2582,8 +2647,18 @@ end)
 
 Toggles.ItemESPToggle:OnChanged(function(Value)
 	for _, Object in Objects.Items do
-		if Value then
-			local Label = ItemNames[Object.Name] or (Object.Name == "Green_Herb" and "Green Herb")
+		local isPlayerItem = Object:IsDescendantOf(Services.Players) or (Object.Parent and Object.Parent:IsA("Model") and Services.Players:GetPlayerFromCharacter(Object.Parent)) or (Object.Parent and Object.Parent:IsA("Backpack"))
+		if Value and not isPlayerItem then
+			local Label = ItemNames[Object.Name]
+			if not Label then
+				local lowerName = Object.Name:lower()
+				if lowerName:find("leftover") then Label = "Leftovers"
+				elseif lowerName:find("paper") or lowerName:find("plan") or lowerName:find("plane") then Label = "Paper Plane"
+				elseif lowerName:find("briefcase") or lowerName:find("suitcase") then Label = "Briefcase"
+				elseif lowerName:find("pizza") then Label = "Pizza"
+				elseif Object.Name == "Green_Herb" then Label = "Green Herb"
+				end
+			end
 			if Label then
 				Functions.AddESP({ Object = Object, Text = Label, Color = Options.ItemESPColor.Value }, Object:GetAttribute("ParentRoom") ~= nil)
 			end
@@ -3936,7 +4011,7 @@ Functions.HandleObject = function(Object)
 		if Toggles.LadderESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Ladder", Color = Options.LadderESPColor.Value }, true) end
 		if Toggles.NotifyLadder.Value then Functions.Notify({ Title = "Ladder Notify", Body = "Ladder has spawned in Room " .. (Object:GetAttribute("ParentRoom") or "(sorry this is a bug)") .. "." }) end
 		table.insert(Objects.Ladders, Object)
-	elseif Name == "Door" and Object.Parent and tonumber(Object.Parent.Name) then
+	elseif Name == "Door" and Object.Parent and (tonumber(Object.Parent.Name) or Object.Parent.Name:match("^A%-%d+") or Object.Parent.Name:match("%d+")) then
 		local DoorParts = {}
 		for _, Child in Object:GetChildren() do
 			if Child.Name == "Door" and Child:IsA("BasePart") then
@@ -3944,11 +4019,13 @@ Functions.HandleObject = function(Object)
 			end
 		end
 
+		local parentRoomAttr = tonumber(Object.Parent.Name) or Object.Parent.Name
+
 		if #DoorParts == 2 then
 			local HighlightModel = Instance.new("Model", Object)
 			HighlightModel.Name = "HighlightModel"
 			Instance.new("Humanoid", HighlightModel).Name = "HighlightHumanoid"
-			HighlightModel:SetAttribute("ParentRoom", tonumber(Object.Parent.Name))
+			HighlightModel:SetAttribute("ParentRoom", parentRoomAttr)
 
 			for _, DoorPart in DoorParts do
 				local HP = Instance.new("Part", HighlightModel)
@@ -3958,12 +4035,27 @@ Functions.HandleObject = function(Object)
 				HP.CFrame = DoorPart.CFrame
 				HP.Name = "HighlightPart"
 				HP.Material = Enum.Material.Plastic
-				HP:SetAttribute("ParentRoom", tonumber(Object.Parent.Name))
+				HP:SetAttribute("ParentRoom", parentRoomAttr)
 				local W = Instance.new("WeldConstraint", HP)
 				W.Part0 = HP W.Part1 = DoorPart W.Enabled = true
 			end
+
+			local CenterPart = Instance.new("Part", HighlightModel)
+			CenterPart.Transparency = 1
+			CenterPart.Size = Vector3.new(1, 1, 1)
+			CenterPart.CanCollide = false
+			CenterPart.CFrame = CFrame.new((DoorParts[1].Position + DoorParts[2].Position) / 2)
+			CenterPart.Name = "CenterPart"
+			local WCenter = Instance.new("WeldConstraint", CenterPart)
+			WCenter.Part0 = CenterPart WCenter.Part1 = DoorParts[1] WCenter.Enabled = true
+
+			HighlightModel.PrimaryPart = CenterPart
+
 			table.insert(Objects.Doors, HighlightModel)
-			if Toggles.DoorESPToggle.Value then Functions.AddESP({ Object = HighlightModel, Text = GetDoorText(Object), Color = Options.DoorESPColor.Value }, true) end
+
+			if Toggles.DoorESPToggle.Value then
+				Functions.AddESP({ Object = HighlightModel, Text = GetDoorText(Object), Color = Options.DoorESPColor.Value }, true)
+			end
 
 			KeepDoorTextSynced(Object, HighlightModel)
 		else
@@ -3975,12 +4067,16 @@ Functions.HandleObject = function(Object)
 			HP.CFrame = Root.CFrame
 			HP.Name = "HighlightPart"
 			HP.Material = Enum.Material.Plastic
-			HP:SetAttribute("ParentRoom", tonumber(Object.Parent.Name))
+			HP:SetAttribute("ParentRoom", parentRoomAttr)
 			local W = Instance.new("WeldConstraint", HP)
 			W.Part0 = HP W.Part1 = Root W.Enabled = true
 			Instance.new("Humanoid", Object).Name = "HighlightHumanoid"
+
 			table.insert(Objects.Doors, HP)
-			if Toggles.DoorESPToggle.Value then Functions.AddESP({ Object = HP, Text = GetDoorText(Object), Color = Options.DoorESPColor.Value }, true) end
+
+			if Toggles.DoorESPToggle.Value then
+				Functions.AddESP({ Object = HP, Text = GetDoorText(Object), Color = Options.DoorESPColor.Value }, true)
+			end
 
 			KeepDoorTextSynced(Object, HP)
 		end
@@ -4189,13 +4285,49 @@ Functions.HandleObject = function(Object)
 	elseif Name == "MouseHole" then
 		if Toggles.ChestESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Mouse", Color = Options.ChestESPColor.Value }, true) end
 		table.insert(Objects.Chests, Object)
-	elseif ItemNames[Name] and Object:FindFirstChild("ModulePrompt") then
-		if Toggles.ItemESPToggle.Value then Functions.AddESP({ Object = Object, Text = ItemNames[Name], Color = Options.ItemESPColor.Value }, Object:GetAttribute("ParentRoom") ~= nil) end
-		if Name == "LotusHolder" or Name == "LotusPetalPickup" then
-			Object.Handle:GetPropertyChangedSignal("LocalTransparencyModifier"):Connect(function()
-				mstudio45.ESPLibrary:RemoveESP(Object)
+	elseif ItemNames[Name] or Name:lower():find("leftover") or Name:lower():find("paper") or Name:lower():find("plan") or Name:lower():find("plane") or Name:lower():find("briefcase") or Name:lower():find("suitcase") or Name:lower():find("pizza") then
+		local function IsPlayerItem(item)
+			if not item then return true end
+			if item:IsDescendantOf(Services.Players) then return true end
+			if item.Parent and item.Parent:IsA("Model") and Services.Players:GetPlayerFromCharacter(item.Parent) then return true end
+			if item.Parent and item.Parent:IsA("Backpack") then return true end
+			return false
+		end
+
+		if IsPlayerItem(Object) then
+			return
+		end
+
+		local label = ItemNames[Name]
+		if not label then
+			local lower = Name:lower()
+			if lower:find("leftover") then label = "Leftovers"
+			elseif lower:find("paper") or lower:find("plan") or lower:find("plane") then label = "Paper Plane"
+			elseif lower:find("briefcase") or lower:find("suitcase") then label = "Briefcase"
+			elseif lower:find("pizza") then label = "Pizza"
+			end
+		end
+
+		if label and Toggles.ItemESPToggle.Value then
+			Functions.AddESP({ Object = Object, Text = label, Color = Options.ItemESPColor.Value }, Object:GetAttribute("ParentRoom") ~= nil)
+		end
+
+		local ancestryConn
+		ancestryConn = Object.AncestryChanged:Connect(function()
+			if IsPlayerItem(Object) then
+				Functions.RemoveESP(Object)
 				Functions.BlacklistESP(Object)
-			end)
+				if ancestryConn then ancestryConn:Disconnect() end
+			end
+		end)
+
+		if Name == "LotusHolder" or Name == "LotusPetalPickup" then
+			if Object:FindFirstChild("Handle") then
+				Object.Handle:GetPropertyChangedSignal("LocalTransparencyModifier"):Connect(function()
+					mstudio45.ESPLibrary:RemoveESP(Object)
+					Functions.BlacklistESP(Object)
+				end)
+			end
 		end
 
 		table.insert(Objects.Items, Object)
@@ -4721,7 +4853,12 @@ local TriggerDebounce = false
 Functions.TriggerPrompt = function(Prompt)
 	if TriggerDebounce then return end
 	if not Prompt or not Prompt.Parent then return end
-	if AutoInteractBlacklist[Prompt.Name] then return end
+
+	local pName = Prompt.Parent.Name
+	local gpName = Prompt.Parent.Parent and Prompt.Parent.Parent.Name or ""
+	local isLeftovers = pName:lower():find("leftover") or gpName:lower():find("leftover")
+
+	if AutoInteractBlacklist[Prompt.Name] and not isLeftovers then return end
 	if Prompt:GetAttribute("AutoInteractIgnore") then return end
 	if ShouldBlockPrompt(Prompt) then return end
 
@@ -4759,11 +4896,13 @@ Functions.TriggerPrompt = function(Prompt)
 	if (pName == "GoldPile" or pName == "StardustPickup") and Options.AutoInteractIgnoreList.Value["Currency"] then return end
 	if pName == "KeyObtainFake" or pName == "TithingPlate" then return end
 
-	-- Block terminal and vending machines from AutoInteract
-	if pName:find("ArchivesTerminal") or pName:find("ShakelightVendingMachine") or pName:find("Vendor") then return end
-	if Prompt.Parent.Parent then
-		local gpName = Prompt.Parent.Parent.Name
-		if gpName:find("ArchivesTerminal") or gpName:find("ShakelightVendingMachine") or gpName:find("Vendor") then return end
+	-- Block terminal, vending machines, Paper Plane, ArchivesLargePrinter, and ArchivesTrashcan from AutoInteract
+	local lowerPName = pName:lower()
+	if lowerPName:find("archivesterminal") or lowerPName:find("shakelightvendingmachine") or lowerPName:find("vendor") or lowerPName:find("paper") or lowerPName:find("plane") or lowerPName:find("plan") or lowerPName:find("archiveslargeprinter") or lowerPName:find("printer") or lowerPName:find("archivestrashcan") or lowerPName:find("trashcan") then return end
+
+	if Prompt.Parent and Prompt.Parent.Parent then
+		local lowerGPName = Prompt.Parent.Parent.Name:lower()
+		if lowerGPName:find("archivesterminal") or lowerGPName:find("shakelightvendingmachine") or lowerGPName:find("vendor") or lowerGPName:find("paper") or lowerGPName:find("plane") or lowerGPName:find("printer") or lowerGPName:find("trashcan") then return end
 	end
 
 	if Prompt.Name == "ActivateEventPrompt" then
