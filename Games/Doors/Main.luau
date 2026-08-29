@@ -2163,38 +2163,38 @@ end
 
 local function SyncEntityRemoval()
 	local UIModules = FindUIModules()
-	if Toggles.RemoveScreech.Value then
+	if Toggles.RemoveScreech and Toggles.RemoveScreech.Value then
 		RenameModule(UIModules, "Screech", "Screech_Disabled")
 	else
 		RenameModule(UIModules, "Screech_Disabled", "Screech")
 	end
-	if Toggles.RemoveA90.Value then
+	if Toggles.RemoveA90 and Toggles.RemoveA90.Value then
 		RenameModule(UIModules, "A90", "A90_Disabled")
 	else
 		RenameModule(UIModules, "A90_Disabled", "A90")
 	end
-	if Toggles.RemoveDread.Value then
+	if Toggles.RemoveDread and Toggles.RemoveDread.Value then
 		RenameModule(UIModules, "Dread", "Dread_Disabled")
 	else
 		RenameModule(UIModules, "Dread_Disabled", "Dread")
 	end
-	if Toggles.DisableTimothyJumpscare.Value then
+	if Toggles.DisableTimothyJumpscare and Toggles.DisableTimothyJumpscare.Value then
 		RenameModule(UIModules, "SpiderJumpscare", "SpiderJumpscare_Disabled")
 	else
 		RenameModule(UIModules, "SpiderJumpscare_Disabled", "SpiderJumpscare")
 	end
 	local EM = FindEntityModules()
-	if Toggles.RemoveHalt.Value then
+	if Toggles.RemoveHalt and Toggles.RemoveHalt.Value then
 		RenameModule(EM, "Shade", "Shade_Disabled")
 	else
 		RenameModule(EM, "Shade_Disabled", "Shade")
 	end
-	if Toggles.DisableGlitchJumpscare.Value then
+	if Toggles.DisableGlitchJumpscare and Toggles.DisableGlitchJumpscare.Value then
 		RenameModule(EM, "Glitch", "Glitch_Disabled")
 	else
 		RenameModule(EM, "Glitch_Disabled", "Glitch")
 	end
-	if Toggles.DisableVoidJumpscare.Value then
+	if Toggles.DisableVoidJumpscare and Toggles.DisableVoidJumpscare.Value then
 		RenameModule(EM, "Void", "Void_Disabled")
 	else
 		RenameModule(EM, "Void_Disabled", "Void")
@@ -2519,7 +2519,8 @@ local HidingSpotLabels = {
 	Wardrobe = "Closet", ["Backdoor_Wardrobe"] = "Closet", Toolshed = "Closet",
 	RetroWardrobe = "Closet", ["Wardrobe-FOOLS26"] = "Closet",
 	Locker_Large = "Locker", Rooms_Locker = "Locker", Rooms_Locker_Fridge = "Locker",
-	Bed = "Bed", Double_Bed = "Double Bed", CircularVent = "Vent", Dumpster = "Dumpster"
+	Bed = "Bed", Double_Bed = "Double Bed", CircularVent = "Vent", Dumpster = "Dumpster",
+	HidingSpot1 = "Closet", HidingSpot2 = "Closet", HidingSpot3 = "Closet"
 }
 local ChestLabels = {
 	ChestBox = true, ChestBoxLocked = true, Toolbox = true, Toolbox_Locked = true,
@@ -4269,15 +4270,16 @@ Functions.HandleObject = function(Object)
 		table.insert(Objects.Chests, Object)
 	elseif Name == "Locker_Small_Locked" then
 		if Toggles.ChestESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Locked Item Locker", Color = Options.ChestESPColor.Value }, true) end
-			Object:WaitForChild("Main").Open.Played:Once(function()
+		Object:WaitForChild("Main").Open.Played:Once(function()
 			Functions.RemoveESP(Object)
-			Functions.BlacklistESP(Object)
 		end)
 		table.insert(Objects.Chests, Object)
 	elseif Name == "MouseHole" then
 		if Toggles.ChestESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Mouse", Color = Options.ChestESPColor.Value }, true) end
 		table.insert(Objects.Chests, Object)
-	elseif ItemNames[Name] or Name:lower():find("leftover") or Name:lower():find("paper") or Name:lower():find("plan") or Name:lower():find("plane") or Name:lower():find("briefcase") or Name:lower():find("suitcase") or Name:lower():find("pizza") or Name:lower():find("flake") or Name:lower():find("fih") then
+	elseif ItemNames[Name] and Object:FindFirstChild("ModulePrompt") then
+		-- BlackKing-style: only real items carry ModulePrompt; decorative meshes sharing
+		-- an item's name (e.g. Bookcase "Lighter") get no item ESP
 		local function IsPlayerItem(item)
 			if not item or not item.Parent then return true end
 			if item:IsDescendantOf(Services.Players) then return true end
@@ -4298,8 +4300,7 @@ Functions.HandleObject = function(Object)
 		local ancestor = Object.Parent
 		while ancestor and ancestor ~= Services.Workspace and ancestor ~= CurrentRooms do
 			local aName = ancestor.Name
-			local lowerA = aName:lower()
-			if ItemNames[aName] or lowerA:find("flake") or lowerA:find("fih") or lowerA:find("leftover") or lowerA:find("paper") or lowerA:find("briefcase") or lowerA:find("pizza") or lowerA:find("journal") then
+			if ItemNames[aName] then
 				hasItemAncestor = true
 				break
 			end
@@ -4308,36 +4309,32 @@ Functions.HandleObject = function(Object)
 		if hasItemAncestor then return end
 
 		local targetObj = Object
+		if Object:IsA("BasePart") and Object.Parent and Object.Parent:IsA("Model") and not ItemNames[Object.Parent.Name] then
+			local room = Object:FindFirstAncestorOfClass("Model")
+			while room and room.Parent and room.Parent ~= CurrentRooms and room.Parent ~= Services.Workspace do
+				room = room.Parent
+			end
+			if room then
+				Object.Parent = room
+			end
+		end
 
 		local label = ItemNames[Name]
-		if not label then
-			local lower = Name:lower()
-			if lower:find("leftover") then label = "Leftovers"
-			elseif lower:find("paper") or lower:find("plan") or lower:find("plane") then label = "Paper Plane"
-			elseif lower:find("briefcase") or lower:find("suitcase") then label = "Briefcase"
-			elseif lower:find("pizza") then label = "Pizza"
-			elseif lower:find("flake") or lower:find("fih") then label = "Fih Flakes"
+
+		if label then
+			if Toggles.ItemESPToggle.Value then
+				Functions.AddESP({ Object = targetObj, Text = label, Color = Options.ItemESPColor.Value }, Object:GetAttribute("ParentRoom") ~= nil)
 			end
-		end
 
-		if label and Toggles.ItemESPToggle.Value then
-			Functions.AddESP({ Object = targetObj, Text = label, Color = Options.ItemESPColor.Value }, Object:GetAttribute("ParentRoom") ~= nil)
-		end
-
-		local ancestryConn
-		ancestryConn = Object.AncestryChanged:Connect(function()
-			if IsPlayerItem(Object) then
-				Functions.RemoveESP(targetObj)
-				Functions.RemoveESP(Object)
-				Functions.BlacklistESP(targetObj)
-				Functions.BlacklistESP(Object)
-				for _, d in ipairs(Object:GetDescendants()) do
-					Functions.RemoveESP(d)
-					Functions.BlacklistESP(d)
+			local ancConn
+			ancConn = Object.AncestryChanged:Connect(function(_, newParent)
+				if not newParent or IsPlayerItem(Object) then
+					Functions.RemoveESP(targetObj)
+					if ancConn then ancConn:Disconnect() end
 				end
-				if ancestryConn then ancestryConn:Disconnect() end
-			end
-		end)
+			end)
+			table.insert(Conns, ancConn)
+		end
 
 		if Name == "LotusHolder" or Name == "LotusPetalPickup" then
 			if Object:FindFirstChild("Handle") then
@@ -4769,6 +4766,7 @@ local TrackedObjects = {
 	ChestBox=true, ChestBoxLocked=true, Chest_Vine=true, Locker_Small_Locked=true, Toolbox=true,
 	Toolbox_Locked=true, Wardrobe=true, ["Wardrobe-FOOLS26"]=true, Toolshed=true, Toolshed_Small=true,
 	Bed=true, MinesAnchor=true, Double_Bed=true, RetroWardrobe=true, Backdoor_Wardrobe=true,
+	HidingSpot1=true, HidingSpot2=true, HidingSpot3=true,
 	Rooms_Locker=true, Rooms_Locker_Fridge=true, Locker_Large=true, FigureRig=true, FigureRagdoll=true,
 	TimerLever=true, Lever=true, Seek_Arm=true, ChandelierObstruction=true, ScaryWall=true, Ladder=true,
 	CircularVent=true, Dumpster=true, SquareGrate=true, TriggerEventCollision=true, GrumbleRig=true,
