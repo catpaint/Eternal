@@ -321,7 +321,13 @@ local ItemNames = {
 	["JournalItem"]       = "Journal",
 	["JournalRig"]        = "Journal",
 	["Notebook"]          = "Journal",
-	["Diary"]             = "Journal"
+	["Diary"]             = "Journal",
+	["FihFlakes"]         = "Fih Flakes",
+	["FihFlakesItem"]     = "Fih Flakes",
+	["Fih_Flakes"]        = "Fih Flakes",
+	["FishFlakes"]        = "Fih Flakes",
+	["Fish_Flakes"]       = "Fih Flakes",
+	["Flakes"]            = "Fih Flakes"
 }
 
 local Character
@@ -1262,7 +1268,9 @@ Functions.RemoveESP = function(Object)
 		local Pos = table.find(Conns, Conn)
 		if Pos then table.remove(Conns, Pos) end
 	end
-	mstudio45.ESPLibrary:RemoveESP(Object)
+	if mstudio45 and mstudio45.ESPLibrary then
+		mstudio45.ESPLibrary:RemoveESP(Object)
+	end
 end
 
 Functions.BlacklistESP = function(Object)
@@ -1703,53 +1711,7 @@ Toggles.AntiDrone:OnChanged(function(Value)
     end
 end)
 
-Exploits_Anti:AddToggle("BypassElectrifiedWater", {
-    Text = "Anti Electrified Water",
-    Default = true,
-    Tooltip = "Disables touch damage on all electrified water parts, puddles and wires."
-})
 
-local AntiWaterConnection = nil
-local function ApplyWaterBypass(state)
-    local currentRooms = Services.Workspace:FindFirstChild("CurrentRooms")
-    if not currentRooms then return end
-    for _, desc in ipairs(currentRooms:GetDescendants()) do
-        if desc:IsA("BasePart") then
-            local n = desc.Name:lower()
-            local mat = tostring(desc.Material):lower()
-            if n:find("water") or n:find("puddle") or n:find("wet") or n:find("electric") or n:find("shock") or n:find("zap") or n:find("spill") or n:find("current") or mat:find("water") then
-                pcall(function()
-                    desc.CanTouch = not state
-                    desc.CanCollide = false
-                end)
-            end
-        end
-    end
-end
-
-Toggles.BypassElectrifiedWater:OnChanged(function(Value)
-    if AntiWaterConnection then
-        AntiWaterConnection:Disconnect()
-        AntiWaterConnection = nil
-    end
-    if Value then
-        ApplyWaterBypass(true)
-        AntiWaterConnection = Services.Workspace.DescendantAdded:Connect(function(desc)
-            if Toggles.BypassElectrifiedWater and Toggles.BypassElectrifiedWater.Value and desc:IsA("BasePart") then
-                local n = desc.Name:lower()
-                local mat = tostring(desc.Material):lower()
-                if n:find("water") or n:find("puddle") or n:find("wet") or n:find("electric") or n:find("shock") or n:find("zap") or n:find("spill") or n:find("current") or mat:find("water") then
-                    pcall(function()
-                        desc.CanTouch = false
-                        desc.CanCollide = false
-                    end)
-                end
-            end
-        end)
-    else
-        ApplyWaterBypass(false)
-    end
-end)
 
 Toggles.BypassGiggle:OnChanged(function(Value)
 	for _, Object in Objects.Entities do
@@ -2414,7 +2376,7 @@ Visuals_EntitySettings = Visuals_RightTab:AddTab("Settings")
 
 Visuals_Entities:AddDropdown("EntityList", {
 	Text = "Entity List",
-	Values = { "Rush","Ambush","Eyes","Halt","Blitz","Lookman","Gloombat Swarm","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Monument","Scribbles","Bash","AR0xMBUSH","RNIUSHCG==" },
+	Values = { "Rush","Ambush","Eyes","Halt","Blitz","Lookman","Gloombat Swarm","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Monument","Scribbles","Bash","Electric Puddle","AR0xMBUSH","RNIUSHCG==" },
 	Multi = true, AllowNull = true
 })
 Visuals_Entities:AddToggle("NotifyEntities",    { Text = "Notify Entities",    Default = false, Tooltip = "Sends a notification when an entity spawns." })
@@ -2485,7 +2447,8 @@ end
 
 Visuals_ESP_Toggles:AddDropdown("EntityESPOptions",     { 
 	Text = "Entity List",
-	Values = { "Rush","Ambush","Eyes","Dupe","Figure","Blitz","Lookman","Snare","Giggle","Grumble","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Mandrake Hole","Monument","Bramble","Scribbles","Bash","Server Cart","Electrified Water","Vacuum Sideroom","Gloombat Eggs","AR0xMBUSH","RNIUSHCG==" },
+	Values = { "Rush","Ambush","Eyes","Dupe","Figure","Blitz","Lookman","Snare","Giggle","Grumble","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Mandrake Hole","Monument","Bramble","Scribbles","Bash","Server Cart","Electric Puddle","Vacuum Sideroom","Gloombat Eggs","AR0xMBUSH","RNIUSHCG==" },
+	Default = { "Rush","Ambush","Eyes","Dupe","Figure","Blitz","Lookman","Snare","Giggle","Grumble","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Mandrake Hole","Monument","Bramble","Scribbles","Bash","Server Cart","Electric Puddle","Vacuum Sideroom","Gloombat Eggs" },
 	Multi = true,
 	AllowNull = true
 })
@@ -2572,13 +2535,13 @@ local EntityESPLabels = {
 	Bash = "Bash", BashMoving = "Bash",
 	MonumentEntity = "Monument",
 	ServerCartHazard = "Server Cart", ServerCart = "Server Cart",
-	Currents = "Electrified Water", CurrentsHazard = "Electrified Water",
+	Currents = "Electric Puddle", CurrentsHazard = "Electric Puddle", Water = "Electric Puddle", ElectrifiedWater = "Electric Puddle", Puddle = "Electric Puddle",
 	SideroomSpace = "Vacuum Sideroom",
 	GloomPile = "Gloombat Eggs"
 }
 
 local NodeEntities = {
-	Rush = true, Ambush = true, Eyes = true, Blitz = true, Lookman = true, ["A-60"] = true, ["A-120"] = true, Sally = true, ["Jeff The Killer"] = true, Monument = true, Scribbles = true, Bash = true, ["Server Cart"] = true, ["Electrified Water"] = true, ["Vacuum Sideroom"] = true, ["Gloombat Eggs"] = true, ["AR0xMBUSH"] = true, ["RNIUSHCG=="] = true
+	Rush = true, Ambush = true, Eyes = true, Blitz = true, Lookman = true, ["A-60"] = true, ["A-120"] = true, Sally = true, ["Jeff The Killer"] = true, Monument = true, Scribbles = true, Bash = true, ["Server Cart"] = true, ["Electric Puddle"] = true, ["Vacuum Sideroom"] = true, ["Gloombat Eggs"] = true, ["AR0xMBUSH"] = true, ["RNIUSHCG=="] = true
 }
 
 Toggles.DoorESPToggle:OnChanged(function(Value)
@@ -2647,8 +2610,32 @@ end)
 
 Toggles.ItemESPToggle:OnChanged(function(Value)
 	for _, Object in Objects.Items do
-		local isPlayerItem = Object:IsDescendantOf(Services.Players) or (Object.Parent and Object.Parent:IsA("Model") and Services.Players:GetPlayerFromCharacter(Object.Parent)) or (Object.Parent and Object.Parent:IsA("Backpack"))
+		local isPlayerItem = Object:IsDescendantOf(Services.Players)
+		if not isPlayerItem and Object.Parent then
+			if Object.Parent:IsA("Backpack") or Object.Parent.Name == "Backpack" or Services.Players:GetPlayerFromCharacter(Object.Parent) then
+				isPlayerItem = true
+			else
+				for _, p in ipairs(Services.Players:GetPlayers()) do
+					if p.Character and Object:IsDescendantOf(p.Character) then isPlayerItem = true break end
+					if p:FindFirstChild("Backpack") and Object:IsDescendantOf(p.Backpack) then isPlayerItem = true break end
+				end
+			end
+		end
+
 		if Value and not isPlayerItem then
+			local hasItemAncestor = false
+			local ancestor = Object.Parent
+			while ancestor and ancestor ~= Services.Workspace and ancestor ~= CurrentRooms do
+				local aName = ancestor.Name
+				local lowerA = aName:lower()
+				if ItemNames[aName] or lowerA:find("flake") or lowerA:find("fih") or lowerA:find("leftover") or lowerA:find("paper") or lowerA:find("briefcase") or lowerA:find("pizza") or lowerA:find("journal") then
+					hasItemAncestor = true
+					break
+				end
+				ancestor = ancestor.Parent
+			end
+			if hasItemAncestor then continue end
+
 			local Label = ItemNames[Object.Name]
 			if not Label then
 				local lowerName = Object.Name:lower()
@@ -2656,6 +2643,7 @@ Toggles.ItemESPToggle:OnChanged(function(Value)
 				elseif lowerName:find("paper") or lowerName:find("plan") or lowerName:find("plane") then Label = "Paper Plane"
 				elseif lowerName:find("briefcase") or lowerName:find("suitcase") then Label = "Briefcase"
 				elseif lowerName:find("pizza") then Label = "Pizza"
+				elseif lowerName:find("flake") or lowerName:find("fih") then Label = "Fih Flakes"
 				elseif Object.Name == "Green_Herb" then Label = "Green Herb"
 				end
 			end
@@ -2664,6 +2652,7 @@ Toggles.ItemESPToggle:OnChanged(function(Value)
 			end
 		else
 			Functions.RemoveESP(Object)
+			for _, d in ipairs(Object:GetDescendants()) do Functions.RemoveESP(d) end
 		end
 	end
 end)
@@ -2696,7 +2685,9 @@ Toggles.EntityESPToggle:OnChanged(function(Value)
 			local Label = EntityESPLabels[Object.Name]
 			if not Label and Entities[Object.Name] then Label = Entities[Object.Name].Name end
 			if Label and Options.EntityESPOptions.Value[Label] then
-				Functions.AddESP({ Object = Object, Text = Label, Color = Options.EntityESPColor.Value }, NodeEntities[Label] ~= true)
+				local txt = Object:GetAttribute("StatusText") or Label
+				local clr = Object:GetAttribute("StatusColor") or Options.EntityESPColor.Value
+				Functions.AddESP({ Object = Object, Text = txt, Color = clr }, NodeEntities[Label] ~= true)
 			else
 				Functions.RemoveESP(Object)
 			end
@@ -2712,7 +2703,9 @@ Options.EntityESPOptions:OnChanged(function(Value)
 			local Label = EntityESPLabels[Object.Name]
 			if not Label and Entities[Object.Name] then Label = Entities[Object.Name].Name end
 			if Label and Options.EntityESPOptions.Value[Label] then
-				Functions.AddESP({ Object = Object, Text = Label, Color = Options.EntityESPColor.Value }, NodeEntities[Label] ~= true)
+				local txt = Object:GetAttribute("StatusText") or Label
+				local clr = Object:GetAttribute("StatusColor") or Options.EntityESPColor.Value
+				Functions.AddESP({ Object = Object, Text = txt, Color = clr }, NodeEntities[Label] ~= true)
 			else
 				Functions.RemoveESP(Object)
 			end
@@ -3366,8 +3359,8 @@ else
 end
 
 Modules = {
-	Glitch         = ClientModules.EntityModules.Glitch,
-	Shade          = ClientModules.EntityModules.Shade,
+	Glitch         = ClientModules.EntityModules:FindFirstChild("Glitch"),
+	Shade          = ClientModules.EntityModules:FindFirstChild("Shade"),
 	Void           = ClientModules.EntityModules:FindFirstChild("Void"),
 	SpiderJumpscare = nil,
 	A90            = nil,
@@ -3866,7 +3859,6 @@ Functions.HandleObject = function(Object)
 			Object:SetAttribute("ParentRoom", tonumber(Room.Name))
 			break
 		end
-		task.wait()
 	end
 
 	if Object.Parent == CurrentRooms then
@@ -4285,18 +4277,37 @@ Functions.HandleObject = function(Object)
 	elseif Name == "MouseHole" then
 		if Toggles.ChestESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Mouse", Color = Options.ChestESPColor.Value }, true) end
 		table.insert(Objects.Chests, Object)
-	elseif ItemNames[Name] or Name:lower():find("leftover") or Name:lower():find("paper") or Name:lower():find("plan") or Name:lower():find("plane") or Name:lower():find("briefcase") or Name:lower():find("suitcase") or Name:lower():find("pizza") then
+	elseif ItemNames[Name] or Name:lower():find("leftover") or Name:lower():find("paper") or Name:lower():find("plan") or Name:lower():find("plane") or Name:lower():find("briefcase") or Name:lower():find("suitcase") or Name:lower():find("pizza") or Name:lower():find("flake") or Name:lower():find("fih") then
 		local function IsPlayerItem(item)
-			if not item then return true end
+			if not item or not item.Parent then return true end
 			if item:IsDescendantOf(Services.Players) then return true end
-			if item.Parent and item.Parent:IsA("Model") and Services.Players:GetPlayerFromCharacter(item.Parent) then return true end
-			if item.Parent and item.Parent:IsA("Backpack") then return true end
+			if item.Parent:IsA("Backpack") or item.Parent.Name == "Backpack" then return true end
+			if Services.Players:GetPlayerFromCharacter(item.Parent) then return true end
+			for _, p in ipairs(Services.Players:GetPlayers()) do
+				if p.Character and item:IsDescendantOf(p.Character) then return true end
+				if p:FindFirstChild("Backpack") and item:IsDescendantOf(p.Backpack) then return true end
+			end
 			return false
 		end
 
 		if IsPlayerItem(Object) then
 			return
 		end
+
+		local hasItemAncestor = false
+		local ancestor = Object.Parent
+		while ancestor and ancestor ~= Services.Workspace and ancestor ~= CurrentRooms do
+			local aName = ancestor.Name
+			local lowerA = aName:lower()
+			if ItemNames[aName] or lowerA:find("flake") or lowerA:find("fih") or lowerA:find("leftover") or lowerA:find("paper") or lowerA:find("briefcase") or lowerA:find("pizza") or lowerA:find("journal") then
+				hasItemAncestor = true
+				break
+			end
+			ancestor = ancestor.Parent
+		end
+		if hasItemAncestor then return end
+
+		local targetObj = Object
 
 		local label = ItemNames[Name]
 		if not label then
@@ -4305,18 +4316,25 @@ Functions.HandleObject = function(Object)
 			elseif lower:find("paper") or lower:find("plan") or lower:find("plane") then label = "Paper Plane"
 			elseif lower:find("briefcase") or lower:find("suitcase") then label = "Briefcase"
 			elseif lower:find("pizza") then label = "Pizza"
+			elseif lower:find("flake") or lower:find("fih") then label = "Fih Flakes"
 			end
 		end
 
 		if label and Toggles.ItemESPToggle.Value then
-			Functions.AddESP({ Object = Object, Text = label, Color = Options.ItemESPColor.Value }, Object:GetAttribute("ParentRoom") ~= nil)
+			Functions.AddESP({ Object = targetObj, Text = label, Color = Options.ItemESPColor.Value }, Object:GetAttribute("ParentRoom") ~= nil)
 		end
 
 		local ancestryConn
 		ancestryConn = Object.AncestryChanged:Connect(function()
 			if IsPlayerItem(Object) then
+				Functions.RemoveESP(targetObj)
 				Functions.RemoveESP(Object)
+				Functions.BlacklistESP(targetObj)
 				Functions.BlacklistESP(Object)
+				for _, d in ipairs(Object:GetDescendants()) do
+					Functions.RemoveESP(d)
+					Functions.BlacklistESP(d)
+				end
 				if ancestryConn then ancestryConn:Disconnect() end
 			end
 		end)
@@ -4325,6 +4343,7 @@ Functions.HandleObject = function(Object)
 			if Object:FindFirstChild("Handle") then
 				Object.Handle:GetPropertyChangedSignal("LocalTransparencyModifier"):Connect(function()
 					mstudio45.ESPLibrary:RemoveESP(Object)
+					mstudio45.ESPLibrary:RemoveESP(Object.Handle)
 					Functions.BlacklistESP(Object)
 				end)
 			end
@@ -4343,6 +4362,75 @@ Functions.HandleObject = function(Object)
 	elseif Name == "GiggleCeiling" then
 		if Toggles.EntityESPToggle.Value and Options.EntityESPOptions.Value["Giggle"] then Functions.AddESP({ Object = Object, Text = "Giggle", Color = Options.EntityESPColor.Value }, true) end
 		if Toggles.BypassGiggle.Value then Object:WaitForChild("Hitbox").CanTouch = false end
+		table.insert(Objects.Entities, Object)
+	elseif Name == "Water" or Name == "Currents" or Name == "CurrentsHazard" or Name == "ElectrifiedWater" or Name:find("Currents") or Name:match("^Pool%d+") or Name == "Puddle" then
+		local function SetupWaterESP(waterModel)
+			if not waterModel or waterModel:GetAttribute("WaterESPHandled") then return end
+			waterModel:SetAttribute("WaterESPHandled", true)
+
+			local puddles = {}
+			for _, desc in ipairs(waterModel:GetDescendants()) do
+				if desc.Name == "Puddle" and desc:IsA("BasePart") and not table.find(puddles, desc) then
+					table.insert(puddles, desc)
+				end
+			end
+
+			if #puddles == 0 and waterModel:IsA("BasePart") then
+				table.insert(puddles, waterModel)
+			end
+
+			if #puddles == 0 then return end
+
+			local function UpdateState()
+				local isElec = waterModel:GetAttribute("Electrified")
+				if isElec == nil and #puddles > 0 and puddles[1].Parent then
+					isElec = puddles[1].Parent:GetAttribute("Electrified")
+				end
+				if isElec == nil and #puddles > 0 then
+					isElec = puddles[1]:GetAttribute("Electrified")
+				end
+
+				local statusText = (isElec == true) and "Electric Puddle [Active]" or "Electric Puddle [Safe]"
+				local statusColor = (isElec == true) and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(80, 220, 100)
+
+				for idx, puddlePart in ipairs(puddles) do
+					if not table.find(Objects.Entities, puddlePart) then
+						table.insert(Objects.Entities, puddlePart)
+					end
+					local labelText = (idx == 1) and statusText or " "
+					puddlePart:SetAttribute("StatusText", labelText)
+					puddlePart:SetAttribute("StatusColor", statusColor)
+
+					Functions.AddESP({ Object = puddlePart, Text = labelText, Color = statusColor }, true)
+					if mstudio45 and mstudio45.ESPLibrary then
+						pcall(function()
+							mstudio45.ESPLibrary:UpdateObjectText(puddlePart, labelText)
+							mstudio45.ESPLibrary:UpdateObjectColor(puddlePart, statusColor)
+						end)
+					end
+				end
+			end
+
+			UpdateState()
+
+			local conn1 = waterModel:GetAttributeChangedSignal("Electrified"):Connect(UpdateState)
+			table.insert(Conns, conn1)
+			if #puddles > 0 and puddles[1].Parent then
+				local conn2 = puddles[1].Parent:GetAttributeChangedSignal("Electrified"):Connect(UpdateState)
+				table.insert(Conns, conn2)
+			end
+		end
+
+		local waterObj = Object
+		if Object.Name:match("^Pool%d+") or Object.Name == "Puddle" then
+			if Object.Parent and (Object.Parent.Name == "Water" or Object.Parent.Name:find("Current")) then
+				waterObj = Object.Parent
+			elseif Object.Parent and Object.Parent.Parent and (Object.Parent.Parent.Name == "Water" or Object.Parent.Parent.Name:find("Current")) then
+				waterObj = Object.Parent.Parent
+			end
+		end
+
+		SetupWaterESP(waterObj)
 		table.insert(Objects.Entities, Object)
 	elseif Name == "GloomPile" then
 		if Toggles.BypassGloombatEggs.Value then
@@ -4692,11 +4780,12 @@ local TrackedObjects = {
 	MovingDoor=true, StardustPickup=true, Hole=true, Groundskeeper=true, MandrakeLive=true,
 	GardenGateButton=true, LotusPetalPickup=true, VineGuillotine=true, LiveEntityBramble=true,
 	RiftSpawn=true, ElevatorBreaker=true, RunnerNodes=true, PathLights=true, DuckBoard=true,
-	Padlock=true, EyestalkEndCutscene=true, MinecartRig=true, SeekMovingNewClone=true
+	Padlock=true, EyestalkEndCutscene=true, MinecartRig=true, SeekMovingNewClone=true,
+	Water=true, Puddle=true, Currents=true, CurrentsHazard=true, ElectrifiedWater=true
 }
 
 Functions.QueueObject = function(Object)
-	if not TrackedObjects[Object.Name] and Object.ClassName ~= "ProximityPrompt" and Object.Parent ~= CurrentRooms and not ItemNames[Object.Name] then
+	if not TrackedObjects[Object.Name] and not Object.Name:match("^Pool%d+") and Object.ClassName ~= "ProximityPrompt" and Object.Parent ~= CurrentRooms and not ItemNames[Object.Name] then
 		return
 	end
 	table.insert(Global.ObjectQueue, Object)
