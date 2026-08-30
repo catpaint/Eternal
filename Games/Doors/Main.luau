@@ -217,6 +217,10 @@ local Entities = {
 	["BashMoving"] = {
 		Name = "Bash",
 		NotifyMessage = { Title = "Entity 'Bash' has spawned.", Body = "Hide or get out of the way!" }
+	},
+	["DronesStampede"] = {
+		Name = "Stampede of Drones",
+		NotifyMessage = { Title = "Entity 'Stampede of Drones' has spawned.", Body = "Find a hiding spot or get out of the path." }
 	}
 }
 
@@ -1711,6 +1715,30 @@ Toggles.AntiDrone:OnChanged(function(Value)
     end
 end)
 
+Exploits_Anti:AddToggle("BypassDrones", { Text = "Anti Drone (FE)", Default = false, Tooltip = "Prevents 'Drones' from hurting you by muting their walk-in hitbox." })
+Exploits_Anti:AddToggle("BypassScribbles", { Text = "Anti Scribbles", Default = false, Tooltip = "Blocks 'Scribbles' damage by disabling touch on its parts." })
+
+Toggles.BypassDrones:OnChanged(function(Value)
+	for _, Object in Objects.Entities do
+		if Object.Name == "Drones" then
+			local WalkedInto = Object:FindFirstChild(Value and "_WalkedInto" or "WalkedInto")
+			if WalkedInto then
+				WalkedInto.Name = Value and "_WalkedInto" or "WalkedInto"
+			end
+		end
+	end
+end)
+
+Toggles.BypassScribbles:OnChanged(function(Value)
+	for _, Object in Objects.Entities do
+		if Object.Name == "Scribbles" or Object.Name == "ScribbleMoving" or Object.Name == "Scribble" then
+			for _, Part in Object:GetDescendants() do
+				if Part:IsA("BasePart") then Part.CanTouch = not Value end
+			end
+		end
+	end
+end)
+
 
 
 Toggles.BypassGiggle:OnChanged(function(Value)
@@ -2006,6 +2034,20 @@ Toggles.AnitFigureHearing:OnChanged(function(Value)
 	else
 		FakeEvents.Figure_Real.Parent = RemotesFolder
 		FakeEvents.Figure.Parent = Workspace.mstudio45_Folder
+	end
+end)
+
+Exploits_BypassRight:AddToggle("AntiPuddle", {
+	Text = "Anti Puddle", Default = false, Tooltip = "Raises your HipHeight over the glass puddle and restores it when you leave."
+})
+local DefaultHipHeight = Humanoid and Humanoid.HipHeight or 2.396
+Conns.AntiPuddle = Services.RunService.Heartbeat:Connect(function()
+	if Toggles.AntiPuddle.Value and not Toggles.PositionSpoof.Value then
+		if Humanoid.FloorMaterial == Enum.Material.Glass then
+			if Humanoid.HipHeight ~= 3 then Humanoid.HipHeight = 3 end
+		else
+			if Humanoid.HipHeight ~= 2.396 then Humanoid.HipHeight = 2.396 end
+		end
 	end
 end)
 
@@ -2376,7 +2418,7 @@ Visuals_EntitySettings = Visuals_RightTab:AddTab("Settings")
 
 Visuals_Entities:AddDropdown("EntityList", {
 	Text = "Entity List",
-	Values = { "Rush","Ambush","Eyes","Halt","Blitz","Lookman","Gloombat Swarm","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Monument","Scribbles","Bash","Electric Puddle","AR0xMBUSH","RNIUSHCG==" },
+	Values = { "Rush","Ambush","Eyes","Halt","Blitz","Lookman","Gloombat Swarm","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Monument","Scribbles","Bash","Electric Puddle","AR0xMBUSH","RNIUSHCG==","Stampede of Drones" },
 	Multi = true, AllowNull = true
 })
 Visuals_Entities:AddToggle("NotifyEntities",    { Text = "Notify Entities",    Default = false, Tooltip = "Sends a notification when an entity spawns." })
@@ -2447,7 +2489,7 @@ end
 
 Visuals_ESP_Toggles:AddDropdown("EntityESPOptions",     { 
 	Text = "Entity List",
-	Values = { "Rush","Ambush","Eyes","Dupe","Figure","Blitz","Lookman","Snare","Giggle","Grumble","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Mandrake Hole","Monument","Bramble","Scribbles","Bash","Server Cart","Electric Puddle","Vacuum Sideroom","Gloombat Eggs","AR0xMBUSH","RNIUSHCG==" },
+	Values = { "Rush","Ambush","Eyes","Dupe","Figure","Blitz","Lookman","Snare","Giggle","Grumble","Drones","Teller","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Mandrake Hole","Monument","Bramble","Scribbles","Bash","Server Cart","Electric Puddle","Vacuum Sideroom","Gloombat Eggs","AR0xMBUSH","RNIUSHCG==" },
 	Default = { "Rush","Ambush","Eyes","Dupe","Figure","Blitz","Lookman","Snare","Giggle","Grumble","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Mandrake Hole","Monument","Bramble","Scribbles","Bash","Server Cart","Electric Puddle","Vacuum Sideroom","Gloombat Eggs" },
 	Multi = true,
 	AllowNull = true
@@ -2528,7 +2570,8 @@ local ChestLabels = {
 }
 local EntityESPLabels = {
 	JeffTheKiller = "Jeff the Killer", GiggleCeiling = "Giggle",
-	Snare = "Snare", GrumbleRig = "Grumble",
+	Snare = "Snare", GrumbleRig = "Grumble", TellerRig = "Teller",
+	Drones = "Drones",
 	Drakobloxxer = "Drakobloxxer", Hole = "Mandrake Hole", Groundskeeper = "Groundskeeper",
 	LiveEntityBramble = "Bramble", Figure = "Figure", FigureRig = "Figure", FigureRagdoll = "Figure",
 	FakeDoor = "Dupe", DoorFake = "Dupe",
@@ -3854,6 +3897,184 @@ Functions.HandleHidingTransparency = function(Model)
 	end
 end
 
+-- per-run water esp state: instance attributes survive script reloads in the same
+-- session and would block re-attaching, so key run markers on this table instead
+local AttachedWaterESP = {}
+
+-- Forget-Me-Not puzzle: the room holds two copies of the same layout — the room's own
+-- "Assets" and a replica Model named after the local player. The server removes an
+-- object from the replica; diff the two and mark what the replica is missing.
+Functions.AnalyzeForgetMeNot = function(Replica)
+	task.spawn(function()
+		local Room = Replica.Parent
+		if not (Room and Room.Parent == CurrentRooms) then return end
+
+		-- let the replica finish streaming in
+		task.wait(3)
+		if not Replica.Parent then return end
+
+		local SourceAssets = Room:FindFirstChild("Assets")
+		local ReplicaAssets = Replica:FindFirstChild("Assets")
+		if not (SourceAssets and ReplicaAssets) then return end
+
+		local Source = SourceAssets:FindFirstChild("Deletable") or SourceAssets
+		local Target = ReplicaAssets:FindFirstChild("Deletable") or ReplicaAssets
+
+		local function Collect(root)
+			local map = {}
+			for _, d in ipairs(root:GetDescendants()) do
+				if (d:IsA("Model") or d:IsA("MeshPart")) and not tonumber(d.Name) then
+					map[d.Name] = map[d.Name] or {}
+					table.insert(map[d.Name], d)
+				end
+			end
+			return map
+		end
+
+		local A, B = Collect(Source), Collect(Target)
+
+		-- offset between the two copies, from equally-counted shared models paired by position
+		local xs, ys, zs = {}, {}, {}
+		local function SortByPos(l)
+			table.sort(l, function(p, q)
+				local a, b = p:GetPivot().Position, q:GetPivot().Position
+				if a.X ~= b.X then return a.X < b.X end
+				if a.Y ~= b.Y then return a.Y < b.Y end
+				return a.Z < b.Z
+			end)
+		end
+		for name, listA in pairs(A) do
+			local listB = B[name]
+			if listB and #listB > 0 and #listA == #listB then
+				SortByPos(listA)
+				SortByPos(listB)
+				for i = 1, #listA do
+					local delta = listB[i]:GetPivot().Position - listA[i]:GetPivot().Position
+					table.insert(xs, delta.X)
+					table.insert(ys, delta.Y)
+					table.insert(zs, delta.Z)
+				end
+			end
+		end
+		local function Median(t)
+			if #t == 0 then return 0 end
+			table.sort(t)
+			return t[math.ceil(#t / 2)]
+		end
+		local Offset = Vector3.new(Median(xs), Median(ys), Median(zs))
+
+		-- objects fully missing from the replica, keeping only top-level ones
+		local missing = {}
+		for name, listA in pairs(A) do
+			if not B[name] then
+				missing[name] = listA[1]
+			end
+		end
+		local function HasMissingAncestor(inst)
+			local anc = inst.Parent
+			while anc and anc ~= Room do
+				if missing[anc.Name] then return true end
+				anc = anc.Parent
+			end
+			return false
+		end
+
+		local markers = {}
+		for name, inst in pairs(missing) do
+			if not HasMissingAncestor(inst) then
+				table.insert(markers, { name = name, inst = inst })
+			end
+		end
+		if #markers == 0 then return end
+
+		-- collapse clustered markers, keeping the largest object of each cluster
+		table.sort(markers, function(a, b)
+			return a.inst:GetExtentsSize().Magnitude > b.inst:GetExtentsSize().Magnitude
+		end)
+		local kept = {}
+		for _, m in ipairs(markers) do
+			local pos = m.inst:GetPivot().Position
+			local near = false
+			for _, k in ipairs(kept) do
+				if (k.inst:GetPivot().Position - pos).Magnitude < 15 then
+					near = true
+					break
+				end
+			end
+			if not near then table.insert(kept, m) end
+		end
+
+		local names = {}
+		for _, m in ipairs(kept) do
+			local Marker = Instance.new("Part")
+			Marker.Name = "FMN_Anomaly_Marker"
+			Marker.Anchored = true
+			Marker.CanCollide = false
+			Marker.CanQuery = false
+			Marker.CanTouch = false
+			Marker.Transparency = 1
+			Marker.Size = Vector3.new(2, 2, 2)
+			Marker.Position = m.inst:GetPivot().Position + Offset
+			Marker:SetAttribute("ParentRoom", tonumber(Room.Name))
+			Marker.Parent = Services.Workspace
+
+			Functions.AddESP({ Object = Marker, Text = m.name .. " [Missing]", Color = Color3.fromRGB(255, 60, 60) }, true)
+			table.insert(Objects.Entities, Marker)
+			names[#names + 1] = m.name
+		end
+
+		if #names > 0 then
+			Functions.Notify({ Title = "Forget-Me-Not", Body = "Replica is missing: " .. table.concat(names, ", ") })
+		end
+
+		-- door picking, verified against live playthroughs:
+		-- with an anomaly present the real exit is the door NEAR the missing object;
+		-- with no anomaly the real exit is the door WITHOUT the BaseDirection attribute
+		local doorBases = {}
+		for _, vd in ipairs(Replica:GetDescendants()) do
+			if vd.Name == "ForgetMeNotVineDoors" then
+				local Base = vd:FindFirstChild("Base")
+				if Base then
+					table.insert(doorBases, Base)
+				end
+			end
+		end
+		if #doorBases > 0 then
+			local correct
+			if #kept > 0 and kept[1].inst then
+				-- anomaly case: closest door to the missing object's mirrored position
+				local anomalyPos = kept[1].inst:GetPivot().Position + Offset
+				local bestDist = math.huge
+				for _, Base in ipairs(doorBases) do
+					local dist = (Base.Position - anomalyPos).Magnitude
+					if dist < bestDist then
+						correct, bestDist = Base, dist
+					end
+				end
+			else
+				-- clean case: the door lacking BaseDirection is the real passage
+				for _, Base in ipairs(doorBases) do
+					if Base:GetAttribute("BaseDirection") == nil then
+						correct = Base
+						break
+					end
+				end
+			end
+
+			for _, Base in ipairs(doorBases) do
+				local isCorrect = (Base == correct)
+				Base:SetAttribute("ParentRoom", tonumber(Room.Name))
+				Functions.AddESP({
+					Object = Base,
+					Text = isCorrect and "Correct Door" or "Wrong Door",
+					Color = isCorrect and Color3.fromRGB(60, 255, 90) or Color3.fromRGB(255, 60, 60)
+				}, true)
+				table.insert(Objects.Objectives, Base)
+			end
+		end
+	end)
+end
+
 Functions.HandleObject = function(Object)
 	for _, Room in CurrentRooms:GetChildren() do
 		if Object:IsDescendantOf(Room) then
@@ -3872,7 +4093,9 @@ Functions.HandleObject = function(Object)
 
 	local Name = Object.Name
 
-	if Name == "KeyObtain" then
+	if Name == LocalPlayer.Name and Object:IsA("Model") and Object.Parent and Object.Parent.Parent == CurrentRooms then
+		Functions.AnalyzeForgetMeNot(Object)
+	elseif Name == "KeyObtain" then
 		task.spawn(function()
 			task.wait(0.5)
 			if Object.Parent then
@@ -4361,74 +4584,97 @@ Functions.HandleObject = function(Object)
 		if Toggles.BypassGiggle.Value then Object:WaitForChild("Hitbox").CanTouch = false end
 		table.insert(Objects.Entities, Object)
 	elseif Name == "Water" or Name == "Currents" or Name == "CurrentsHazard" or Name == "ElectrifiedWater" or Name:find("Currents") or Name:match("^Pool%d+") or Name == "Puddle" then
-		local function SetupWaterESP(waterModel)
-			if not waterModel or waterModel:GetAttribute("WaterESPHandled") then return end
-			waterModel:SetAttribute("WaterESPHandled", true)
+		-- water esp pattern that works across map variants: ONE label on the Water model
+		-- itself (adornee = model root), like the reference script does. Pools are
+		-- geometric chunks that stream in/out dynamically and can't be anchor points.
+		local function IsRoomWater(waterModel)
+			local parent = waterModel and waterModel.Parent
+			return parent ~= nil and parent.Parent == CurrentRooms
+		end
 
-			local puddles = {}
-			for _, desc in ipairs(waterModel:GetDescendants()) do
-				if desc.Name == "Puddle" and desc:IsA("BasePart") and not table.find(puddles, desc) then
-					table.insert(puddles, desc)
-				end
+		local function AttachWaterLabel(waterModel)
+			if not waterModel then return end
+			if AttachedWaterESP[waterModel] then return end
+			AttachedWaterESP[waterModel] = true
+
+			-- room-gated esp reads ParentRoom off the target; stamp it on the model
+			local roomNum = tonumber(waterModel.Parent and waterModel.Parent.Name)
+			if roomNum and not waterModel:GetAttribute("ParentRoom") then
+				waterModel:SetAttribute("ParentRoom", roomNum)
 			end
-
-			if #puddles == 0 and waterModel:IsA("BasePart") then
-				table.insert(puddles, waterModel)
-			end
-
-			if #puddles == 0 then return end
 
 			local function UpdateState()
+				-- any electrified pool makes the whole water hazard active
 				local isElec = waterModel:GetAttribute("Electrified")
-				if isElec == nil and #puddles > 0 and puddles[1].Parent then
-					isElec = puddles[1].Parent:GetAttribute("Electrified")
-				end
-				if isElec == nil and #puddles > 0 then
-					isElec = puddles[1]:GetAttribute("Electrified")
+				if isElec == nil then
+					for _, pool in ipairs(waterModel:GetChildren()) do
+						if pool:GetAttribute("Electrified") == true then
+							isElec = true
+							break
+						end
+					end
 				end
 
 				local statusText = (isElec == true) and "Electric Puddle [Active]" or "Electric Puddle [Safe]"
 				local statusColor = (isElec == true) and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(80, 220, 100)
 
-				for idx, puddlePart in ipairs(puddles) do
-					if not table.find(Objects.Entities, puddlePart) then
-						table.insert(Objects.Entities, puddlePart)
-					end
-					local labelText = (idx == 1) and statusText or " "
-					puddlePart:SetAttribute("StatusText", labelText)
-					puddlePart:SetAttribute("StatusColor", statusColor)
-
-					Functions.AddESP({ Object = puddlePart, Text = labelText, Color = statusColor }, true)
-					if mstudio45 and mstudio45.ESPLibrary then
-						pcall(function()
-							mstudio45.ESPLibrary:UpdateObjectText(puddlePart, labelText)
-							mstudio45.ESPLibrary:UpdateObjectColor(puddlePart, statusColor)
-						end)
-					end
+				Functions.AddESP({ Object = waterModel, Text = statusText, Color = statusColor }, true)
+				if mstudio45 and mstudio45.ESPLibrary then
+					pcall(function()
+						mstudio45.ESPLibrary:UpdateObjectText(waterModel, statusText)
+						mstudio45.ESPLibrary:UpdateObjectColor(waterModel, statusColor)
+					end)
 				end
 			end
 
 			UpdateState()
 
+			if not table.find(Objects.Entities, waterModel) then
+				table.insert(Objects.Entities, waterModel)
+			end
+
+			-- keep the label in sync with the hazard state
 			local conn1 = waterModel:GetAttributeChangedSignal("Electrified"):Connect(UpdateState)
 			table.insert(Conns, conn1)
-			if #puddles > 0 and puddles[1].Parent then
-				local conn2 = puddles[1].Parent:GetAttributeChangedSignal("Electrified"):Connect(UpdateState)
-				table.insert(Conns, conn2)
+			local conn2 = waterModel.ChildAdded:Connect(function(child)
+				if child:IsA("Model") then
+					local c = child:GetAttributeChangedSignal("Electrified"):Connect(UpdateState)
+					table.insert(Conns, c)
+					UpdateState()
+				end
+			end)
+			table.insert(Conns, conn2)
+			for _, pool in ipairs(waterModel:GetChildren()) do
+				if pool:IsA("Model") then
+					local c = pool:GetAttributeChangedSignal("Electrified"):Connect(UpdateState)
+					table.insert(Conns, c)
+				end
 			end
 		end
 
-		local waterObj = Object
-		if Object.Name:match("^Pool%d+") or Object.Name == "Puddle" then
-			if Object.Parent and (Object.Parent.Name == "Water" or Object.Parent.Name:find("Current")) then
-				waterObj = Object.Parent
-			elseif Object.Parent and Object.Parent.Parent and (Object.Parent.Parent.Name == "Water" or Object.Parent.Parent.Name:find("Current")) then
-				waterObj = Object.Parent.Parent
+		if Object.Name == "Water" then
+			-- only the room's own water (direct child of a room model) gets the label;
+			-- decorative water nested under Assets (fish tanks, coolers) is excluded
+			if IsRoomWater(Object) then
+				AttachWaterLabel(Object)
+			end
+		else
+			-- a pool/puddle chunk: label its root Water model instead
+			local waterRoot
+			local anc = Object
+			while anc do
+				if anc.Name == "Water" and IsRoomWater(anc) then
+					waterRoot = anc
+					break
+				end
+				anc = anc.Parent
+			end
+			if waterRoot then
+				AttachWaterLabel(waterRoot)
+			elseif Name == "Currents" or Name == "CurrentsHazard" or Name == "ElectrifiedWater" or Name:find("Currents") then
+				AttachWaterLabel(Object) -- standalone hazard without a Water wrapper
 			end
 		end
-
-		SetupWaterESP(waterObj)
-		table.insert(Objects.Entities, Object)
 	elseif Name == "GloomPile" then
 		if Toggles.BypassGloombatEggs.Value then
 			for _, Part in Object:GetDescendants() do
@@ -4542,6 +4788,57 @@ Functions.HandleObject = function(Object)
 		end
 	elseif Name == "GrumbleRig" then
 		if Toggles.EntityESPToggle.Value and Options.EntityESPOptions.Value["Grumble"] then Functions.AddESP({ Object = Object, Text = "Grumble", Color = Options.EntityESPColor.Value }, true) end
+		table.insert(Objects.Entities, Object)
+	elseif Name == "TellerRig" then
+		if not Object:FindFirstChildOfClass("Humanoid") then
+			Instance.new("Humanoid", Object).Name = "HighlightHumanoid"
+		end
+		local Root = Object:FindFirstChild("Root") or Object.PrimaryPart or Object:FindFirstChildWhichIsA("BasePart")
+		if Root then
+			Object.PrimaryPart = Root
+		end
+		if Toggles.EntityESPToggle.Value and Options.EntityESPOptions.Value["Teller"] then
+			local NumberLabel = Object:FindFirstChild("ScreenFrame") and Object.ScreenFrame:FindFirstChild("Screen") and Object.ScreenFrame.Screen:FindFirstChild("SurfaceGui") and Object.ScreenFrame.Screen.SurfaceGui:FindFirstChild("NumberLabel")
+			local function MakeLabel()
+				return NumberLabel and ("Teller [" .. tostring(NumberLabel.Text or NumberLabel) .. "]") or "Teller"
+			end
+			Functions.AddESP({ Object = Object, Text = MakeLabel(), Color = Options.EntityESPColor.Value }, Object:GetAttribute("ParentRoom") ~= nil)
+			if NumberLabel then
+				NumberLabel:GetPropertyChangedSignal("Text"):Connect(function()
+					if Toggles.EntityESPToggle.Value and Options.EntityESPOptions.Value["Teller"] then
+						mstudio45.ESPLibrary:UpdateObjectText(Object, MakeLabel())
+					end
+				end)
+			end
+		end
+		table.insert(Objects.Entities, Object)
+	elseif Name == "Drones" then
+		if Toggles.BypassDrones.Value then
+			local WalkedInto = Object:FindFirstChild("WalkedInto")
+			if WalkedInto then WalkedInto.Name = "_WalkedInto" end
+		end
+		local DroneConnection = Object.DescendantAdded:Connect(function(Part)
+			if Part.Name == "WalkedInto" and Toggles.BypassDrones.Value then
+				Part.Name = "_WalkedInto"
+			end
+		end)
+		table.insert(Conns, DroneConnection)
+		Object.Destroying:Once(function()
+			if DroneConnection then DroneConnection:Disconnect() end
+		end)
+		if not Object:FindFirstChildOfClass("Humanoid") then
+			Instance.new("Humanoid", Object).Name = "HighlightHumanoid"
+		end
+		local Root = Object:FindFirstChild("Root") or Object.PrimaryPart or Object:FindFirstChildWhichIsA("BasePart")
+		if Root then
+			Object.PrimaryPart = Root
+			Root.Transparency = 0.999
+			Root.Material = Enum.Material.Plastic
+			Root:SetAttribute("ParentRoom", Object:GetAttribute("SpawnRoom"))
+			if Toggles.EntityESPToggle.Value and Options.EntityESPOptions.Value["Drones"] then
+				Functions.AddESP({ Object = Root, Text = "Drones", Color = Options.EntityESPColor.Value }, true)
+			end
+		end
 		table.insert(Objects.Entities, Object)
 	elseif Name == "LiveEntityBramble" then
 		if Toggles.EntityESPToggle.Value and Options.EntityESPOptions.Value["Bramble"] then Functions.AddESP({ Object = Object, Text = "Bramble", Color = Options.EntityESPColor.Value }, true) end
@@ -4771,6 +5068,7 @@ local TrackedObjects = {
 	TimerLever=true, Lever=true, Seek_Arm=true, ChandelierObstruction=true, ScaryWall=true, Ladder=true,
 	CircularVent=true, Dumpster=true, SquareGrate=true, TriggerEventCollision=true, GrumbleRig=true,
 	GiggleCeiling=true, MinesGateButton=true, ElectricalKeyObtain=true, LibraryHintPaper=true,
+	Drones=true, TellerRig=true, DronesStampede=true,
 	WaterPump=true, CringlePresent=true, Wheel=true, PickupItem=true, LiveHintBook=true,
 	LiveBreakerPolePickup=true, LeverForGate=true, GloomPile=true, SeekFloodline=true, Door=true,
 	Green_Herb=true, Bridge=true, MouseHole=true, BananaPeel=true, NannerPeel=true, PowerupPad=true,
@@ -4783,7 +5081,8 @@ local TrackedObjects = {
 }
 
 Functions.QueueObject = function(Object)
-	if not TrackedObjects[Object.Name] and not Object.Name:match("^Pool%d+") and Object.ClassName ~= "ProximityPrompt" and Object.Parent ~= CurrentRooms and not ItemNames[Object.Name] then
+	if not (Object.Name == LocalPlayer.Name and Object:IsA("Model") and Object.Parent and Object.Parent.Parent == CurrentRooms)
+	and not TrackedObjects[Object.Name] and not Object.Name:match("^Pool%d+") and Object.ClassName ~= "ProximityPrompt" and Object.Parent ~= CurrentRooms and not ItemNames[Object.Name] then
 		return
 	end
 	table.insert(Global.ObjectQueue, Object)
@@ -5210,7 +5509,7 @@ Conns.FogHandler2 = Services.Lighting.DescendantAdded:Connect(function(Object)
 	table.insert(Global.FogInstances, Object)
 end)
 
-local RusherNames = { Rush=true, Ambush=true, Eyes=true, Lookman=true, Blitz=true, ["A-60"]=true, ["A-120"]=true, AR0xMBUSH=true, ["RNIUSHCG=="]=true, ["Custom Entity"]=true }
+local RusherNames = { Rush=true, Ambush=true, Eyes=true, Lookman=true, Scribbles=true, Bash=true, Drones=true, Blitz=true, ["A-60"]=true, ["A-120"]=true, AR0xMBUSH=true, ["RNIUSHCG=="]=true, ["Custom Entity"]=true }
 
 Conns.EntityHandler = Services.Workspace.ChildAdded:Connect(function(Entity)
 	local EntityData = Entities[Entity.Name]
@@ -5255,6 +5554,21 @@ Conns.EntityHandler = Services.Workspace.ChildAdded:Connect(function(Entity)
 			end
 		end
 		table.insert(Objects.Entities, Entity)
+	end
+
+	-- scribbles spawned while the bypass is on get their touch disabled right away
+	if Entity.Name == "Scribbles" or Entity.Name == "ScribbleMoving" or Entity.Name == "Scribble" then
+		if Toggles.BypassScribbles and Toggles.BypassScribbles.Value then
+			for _, Part in Entity:GetDescendants() do
+				if Part:IsA("BasePart") then Part.CanTouch = false end
+			end
+			local ScribbleConn = Entity.DescendantAdded:Connect(function(Part)
+				if Part:IsA("BasePart") and Toggles.BypassScribbles.Value then
+					Part.CanTouch = false
+				end
+			end)
+			table.insert(Conns, ScribbleConn)
+		end
 	end
 
 	if RusherNames[EntityData.Name] then
@@ -5368,6 +5682,15 @@ Library:OnUnload(function()
 		if Object.Name == "SideroomSpace" then
 			local Coll = Object:FindFirstChild("Collision")
 			if Coll then Coll.CanCollide = false Coll.CanTouch = true end
+		end
+		if Object.Name == "Drones" then
+			local WalkedInto = Object:FindFirstChild("_WalkedInto")
+			if WalkedInto then WalkedInto.Name = "WalkedInto" end
+		end
+		if Object.Name == "Scribbles" or Object.Name == "ScribbleMoving" or Object.Name == "Scribble" then
+			for _, Part in Object:GetDescendants() do
+				if Part:IsA("BasePart") then Part.CanTouch = true end
+			end
 		end
 	end
 
