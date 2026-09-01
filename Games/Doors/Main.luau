@@ -1289,6 +1289,12 @@ end
 
 local function GetDoorText(Object)
 	local roomName = Object and Object.Parent and Object.Parent.Name or ""
+	-- the door at the end of room N leads into room N+1: the game numbers it by
+	-- its RoomID attribute (printed on its sign as A-00N), not by the room it sits in
+	local doorId = Object and Object:GetAttribute("RoomID")
+	if doorId ~= nil then
+		roomName = tostring(doorId)
+	end
 	local opened = Functions.GetAttributeOpened(Object) or ""
 	if opened ~= "" then opened = " " .. opened end
 	if roomName ~= "" then
