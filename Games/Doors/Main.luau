@@ -1586,6 +1586,105 @@ Toggles.AutoBreakerBox:OnChanged(function(Value)
 	end
 end)
 
+Self_Automation:AddToggle("AutoDropTV", {
+	Text = "Auto Drop TV", Default = false,
+	Tooltip = "Automatically takes control of the TV cart with boosted handling."
+})
+
+local AutoDropTVConn
+Toggles.AutoDropTV:OnChanged(function(Value)
+	if AutoDropTVConn then
+		AutoDropTVConn:Disconnect()
+		AutoDropTVConn = nil
+	end
+	if not Value then return end
+
+	if not Functions.CheckEnv("getnilinstances") or not firesignal then
+		Functions.Notify({ Title = "Auto Drop TV", Body = "Your executor doesn't support this feature." })
+		return
+	end
+
+	-- the server hands the cart over as a nil-parented instance, its DebugId changes
+	-- every session, so resolve the cart by name instead of a hardcoded id
+	local function DropCartUnderMap()
+		-- the cart sim is client-side: pivot the rig below the floor and gravity does
+		-- the rest (a welded rider falls with it)
+		local Cart
+		for _, Object in getnilinstances() do
+			if Object.Name == "TV_Stand" then
+				Cart = Object
+				break
+			end
+		end
+		if not Cart then return end
+		local Pos = Cart:GetPivot().Position
+		pcall(function()
+			Cart:PivotTo(CFrame.new(Pos - Vector3.new(0, 25, 0)))
+		end)
+		Functions.Notify({ Title = "Auto Drop TV", Body = "Cart dropped under the map." })
+	end
+
+	local function TakeCart()
+		local Cart
+		for _, Object in getnilinstances() do
+			if Object.Name == "TV_Stand" then
+				Cart = Object
+				break
+			end
+		end
+		if not Cart then return false end
+
+		local Look = Vector3.new(0, 0, -1)
+		local CharRoot = Character and Character:FindFirstChild("HumanoidRootPart")
+		if CharRoot then
+			local LV = CharRoot.CFrame.LookVector
+			Look = Vector3.new(LV.X, 0, LV.Z)
+			if Look.Magnitude > 0 then Look = Look.Unit end
+		end
+
+		firesignal(RemotesFolder.CartControl.OnClientEvent,
+			Cart,
+			{
+				Slowdown = 0, GrabOffset = 3, SlopeSpeedGain = 3, ShovePower = 100,
+				ShoveReleases = true, SlopeSpeedGainDown = 3, TurnSpeed = 180,
+				CamAngle = 45, TurnAccel = 12, CamPitch = 55, BreakDist = 999
+			},
+			Look,
+			8
+		)
+		Functions.Notify({ Title = "Auto Drop TV", Body = "Cart control taken." })
+		task.delay(0.3, DropCartUnderMap)
+		return true
+	end
+
+	if TakeCart() then return end
+
+	-- cart not handed over yet: keep requesting it until it appears (or 30s pass)
+	RemotesFolder.CartControl:FireServer()
+	local StartedAt = tick()
+	local LastFire = tick()
+	AutoDropTVConn = Services.RunService.Heartbeat:Connect(function()
+		if not Toggles.AutoDropTV.Value or tick() - StartedAt > 30 then
+			AutoDropTVConn:Disconnect()
+			AutoDropTVConn = nil
+			if Toggles.AutoDropTV.Value then
+				Toggles.AutoDropTV:SetValue(false)
+				Functions.Notify({ Title = "Auto Drop TV", Body = "No cart was handed over." })
+			end
+			return
+		end
+		if tick() - LastFire < 1 then return end
+		LastFire = tick()
+		if TakeCart() then
+			AutoDropTVConn:Disconnect()
+			AutoDropTVConn = nil
+		else
+			RemotesFolder.CartControl:FireServer()
+		end
+	end)
+	table.insert(Conns, AutoDropTVConn)
+end)
+
 Self_Automation:AddDivider()
 Self_Automation:AddToggle("AutoUnlockPadlockToggle", {
 	Text = "Auto Unlock Padlock", Default = false, Tooltip = "Automatically enters the code into the library padlock."
