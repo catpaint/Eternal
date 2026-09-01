@@ -326,6 +326,8 @@ local ItemNames = {
 	["JournalRig"]        = "Journal",
 	["Notebook"]          = "Journal",
 	["Diary"]             = "Journal",
+	["GweenSodaPack"]     = "Gween Soda Pack",
+	["Jerrycan"]          = "Jerrycan",
 	["FihFlakes"]         = "Fih Flakes",
 	["FihFlakesItem"]     = "Fih Flakes",
 	["Fih_Flakes"]        = "Fih Flakes",
@@ -2418,7 +2420,7 @@ Visuals_EntitySettings = Visuals_RightTab:AddTab("Settings")
 
 Visuals_Entities:AddDropdown("EntityList", {
 	Text = "Entity List",
-	Values = { "Rush","Ambush","Eyes","Halt","Blitz","Lookman","Gloombat Swarm","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Monument","Scribbles","Bash","Electric Puddle","AR0xMBUSH","RNIUSHCG==","Stampede of Drones" },
+	Values = { "Rush","Ambush","Eyes","Halt","Blitz","Lookman","Gloombat Swarm","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Monument","Scribbles","Bash","Electric Puddle","AR0xMBUSH","RNIUSHCG==","Stampede of Drones","Creak","Stems","Noise","Hijack" },
 	Multi = true, AllowNull = true
 })
 Visuals_Entities:AddToggle("NotifyEntities",    { Text = "Notify Entities",    Default = false, Tooltip = "Sends a notification when an entity spawns." })
@@ -2489,7 +2491,7 @@ end
 
 Visuals_ESP_Toggles:AddDropdown("EntityESPOptions",     { 
 	Text = "Entity List",
-	Values = { "Rush","Ambush","Eyes","Dupe","Figure","Blitz","Lookman","Snare","Giggle","Grumble","Drones","Teller","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Mandrake Hole","Monument","Bramble","Scribbles","Bash","Server Cart","Electric Puddle","Vacuum Sideroom","Gloombat Eggs","AR0xMBUSH","RNIUSHCG==" },
+	Values = { "Rush","Ambush","Eyes","Dupe","Figure","Blitz","Lookman","Snare","Giggle","Grumble","Drones","Teller","Portrait","Creak","Stems","Noise","Hijack","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Mandrake Hole","Monument","Bramble","Scribbles","Bash","Server Cart","Electric Puddle","Vacuum Sideroom","Gloombat Eggs","AR0xMBUSH","RNIUSHCG==" },
 	Default = { "Rush","Ambush","Eyes","Dupe","Figure","Blitz","Lookman","Snare","Giggle","Grumble","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Mandrake Hole","Monument","Bramble","Scribbles","Bash","Server Cart","Electric Puddle","Vacuum Sideroom","Gloombat Eggs" },
 	Multi = true,
 	AllowNull = true
@@ -2528,13 +2530,36 @@ local ObjectiveLabels = {
 	["LeverForGate"]           = "Gate Lever",
 	["MinesGateButton"]        = "Gate Button",
 	["GardenGateButton"]       = "Gate Button",
+	["LargeScrew"]             = "Large Screw",
+	["DinkyLamp"]              = "Dinky Lamp",
+	["BottleCrate"]            = "Bottle Crate",
+	["StairwellTerminal"]      = "Stairwell Terminal",
+	["StairwellFireAlarm"]     = "Fire Alarm",
+	["TV_Stand"]               = "TV Stand",
+	["Cubby_Large_Tarped"]     = "Cubby",
+	["BrokenMonitor"]          = "Broken Monitor",
+	["JerryCan"]               = "Jerry Can",
+}
+
+-- these objectives anchor their esp on the "Main" child part, both on spawn and re-apply
+local ObjectiveMainAnchors = {
+	LargeScrew = true, DinkyLamp = true, BottleCrate = true, StairwellTerminal = true,
+	StairwellFireAlarm = true, TV_Stand = true, Cubby_Large_Tarped = true,
+	BrokenMonitor = true, JerryCan = true,
 }
 
 Toggles.ObjectiveESPToggle:OnChanged(function(Value)
 	for _, Object in Objects.Objectives do
 		if Value then
 			local Label = ObjectiveLabels[Object.Name]
-			if Object.Name == "TimerLever" then
+			if ObjectiveMainAnchors[Object.Name] then
+				local Anchor = Object:FindFirstChild("Main") or Object
+				if not Anchor:GetAttribute("ParentRoom") then
+					Anchor:SetAttribute("ParentRoom", Object:GetAttribute("ParentRoom"))
+				end
+				Functions.AddESP({ Object = Anchor, Text = Label or Object.Name, Color = Options.ObjectiveESPColor.Value }, true)
+				Label = nil
+			elseif Object.Name == "TimerLever" then
 				Label = "Time Lever"
 			elseif Object.Name == "MinesAnchor" then
 				Label = "Anchor [" .. Object:WaitForChild("Sign").TextLabel.Text .. "]"
@@ -2571,7 +2596,8 @@ local ChestLabels = {
 local EntityESPLabels = {
 	JeffTheKiller = "Jeff the Killer", GiggleCeiling = "Giggle",
 	Snare = "Snare", GrumbleRig = "Grumble", TellerRig = "Teller",
-	Drones = "Drones",
+	Drones = "Drones", Creak = "Creak", StemsEntity = "Stems",
+	Noise = "Noise", Hijack = "Hijack",
 	Drakobloxxer = "Drakobloxxer", Hole = "Mandrake Hole", Groundskeeper = "Groundskeeper",
 	LiveEntityBramble = "Bramble", Figure = "Figure", FigureRig = "Figure", FigureRagdoll = "Figure",
 	FakeDoor = "Dupe", DoorFake = "Dupe",
@@ -2585,7 +2611,7 @@ local EntityESPLabels = {
 }
 
 local NodeEntities = {
-	Rush = true, Ambush = true, Eyes = true, Blitz = true, Lookman = true, ["A-60"] = true, ["A-120"] = true, Sally = true, ["Jeff The Killer"] = true, Monument = true, Scribbles = true, Bash = true, ["Server Cart"] = true, ["Electric Puddle"] = true, ["Vacuum Sideroom"] = true, ["Gloombat Eggs"] = true, ["AR0xMBUSH"] = true, ["RNIUSHCG=="] = true
+	Rush = true, Ambush = true, Eyes = true, Blitz = true, Lookman = true, ["A-60"] = true, ["A-120"] = true, Sally = true, ["Jeff The Killer"] = true, Monument = true, Scribbles = true, Bash = true, ["Server Cart"] = true, ["Electric Puddle"] = true, ["Vacuum Sideroom"] = true, ["Gloombat Eggs"] = true, ["AR0xMBUSH"] = true, ["RNIUSHCG=="] = true, ["Portrait"] = true, ["Creak"] = true, ["Stems"] = true, ["Noise"] = true, ["Hijack"] = true
 }
 
 Toggles.DoorESPToggle:OnChanged(function(Value)
@@ -4093,7 +4119,92 @@ Functions.HandleObject = function(Object)
 
 	local Name = Object.Name
 
-	if Name == LocalPlayer.Name and Object:IsA("Model") and Object.Parent and Object.Parent.Parent == CurrentRooms then
+	if Name == "Creak" then
+		-- creak entity from LiveEntities: anchored on its head part
+		local Root = Object:FindFirstChild("Head") or Object:FindFirstChildOfClass("BasePart") or Object.PrimaryPart
+		if Root then
+			if Toggles.EntityESPToggle.Value and Options.EntityESPOptions.Value["Creak"] then
+				Functions.AddESP({ Object = Root, Text = "Creak", Color = Options.EntityESPColor.Value }, false)
+			end
+			if Toggles.NotifyEntities.Value and Options.EntityList.Value["Creak"] then
+				Functions.Notify({ Title = "Entity 'Creak' has spawned.", Body = "Watch your step." })
+			end
+		end
+		table.insert(Objects.Entities, Object)
+	elseif Name == "StemsEntity" then
+		-- stems entity (child of the StemsNyxvhal model): anchored on its RootPart
+		local Root = Object:FindFirstChild("RootPart") or Object.PrimaryPart or Object:FindFirstChildWhichIsA("BasePart")
+		if Root then
+			if not Object.PrimaryPart then Object.PrimaryPart = Root end
+			if Toggles.EntityESPToggle.Value and Options.EntityESPOptions.Value["Stems"] then
+				Functions.AddESP({ Object = Root, Text = "Stems", Color = Options.EntityESPColor.Value }, false)
+			end
+			if Toggles.NotifyEntities.Value and Options.EntityList.Value["Stems"] then
+				Functions.Notify({ Title = "Entity 'Stems' has spawned.", Body = "Don't get too close to the stems." })
+			end
+		end
+		table.insert(Objects.Entities, Object)
+	elseif Name == "Noise" then
+		-- noise entity: esp on its root/head + notify
+		local Root = Object.PrimaryPart or Object:FindFirstChild("HumanoidRootPart") or Object:FindFirstChild("Head") or Object:FindFirstChildWhichIsA("BasePart")
+		if Root then
+			if not Object.PrimaryPart then Object.PrimaryPart = Root end
+			if Toggles.EntityESPToggle.Value and Options.EntityESPOptions.Value["Noise"] then
+				Functions.AddESP({ Object = Root, Text = "Noise", Color = Options.EntityESPColor.Value }, false)
+			end
+			if Toggles.NotifyEntities.Value and Options.EntityList.Value["Noise"] then
+				Functions.Notify({ Title = "Entity 'Noise' has spawned.", Body = "Watch out for Noise." })
+			end
+		end
+		table.insert(Objects.Entities, Object)
+	elseif Name == "Hijack" then
+		-- hijack entity: esp on its root/head + notify
+		local Root = Object.PrimaryPart or Object:FindFirstChild("HumanoidRootPart") or Object:FindFirstChild("Head") or Object:FindFirstChildWhichIsA("BasePart")
+		if Root then
+			if not Object.PrimaryPart then Object.PrimaryPart = Root end
+			if Toggles.EntityESPToggle.Value and Options.EntityESPOptions.Value["Hijack"] then
+				Functions.AddESP({ Object = Root, Text = "Hijack", Color = Options.EntityESPColor.Value }, false)
+			end
+			if Toggles.NotifyEntities.Value and Options.EntityList.Value["Hijack"] then
+				Functions.Notify({ Title = "Entity 'Hijack' has spawned.", Body = "Something is trying to hijack you." })
+			end
+		end
+		table.insert(Objects.Entities, Object)
+	elseif Name:match("^MirrorRig_Portrait") and Object:IsA("Model") then
+		-- portrait clone of the player shown in mirror scenes: lives under the camera
+		-- (not in a room) and the game reuses one rig, moving it between mirrors, so
+		-- the esp bypasses the room gate and the notify follows each scene approach
+		if not Object.PrimaryPart then
+			Object.PrimaryPart = Object:FindFirstChild("HumanoidRootPart") or Object:FindFirstChildWhichIsA("BasePart")
+		end
+		EntityESPLabels[Name] = "Portrait"
+		if Object.PrimaryPart then
+			if Toggles.EntityESPToggle.Value and Options.EntityESPOptions.Value["Portrait"] then
+				Functions.AddESP({ Object = Object, Text = "Portrait", Color = Options.EntityESPColor.Value }, false)
+			end
+
+			local InScene = false
+			local PortraitWatchConn
+			PortraitWatchConn = Services.RunService.Heartbeat:Connect(function()
+				if not Object.Parent then
+					if PortraitWatchConn then PortraitWatchConn:Disconnect() end
+					return
+				end
+				local Char = LocalPlayer.Character
+				local Root = Char and Char:FindFirstChild("HumanoidRootPart")
+				if not (Root and Object.PrimaryPart) then return end
+				local Dist = (Root.Position - Object.PrimaryPart.Position).Magnitude
+				if Dist < 80 and not InScene then
+					InScene = true
+					Functions.Notify({ Title = "Entity 'Portrait' has spawned.", Body = "Your mirror portrait is active." })
+				elseif Dist >= 120 then
+					InScene = false
+				end
+			end)
+			table.insert(Conns, PortraitWatchConn)
+		end
+		table.insert(Objects.Entities, Object)
+	elseif Name == LocalPlayer.Name and Object:IsA("Model") and Object.Parent and Object.Parent.Parent == CurrentRooms then
 		Functions.AnalyzeForgetMeNot(Object)
 	elseif Name == "KeyObtain" then
 		task.spawn(function()
@@ -4143,6 +4254,26 @@ Functions.HandleObject = function(Object)
 			Functions.RemoveESP(Object)
 			Functions.BlacklistESP(Object)
 		end)
+		table.insert(Objects.Objectives, Object)
+	elseif ObjectiveMainAnchors[Name] then
+		-- stairwell / misc interactables (LargeScrew, DinkyLamp, BottleCrate, ...):
+		-- esp anchored on the Main child part when the game builds it that way
+		local Anchor = Object:FindFirstChild("Main") or Object
+		if Anchor ~= Object and not Anchor:GetAttribute("ParentRoom") then
+			Anchor:SetAttribute("ParentRoom", Object:GetAttribute("ParentRoom"))
+		end
+		if Name == "TV_Stand" and not Object:GetAttribute("ParentRoom") then
+			-- TV_Stand lives under workspace.Misc, not in a room: stamp the player's
+			-- current room so the objective esp keeps working with the room gate
+			local Cur = tonumber(LocalPlayer:GetAttribute("CurrentRoom"))
+			if Cur then
+				Object:SetAttribute("ParentRoom", Cur)
+				if Anchor ~= Object then Anchor:SetAttribute("ParentRoom", Cur) end
+			end
+		end
+		if Toggles.ObjectiveESPToggle.Value then
+			Functions.AddESP({ Object = Anchor, Text = ObjectiveLabels[Name] or Name, Color = Options.ObjectiveESPColor.Value }, true)
+		end
 		table.insert(Objects.Objectives, Object)
 	elseif Name == "WaterPump" then
 		if Toggles.ObjectiveESPToggle.Value then Functions.AddESP({ Object = Object:WaitForChild("Wheel"), Text = "Water Pump", Color = Options.ObjectiveESPColor.Value }, true) end
@@ -5069,6 +5200,10 @@ local TrackedObjects = {
 	CircularVent=true, Dumpster=true, SquareGrate=true, TriggerEventCollision=true, GrumbleRig=true,
 	GiggleCeiling=true, MinesGateButton=true, ElectricalKeyObtain=true, LibraryHintPaper=true,
 	Drones=true, TellerRig=true, DronesStampede=true,
+	Creak=true, StemsEntity=true, LargeScrew=true, DinkyLamp=true, BottleCrate=true,
+	StairwellTerminal=true, StairwellFireAlarm=true, TV_Stand=true, Cubby_Large_Tarped=true,
+	BrokenMonitor=true, JerryCan=true,
+	Noise=true, Hijack=true,
 	WaterPump=true, CringlePresent=true, Wheel=true, PickupItem=true, LiveHintBook=true,
 	LiveBreakerPolePickup=true, LeverForGate=true, GloomPile=true, SeekFloodline=true, Door=true,
 	Green_Herb=true, Bridge=true, MouseHole=true, BananaPeel=true, NannerPeel=true, PowerupPad=true,
@@ -5082,7 +5217,7 @@ local TrackedObjects = {
 
 Functions.QueueObject = function(Object)
 	if not (Object.Name == LocalPlayer.Name and Object:IsA("Model") and Object.Parent and Object.Parent.Parent == CurrentRooms)
-	and not TrackedObjects[Object.Name] and not Object.Name:match("^Pool%d+") and Object.ClassName ~= "ProximityPrompt" and Object.Parent ~= CurrentRooms and not ItemNames[Object.Name] then
+	and not TrackedObjects[Object.Name] and not Object.Name:match("^Pool%d+") and not Object.Name:match("^MirrorRig_Portrait") and Object.ClassName ~= "ProximityPrompt" and Object.Parent ~= CurrentRooms and not ItemNames[Object.Name] then
 		return
 	end
 	table.insert(Global.ObjectQueue, Object)
