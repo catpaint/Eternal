@@ -1485,7 +1485,19 @@ General_Character:AddToggle("EnableCharacterJump", {
 	Text = "Enable Jumping", Default = false, Tooltip = "Allows your character to jump."
 })
 
+General_Character:AddToggle("InfiniteJumps", {
+	Text = "Infinite Jumps", Default = false, Tooltip = "Allows you to jump while in the air."
+})
+
 local OldJump = false
+
+Conns.InfiniteJumpsConnection = Services.UserInputService.InputBegan:Connect(function(Input)
+	if Input.KeyCode == Enum.KeyCode.Space and Toggles.InfiniteJumps.Value and not Global.IsTyping then
+		if Humanoid then
+			Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+		end
+	end
+end)
 
 Toggles.WalkSpeedToggle:OnChanged(function(Value)
 	if Humanoid then
@@ -1772,6 +1784,65 @@ end)
 
 Exploits_Anti:AddToggle("BypassDrones", { Text = "Anti Drone (FE)", Default = false, Tooltip = "Prevents 'Drones' from hurting you by muting their walk-in hitbox." })
 Exploits_Anti:AddToggle("BypassScribbles", { Text = "Anti Scribbles", Default = false, Tooltip = "Blocks 'Scribbles' damage by disabling touch on its parts." })
+Exploits_Anti:AddToggle("BypassAntiAlma", { Text = "Anti Alma", Default = false, Tooltip = "Renames your Humanoid to avoid 'Alma' targeting you." })
+Exploits_Anti:AddToggle("BypassStampede", { Text = "Anti Stampede of Drones", Default = false, Tooltip = "Spams the ArchivesClock LookedAtRemote to stop the stampede." })
+
+local function ApplyAntiAlma()
+	local Char = LocalPlayer.Character
+	local Hum = Char and (Char:FindFirstChild("Humanoid") or Char:FindFirstChild("Humanoid_AntiAlma"))
+	if Hum then
+		Hum.Name = Toggles.BypassAntiAlma.Value and "Humanoid_AntiAlma" or "Humanoid"
+	end
+end
+
+Toggles.BypassAntiAlma:OnChanged(function()
+	ApplyAntiAlma()
+end)
+
+Global.ClockRemotes = {}
+local function RegisterClockRemotes()
+	Global.ClockRemotes = {}
+	for _, Clock in Services.Workspace:GetDescendants() do
+		if Clock.Name == "ArchivesClock" and Clock:IsA("Model") then
+			for _, Child in Clock:GetDescendants() do
+				if Child.Name == "LookedAtRemote" then
+					table.insert(Global.ClockRemotes, Child)
+				end
+			end
+		end
+	end
+end
+
+local ClockRemoteTimer = 0
+Conns.ClockRemotesSpam = Services.RunService.Heartbeat:Connect(function(dt)
+	if not (Toggles.BypassStampede and Toggles.BypassStampede.Value) then return end
+	ClockRemoteTimer += dt
+	if ClockRemoteTimer < 0.89 then return end
+	ClockRemoteTimer = 0
+	for i = #Global.ClockRemotes, 1, -1 do
+		local Remote = Global.ClockRemotes[i]
+		if Remote and Remote.Parent then
+			Remote:FireServer()
+		else
+			table.remove(Global.ClockRemotes, i)
+		end
+	end
+end)
+
+Conns.ClockDiscoverer = Services.Workspace.DescendantAdded:Connect(function(Object)
+	if not (Toggles.BypassStampede and Toggles.BypassStampede.Value) then return end
+	if Object.Name == "LookedAtRemote" or (Object.Name == "ArchivesClock" and Object:IsA("Model")) then
+		RegisterClockRemotes()
+	end
+end)
+
+Toggles.BypassStampede:OnChanged(function(Value)
+	if Value then
+		RegisterClockRemotes()
+	else
+		Global.ClockRemotes = {}
+	end
+end)
 
 Toggles.BypassDrones:OnChanged(function(Value)
 	for _, Object in Objects.Entities do
@@ -2477,6 +2548,7 @@ Visuals_Entities:AddDropdown("EntityList", {
 	Multi = true, AllowNull = true
 })
 Visuals_Entities:AddToggle("NotifyEntities",    { Text = "Notify Entities",    Default = false, Tooltip = "Sends a notification when an entity spawns." })
+Visuals_Entities:AddToggle("NotifyItemsToggle", { Text = "Notify Items",    Default = false, Tooltip = "Sends a notification when an item spawns." })
 Visuals_Entities:AddToggle("NotifyRoomAnomalies", { Text = "Notify Room Anomalies", Default = true, Tooltip = "Notifies you of any room anomaly (Dupe, Monument, Currents, Server Carts, Scribble, Giggle, etc.) as soon as a new room loads." })
 Visuals_Entities:AddDivider()
 
@@ -2921,6 +2993,10 @@ Tabs.Floors:UpdateWarningBox({
 })
 
 Floors_Automation = Tabs.Floors:AddRightGroupbox("Automation")
+Floors_Automation:AddToggle("AutoForgetMeNot", {
+	Text = "Auto ForgetMeNot", Default = false,
+	Tooltip = "Automatically teleports you through the door during the ForgetMeNot room."
+})
 Floors_Automation:AddToggle("MinecartTeleport", {
     Text = "Minecart Teleport",
     Default = false,
@@ -4154,6 +4230,68 @@ Functions.AnalyzeForgetMeNot = function(Replica)
 	end)
 end
 
+-- Auto Forget-Me-Not: while the puzzle room is active, keep pivoting the player
+-- to the room's CanGo part until the exit door's open sound starts playing
+local ForgetMeNotRunning = false
+
+local function GetForgetMeNotOpenSound(Room)
+	local Door = Room and Room:FindFirstChild("Door")
+	local Inner = Door and Door:FindFirstChild("Door")
+	local Open = Inner and Inner:FindFirstChild("Open")
+	if Open and Open:IsA("Sound") then
+		return Open
+	end
+	return nil
+end
+
+local function StopAutoForgetMeNot()
+	ForgetMeNotRunning = false
+	if Conns.ForgetMeNotLoop then
+		Conns.ForgetMeNotLoop:Disconnect()
+		Conns.ForgetMeNotLoop = nil
+	end
+end
+
+local function HandleForgetMeNot(Room)
+	if ForgetMeNotRunning then return end
+	ForgetMeNotRunning = true
+	Conns.ForgetMeNotLoop = Services.RunService.Heartbeat:Connect(function()
+		if not ForgetMeNotRunning or not (Toggles.AutoForgetMeNot and Toggles.AutoForgetMeNot.Value) then
+			ForgetMeNotRunning = false
+			if Conns.ForgetMeNotLoop then
+				Conns.ForgetMeNotLoop:Disconnect()
+				Conns.ForgetMeNotLoop = nil
+			end
+			return
+		end
+		local Car = CurrentRooms:FindFirstChild(tostring(LatestRoom.Value))
+		local OpenSound = Car and GetForgetMeNotOpenSound(Car)
+		if OpenSound and OpenSound.IsPlaying then
+			StopAutoForgetMeNot()
+			return
+		end
+		local Door = Car and Car:FindFirstChild("Door")
+		local CanGo = Door and Door:FindFirstChild("CanGo")
+		local Char = LocalPlayer.Character
+		if Char and CanGo then
+			Char:PivotTo(CanGo.CFrame)
+		end
+	end)
+end
+
+Conns.ForgetMeNotWatcher = CurrentRooms.DescendantAdded:Connect(function(Object)
+	if not (Toggles.AutoForgetMeNot and Toggles.AutoForgetMeNot.Value) then return end
+	if Object:IsA("Model") and Object.Name == LocalPlayer.Name and Object.Parent and Object.Parent.Parent == CurrentRooms then
+		HandleForgetMeNot(Object.Parent)
+	end
+end)
+
+Toggles.AutoForgetMeNot:OnChanged(function(Value)
+	if not Value then
+		StopAutoForgetMeNot()
+	end
+end)
+
 Functions.HandleObject = function(Object)
 	for _, Room in CurrentRooms:GetChildren() do
 		if Object:IsDescendantOf(Room) then
@@ -4173,15 +4311,22 @@ Functions.HandleObject = function(Object)
 	local Name = Object.Name
 
 	if Name == "Creak" then
-		-- creak entity from LiveEntities: anchored on its head part
-		local Root = Object:FindFirstChild("Head") or Object:FindFirstChildOfClass("BasePart") or Object.PrimaryPart
-		if Root then
-			if Toggles.EntityESPToggle.Value and Options.EntityESPOptions.Value["Creak"] then
-				Functions.AddESP({ Object = Root, Text = "Creak", Color = Options.EntityESPColor.Value }, false)
-			end
-			if Toggles.NotifyEntities.Value and Options.EntityList.Value["Creak"] then
-				Functions.Notify({ Title = "Entity 'Creak' has spawned.", Body = "Watch your step." })
-			end
+		-- creak sounds with the same name get placed in Terrain/misparented spots: only
+		-- the real entity is a Model inside LiveEntities, everything else is ignored
+		if not (Object:IsA("Model") and Object.Parent and Object.Parent.Name == "LiveEntities") then
+			return
+		end
+		-- creak from LiveEntities: esp on the whole model (every body part at once);
+		-- HumanoidRootPart is its head/anchor, so the model needs PrimaryPart pinned
+		-- for the library to compute bounds over the full body
+		if Toggles.NotifyEntities.Value and Options.EntityList.Value["Creak"] then
+			Functions.Notify({ Title = "Entity 'Creak' has spawned.", Body = "Watch your step." })
+		end
+		if not Object.PrimaryPart then
+			Object.PrimaryPart = Object:FindFirstChild("HumanoidRootPart") or Object:FindFirstChildWhichIsA("BasePart")
+		end
+		if Toggles.EntityESPToggle.Value and Options.EntityESPOptions.Value["Creak"] then
+			Functions.AddESP({ Object = Object, Text = "Creak", Color = Options.EntityESPColor.Value }, false)
 		end
 		table.insert(Objects.Entities, Object)
 	elseif Name == "StemsEntity" then
@@ -4731,6 +4876,15 @@ Functions.HandleObject = function(Object)
 		if label then
 			if Toggles.ItemESPToggle.Value then
 				Functions.AddESP({ Object = targetObj, Text = label, Color = Options.ItemESPColor.Value }, Object:GetAttribute("ParentRoom") ~= nil)
+			end
+
+			if Toggles.NotifyItemsToggle.Value and Object.Parent and Object.Parent.Name ~= "Drops" then
+				local Body = "... there it is."
+				local Prim = Object.PrimaryPart or (Object:IsA("BasePart") and Object)
+				if Prim then
+					Body = "It is " .. math.floor(LocalPlayer:DistanceFromCharacter(Prim.Position)) .. " studs away from you."
+				end
+				Functions.Notify({ Title = "Item '" .. label .. "' has spawned.", Body = Body })
 			end
 
 			local ancConn
