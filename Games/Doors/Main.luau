@@ -397,6 +397,31 @@ if not Library.Scheme then
 	})
 end
 
+-- Obsidian loading screen: must be created after the old-GUI cleanup above,
+-- otherwise that cleanup destroys the loader's ScreenGui too
+	if Library.ActiveLoading and Library.ActiveLoading.Destroyed ~= true then
+		pcall(function() Library.ActiveLoading:Destroy() end)
+	end
+	local Loading = Library:CreateLoading({
+		Title = "mstudio45 V4",
+		Icon = 77196040991392,
+		TotalSteps = 4,
+		ShowSidebar = true,
+		AlwaysOnTop = true,
+	})
+	Loading:SetCurrentStep(1)
+	Loading:SetMessage("Loading mstudio45 V4...")
+	Loading:SetDescription("fun fact: bomb.exe is loading...")
+	pcall(function()
+		Loading.Sidebar:AddLabel("Game: DOORS")
+		Loading.Sidebar:AddLabel("Player: " .. LocalPlayer.Name)
+		Loading.Sidebar:AddLabel("UI Library: Obsidian")
+		if mstudio45.TotalExecutions then
+			Loading.Sidebar:AddLabel("Total Executions: " .. mstudio45.TotalExecutions)
+		end
+	end)
+	task.wait(1)
+
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
@@ -889,6 +914,10 @@ Library.Notify = function(Data, Body, Time)
 end
 
 if not LocalPlayer.Character or not CurrentRooms:FindFirstChildOfClass("Model") then
+	if Loading then
+		Loading:SetCurrentStep(2)
+		Loading:SetMessage("Waiting for the game to load...")
+	end
 	Functions.Notify({ Title = "Waiting for the game to load..." })
 	while not LocalPlayer.Character or not CurrentRooms:FindFirstChildOfClass("Model") do
 		task.wait()
@@ -6147,4 +6176,15 @@ end
 while not Global.MainUI do task.wait() end
 
 if type(SyncEntityRemoval) == "function" then pcall(SyncEntityRemoval) end
+
+if Loading and Loading.Destroyed ~= true then
+	Loading:SetCurrentStep(3)
+	Loading:SetMessage("Building interface...")
+	task.wait(1.5)
+	Loading:SetCurrentStep(4)
+	Loading:SetMessage("Ready.")
+	Loading:SetDescription("fun fact: bomb.exe is loading...")
+	task.wait(1.5)
+	Loading:Continue()
+end
 Functions.Notify({ Title = "Successfully loaded", Body = "Press RightControl to Close/Open the menu"})
