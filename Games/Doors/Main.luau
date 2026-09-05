@@ -399,28 +399,28 @@ end
 
 -- Obsidian loading screen: must be created after the old-GUI cleanup above,
 -- otherwise that cleanup destroys the loader's ScreenGui too
-	if Library.ActiveLoading and Library.ActiveLoading.Destroyed ~= true then
-		pcall(function() Library.ActiveLoading:Destroy() end)
+if Library.ActiveLoading and Library.ActiveLoading.Destroyed ~= true then
+	pcall(function() Library.ActiveLoading:Destroy() end)
+end
+local Loading = Library:CreateLoading({
+	Title = "mstudio45 V4",
+	Icon = 77196040991392,
+	TotalSteps = 4,
+	ShowSidebar = true,
+	AlwaysOnTop = true,
+})
+Loading:SetCurrentStep(1)
+Loading:SetMessage("Loading mstudio45 V4...")
+Loading:SetDescription("fun fact: bomb.exe is loading...")
+pcall(function()
+	Loading.Sidebar:AddLabel("Game: DOORS")
+	Loading.Sidebar:AddLabel("Player: " .. LocalPlayer.Name)
+	Loading.Sidebar:AddLabel("UI Library: Obsidian")
+	if mstudio45.TotalExecutions then
+		Loading.Sidebar:AddLabel("Total Executions: " .. mstudio45.TotalExecutions)
 	end
-	local Loading = Library:CreateLoading({
-		Title = "mstudio45 V4",
-		Icon = 77196040991392,
-		TotalSteps = 4,
-		ShowSidebar = true,
-		AlwaysOnTop = true,
-	})
-	Loading:SetCurrentStep(1)
-	Loading:SetMessage("Loading mstudio45 V4...")
-	Loading:SetDescription("fun fact: bomb.exe is loading...")
-	pcall(function()
-		Loading.Sidebar:AddLabel("Game: DOORS")
-		Loading.Sidebar:AddLabel("Player: " .. LocalPlayer.Name)
-		Loading.Sidebar:AddLabel("UI Library: Obsidian")
-		if mstudio45.TotalExecutions then
-			Loading.Sidebar:AddLabel("Total Executions: " .. mstudio45.TotalExecutions)
-		end
-	end)
-	task.wait(1)
+end)
+task.wait(1)
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -1813,19 +1813,33 @@ end)
 
 Exploits_Anti:AddToggle("BypassDrones", { Text = "Anti Drone (FE)", Default = false, Tooltip = "Prevents 'Drones' from hurting you by muting their walk-in hitbox." })
 Exploits_Anti:AddToggle("BypassScribbles", { Text = "Anti Scribbles", Default = false, Tooltip = "Blocks 'Scribbles' damage by disabling touch on its parts." })
-Exploits_Anti:AddToggle("BypassAntiAlma", { Text = "Anti Alma", Default = false, Tooltip = "Renames your Humanoid to avoid 'Alma' targeting you." })
+Exploits_Anti:AddToggle("BypassAntiAlma", { Text = "Anti Alma", Default = false, Tooltip = "Deletes 'Alma' to stop Alma from attacking you." })
 Exploits_Anti:AddToggle("BypassStampede", { Text = "Anti Stampede of Drones", Default = false, Tooltip = "Spams the ArchivesClock LookedAtRemote to stop the stampede." })
 
-local function ApplyAntiAlma()
-	local Char = LocalPlayer.Character
-	local Hum = Char and (Char:FindFirstChild("Humanoid") or Char:FindFirstChild("Humanoid_AntiAlma"))
-	if Hum then
-		Hum.Name = Toggles.BypassAntiAlma.Value and "Humanoid_AntiAlma" or "Humanoid"
+-- Anti Alma: watch for the Alma model in Workspace and remove it once, when it appears
+local AntiAlmaConnection
+local function RemoveExistingAlma()
+	for _, Object in Services.Workspace:GetChildren() do
+		if Object.Name == "Alma" then
+			pcall(function() Object:Destroy() end)
+		end
 	end
 end
 
-Toggles.BypassAntiAlma:OnChanged(function()
-	ApplyAntiAlma()
+Toggles.BypassAntiAlma:OnChanged(function(Value)
+	if AntiAlmaConnection then
+		AntiAlmaConnection:Disconnect()
+		AntiAlmaConnection = nil
+	end
+	if not Value then return end
+
+	RemoveExistingAlma()
+	AntiAlmaConnection = Services.Workspace.ChildAdded:Connect(function(Object)
+		if Object.Name == "Alma" then
+			pcall(function() Object:Destroy() end)
+		end
+	end)
+	table.insert(Conns, AntiAlmaConnection)
 end)
 
 Global.ClockRemotes = {}
