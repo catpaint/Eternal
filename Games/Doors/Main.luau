@@ -1813,7 +1813,7 @@ end)
 
 Exploits_Anti:AddToggle("BypassDrones", { Text = "Anti Drone (FE)", Default = false, Tooltip = "Prevents 'Drones' from hurting you by muting their walk-in hitbox." })
 Exploits_Anti:AddToggle("BypassScribbles", { Text = "Anti Scribbles", Default = false, Tooltip = "Blocks 'Scribbles' damage by disabling touch on its parts." })
-Exploits_Anti:AddToggle("BypassAntiAlma", { Text = "Anti Alma", Default = false, Tooltip = "Deletes 'Alma' to stop Alma from attacking you." })
+Exploits_Anti:AddToggle("BypassAntiAlma", { Text = "Anti Alma", Default = false, Tooltip = "Deletes 'workspace.Alma' to stop Alma from attacking you." })
 Exploits_Anti:AddToggle("BypassStampede", { Text = "Anti Stampede of Drones", Default = false, Tooltip = "Spams the ArchivesClock LookedAtRemote to stop the stampede." })
 
 -- Anti Alma: watch for the Alma model in Workspace and remove it once, when it appears
@@ -2587,7 +2587,7 @@ Visuals_EntitySettings = Visuals_RightTab:AddTab("Settings")
 
 Visuals_Entities:AddDropdown("EntityList", {
 	Text = "Entity List",
-	Values = { "Rush","Ambush","Eyes","Halt","Blitz","Lookman","Gloombat Swarm","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Monument","Scribbles","Bash","Electric Puddle","AR0xMBUSH","RNIUSHCG==","Stampede of Drones","Creak","Stems","Noise","Hijack" },
+	Values = { "Rush","Ambush","Eyes","Halt","Blitz","Lookman","Gloombat Swarm","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Monument","Scribbles","Bash","Electric Puddle","AR0xMBUSH","RNIUSHCG==","Stampede of Drones","Creak","Stems","Noise","Hijack","Honcho" },
 	Multi = true, AllowNull = true
 })
 Visuals_Entities:AddToggle("NotifyEntities",    { Text = "Notify Entities",    Default = false, Tooltip = "Sends a notification when an entity spawns." })
@@ -2659,7 +2659,7 @@ end
 
 Visuals_ESP_Toggles:AddDropdown("EntityESPOptions",     { 
 	Text = "Entity List",
-	Values = { "Rush","Ambush","Eyes","Dupe","Figure","Blitz","Lookman","Snare","Giggle","Grumble","Drones","Teller","Portrait","Creak","Stems","Noise","Hijack","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Mandrake Hole","Monument","Bramble","Scribbles","Bash","Server Cart","Electric Puddle","Vacuum Sideroom","Gloombat Eggs","AR0xMBUSH","RNIUSHCG==" },
+	Values = { "Rush","Ambush","Eyes","Dupe","Figure","Blitz","Lookman","Snare","Giggle","Grumble","Drones","Teller","Honcho","Portrait","Creak","Stems","Noise","Hijack","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Mandrake Hole","Monument","Bramble","Scribbles","Bash","Server Cart","Electric Puddle","Vacuum Sideroom","Gloombat Eggs","AR0xMBUSH","RNIUSHCG==" },
 	Default = { "Rush","Ambush","Eyes","Dupe","Figure","Blitz","Lookman","Snare","Giggle","Grumble","A-60","A-120","Sally","Jeff the Killer","Groundskeeper","Mandrake Hole","Monument","Bramble","Scribbles","Bash","Server Cart","Electric Puddle","Vacuum Sideroom","Gloombat Eggs" },
 	Multi = true,
 	AllowNull = true
@@ -2731,6 +2731,13 @@ Toggles.ObjectiveESPToggle:OnChanged(function(Value)
 				Label = "Time Lever"
 			elseif Object.Name == "MinesAnchor" then
 				Label = "Anchor [" .. Object:WaitForChild("Sign").TextLabel.Text .. "]"
+			elseif Object.Name == "ArchivesPackageDeposit" then
+				Label = "Package Deposit [" .. tostring(Object:GetAttribute("BoxID") or "?") .. "]"
+			elseif Object.Name == "ArchivesStorageBox" then
+				local BoxID = Object:GetAttribute("Tool_BoxID")
+				if BoxID ~= nil and (Global.ArchivesDeposits or {})[tostring(BoxID)] then
+					Label = "Storage Box [" .. tostring(BoxID) .. "]"
+				end
 			elseif Object.Name == "WaterPump" then
 				Functions.AddESP({ Object = Object.Wheel, Text = "Water Pump", Color = Options.ObjectiveESPColor.Value }, true)
 			elseif Object.Name == "VineGuillotine" then
@@ -2763,7 +2770,7 @@ local ChestLabels = {
 }
 local EntityESPLabels = {
 	JeffTheKiller = "Jeff the Killer", GiggleCeiling = "Giggle",
-	Snare = "Snare", GrumbleRig = "Grumble", TellerRig = "Teller",
+	Snare = "Snare", GrumbleRig = "Grumble", TellerRig = "Teller", HonchoRig = "Honcho",
 	Drones = "Drones", Creak = "Creak", StemsEntity = "Stems",
 	Noise = "Noise", Hijack = "Hijack",
 	Drakobloxxer = "Drakobloxxer", Hole = "Mandrake Hole", Groundskeeper = "Groundskeeper",
@@ -2779,7 +2786,7 @@ local EntityESPLabels = {
 }
 
 local NodeEntities = {
-	Rush = true, Ambush = true, Eyes = true, Blitz = true, Lookman = true, ["A-60"] = true, ["A-120"] = true, Sally = true, ["Jeff The Killer"] = true, Monument = true, Scribbles = true, Bash = true, ["Server Cart"] = true, ["Electric Puddle"] = true, ["Vacuum Sideroom"] = true, ["Gloombat Eggs"] = true, ["AR0xMBUSH"] = true, ["RNIUSHCG=="] = true, ["Portrait"] = true, ["Creak"] = true, ["Stems"] = true, ["Noise"] = true, ["Hijack"] = true
+	Rush = true, Ambush = true, Eyes = true, Blitz = true, Lookman = true, ["A-60"] = true, ["A-120"] = true, Sally = true, ["Jeff The Killer"] = true, Monument = true, Scribbles = true, Bash = true, ["Server Cart"] = true, ["Electric Puddle"] = true, ["Vacuum Sideroom"] = true, ["Gloombat Eggs"] = true, ["AR0xMBUSH"] = true, ["RNIUSHCG=="] = true, ["Portrait"] = true, ["Creak"] = true, ["Stems"] = true, ["Noise"] = true, ["Hijack"] = true, Honcho = true
 }
 
 Toggles.DoorESPToggle:OnChanged(function(Value)
@@ -4335,6 +4342,40 @@ Toggles.AutoForgetMeNot:OnChanged(function(Value)
 	end
 end)
 
+-- Archives (Honcho floor): a package deposit has attribute BoxID; a matching
+-- ArchivesStorageBox carries the same id as Tool_BoxID. Honcho/deposits/boxes can
+-- show up in any room, so rooms are never hardcoded here: pairs are matched by id
+-- and both sides are tracked until the other one shows up, in any order.
+Global.ArchivesDeposits = {}
+Global.ArchivesBoxes = {}
+
+Functions.LinkArchivesBox = function(Object, ID)
+	if ID == nil then return end
+	ID = tostring(ID)
+
+	if Object.Name == "ArchivesPackageDeposit" then
+		Global.ArchivesDeposits[ID] = Object
+		local Box = Global.ArchivesBoxes[ID]
+		if Box then
+			Functions.LabelArchivesPair(Object, Box, ID)
+		end
+	elseif Object.Name == "ArchivesStorageBox" then
+		Global.ArchivesBoxes[ID] = Object
+		local Deposit = Global.ArchivesDeposits[ID]
+		if Deposit then
+			Functions.LabelArchivesPair(Deposit, Object, ID)
+		end
+	end
+end
+
+Functions.LabelArchivesPair = function(Deposit, Box, ID)
+	if not (Deposit and Deposit.Parent and Box and Box.Parent) then return end
+	if Toggles.ObjectiveESPToggle.Value then
+		Functions.AddESP({ Object = Deposit, Text = "Package Deposit [" .. ID .. "]", Color = Options.ObjectiveESPColor.Value }, true)
+		Functions.AddESP({ Object = Box, Text = "Storage Box [" .. ID .. "]", Color = Options.ObjectiveESPColor.Value }, true)
+	end
+end
+
 Functions.HandleObject = function(Object)
 	for _, Room in CurrentRooms:GetChildren() do
 		if Object:IsDescendantOf(Room) then
@@ -4411,6 +4452,32 @@ Functions.HandleObject = function(Object)
 			end
 		end
 		table.insert(Objects.Entities, Object)
+	elseif Name == "HonchoRig" then
+		-- honcho entity: lives in workspace.LiveEntities in any room (never a fixed
+		-- room number), esp on the whole model like Creak; PrimaryPart is pinned so
+		-- the library can compute bounds over the full body
+		if Toggles.NotifyEntities.Value and Options.EntityList.Value["Honcho"] then
+			Functions.Notify({ Title = "Entity 'Honcho' has spawned.", Body = "Watch out for Honcho." })
+		end
+		if not Object.PrimaryPart then
+			Object.PrimaryPart = Object:FindFirstChild("HumanoidRootPart") or Object:FindFirstChild("Root") or Object:FindFirstChildWhichIsA("BasePart")
+		end
+		if Toggles.EntityESPToggle.Value and Options.EntityESPOptions.Value["Honcho"] then
+			Functions.AddESP({ Object = Object, Text = "Honcho", Color = Options.EntityESPColor.Value }, false)
+		end
+		table.insert(Objects.Entities, Object)
+	elseif Name == "ArchivesPackageDeposit" then
+		-- package deposit: shows its BoxID and links to the matching storage box
+		local BoxID = Object:GetAttribute("BoxID")
+		if Toggles.ObjectiveESPToggle.Value then
+			Functions.AddESP({ Object = Object, Text = "Package Deposit [" .. tostring(BoxID or "?") .. "]", Color = Options.ObjectiveESPColor.Value }, true)
+		end
+		Functions.LinkArchivesBox(Object, BoxID)
+		table.insert(Objects.Objectives, Object)
+	elseif Name == "ArchivesStorageBox" then
+		-- storage box: esp only once a deposit with the same id exists (Tool_BoxID matches a BoxID)
+		table.insert(Objects.Objectives, Object)
+		Functions.LinkArchivesBox(Object, Object:GetAttribute("Tool_BoxID"))
 	elseif Name:match("^MirrorRig_Portrait") and Object:IsA("Model") then
 		-- portrait clone of the player shown in mirror scenes: lives under the camera
 		-- (not in a room) and the game reuses one rig, moving it between mirrors, so
@@ -5450,6 +5517,7 @@ local TrackedObjects = {
 	CircularVent=true, Dumpster=true, SquareGrate=true, TriggerEventCollision=true, GrumbleRig=true,
 	GiggleCeiling=true, MinesGateButton=true, ElectricalKeyObtain=true, LibraryHintPaper=true,
 	Drones=true, TellerRig=true, DronesStampede=true,
+	HonchoRig=true, ArchivesPackageDeposit=true, ArchivesStorageBox=true,
 	Creak=true, StemsEntity=true, LargeScrew=true, DinkyLamp=true, BottleCrate=true,
 	StairwellTerminal=true, StairwellFireAlarm=true, TV_Stand=true, Cubby_Large_Tarped=true,
 	BrokenMonitor=true, JerryCan=true,
