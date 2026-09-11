@@ -2878,13 +2878,36 @@ local function RenameModule(Folder, From, To)
 	if Mod then Mod.Name = To end
 end
 
+local AntiScreechConnection
+
+local function RemoveCameraScreech()
+	local Camera = Services.Workspace:FindFirstChild("Camera")
+	local Screech = Camera and Camera:FindFirstChild("Screech")
+	if Screech then
+		Screech:Destroy()
+	end
+end
+
+local function SetAntiScreech(Value)
+	if AntiScreechConnection then
+		AntiScreechConnection:Disconnect()
+		AntiScreechConnection = nil
+	end
+
+	if not Value then return end
+
+	RemoveCameraScreech()
+	AntiScreechConnection = Services.Workspace.DescendantAdded:Connect(function(Object)
+		local Camera = Services.Workspace:FindFirstChild("Camera")
+		if Object.Name == "Screech" and Object.Parent == Camera then
+			Object:Destroy()
+		end
+	end)
+	table.insert(Conns, AntiScreechConnection)
+end
+
 local function SyncEntityRemoval()
 	local UIModules = FindUIModules()
-	if Toggles.RemoveScreech and Toggles.RemoveScreech.Value then
-		RenameModule(UIModules, "Screech", "Screech_Disabled")
-	else
-		RenameModule(UIModules, "Screech_Disabled", "Screech")
-	end
 	if Toggles.RemoveA90 and Toggles.RemoveA90.Value then
 		RenameModule(UIModules, "A90", "A90_Disabled")
 	else
@@ -2943,7 +2966,7 @@ local function RestoreAllModules()
 	if FloorReplicated then RestoreFolder(FloorReplicated) end
 end
 
-Toggles.RemoveScreech:OnChanged(function() SyncEntityRemoval() end)
+Toggles.RemoveScreech:OnChanged(function(Value) SetAntiScreech(Value) end)
 Toggles.RemoveHalt:OnChanged(function() SyncEntityRemoval() end)
 Toggles.RemoveA90:OnChanged(function() SyncEntityRemoval() end)
 Toggles.RemoveDread:OnChanged(function() SyncEntityRemoval() end)
