@@ -1717,13 +1717,6 @@ Self_Automation:AddToggle("AutoDropTV", {
 	Text = "Auto Drop TV", Default = false,
 	Tooltip = "Automatically takes control of the TV cart with boosted handling."
 })
-Self_Automation:AddToggle("AutoHonchoToggle", {
-	Text = "Auto Honcho", Default = false,
-	Tooltip = "Automatically teleports to the matching storage box, grabs the package and deposits it."
-})
-Self_Automation:AddSlider("AutoHonchoDelay", {
-	Text = "Action Delay", Min = 0, Max = 5, Default = 1, Rounding = 1, Compact = true
-})
 
 -- Exploits_Anti
 Exploits_Anti:AddToggle("RemoveDread",   { Text = "Anti Dread",    Default = false, Tooltip = "Prevents 'Dread' from spawning." })
@@ -2151,96 +2144,6 @@ Toggles.AutoDropTV:OnChanged(function(Value)
 		Functions.Notify({ Title = "Auto Drop TV", Body = "Cart dropped under the map." })
 	end)
 	table.insert(Conns, AutoDropTVConn)
-end)
-
-
-
-
--- Auto Honcho: pairs deposits (BoxID) with storage boxes (Tool_BoxID) and, once
--- both sides exist, teleports to the box, takes the package, then teleports to
--- the deposit and hands it in. Runs as a throttled scan so deposits that spawned
--- before the toggle was enabled are handled too; pairs are matched by id only.
-local AutoHonchoState = { Busy = false, Done = {}, Attempts = {}, Seen = {} }
-
-local function FindHonchoPrompt(Container, Excluded)
-	for _, Desc in ipairs(Container and Container:GetDescendants() or {}) do
-		if Desc:IsA("ProximityPrompt") and not (Excluded and Excluded[Desc]) then
-			return Desc
-		end
-	end
-	return nil
-end
-
-local function TeleportTo(Target)
-	local Root = Character and Character:FindFirstChild("HumanoidRootPart")
-	local Pivot = Target and Target.Parent and Target:GetPivot()
-	if not (Root and Pivot) then return false end
-	Root.CFrame = Pivot + Vector3.new(0, 3.5, 0)
-	return true
-end
-
-local function FireHonchoPrompts(Container)
-	if not (Functions.FirePrompt and Container and Container.Parent) then return end
-	local Fired = {}
-	for _ = 1, 3 do
-		local Prompt = FindHonchoPrompt(Container, Fired)
-		if not Prompt then break end
-		Fired[Prompt] = true
-		Functions.FirePrompt(Prompt)
-		task.wait(Options.AutoHonchoDelay and Options.AutoHonchoDelay.Value or 1)
-	end
-end
-
-Conns.AutoHoncho = Services.RunService.Heartbeat:Connect(function()
-	if not (Toggles.AutoHonchoToggle and Toggles.AutoHonchoToggle.Value) then return end
-	if AutoHonchoState.Busy then return end
-	if tick() - (AutoHonchoState.LastCheck or 0) < 1 then return end
-	AutoHonchoState.LastCheck = tick()
-
-	for ID, Deposit in (Global.ArchivesDeposits or {}) do
-		if Deposit.Parent and not AutoHonchoState.Done[ID] then
-			local Box = (Global.ArchivesBoxes or {})[ID]
-			if Box and Box.Parent then
-				if AutoHonchoState.Seen[ID] ~= Deposit then
-					AutoHonchoState.Seen[ID] = Deposit
-					AutoHonchoState.Done[ID] = nil
-					AutoHonchoState.Attempts[ID] = nil
-				end
-				AutoHonchoState.Busy = true
-				task.spawn(function()
-					local Attempts = (AutoHonchoState.Attempts[ID] or 0) + 1
-					AutoHonchoState.Attempts[ID] = Attempts
-					AutoHonchoState.Done[ID] = true
-
-					Functions.Notify({ Title = "Auto Honcho", Body = "Fetching package for deposit [" .. ID .. "]." })
-
-					local ok = pcall(function()
-						if TeleportTo(Box) then
-							FireHonchoPrompts(Box)
-							if TeleportTo(Deposit) then
-								FireHonchoPrompts(Deposit)
-							end
-						end
-					end)
-
-					-- a deposit that is still around after the hand-in didn't go
-					-- through: let the scan retry it instead of locking the pair
-					if ok and Deposit.Parent and Attempts < 3 then
-						AutoHonchoState.Done[ID] = nil
-						AutoHonchoState.Busy = false
-						return
-					end
-					if not ok or (Deposit.Parent and Attempts >= 3) then
-						Functions.Notify({ Title = "Auto Honcho", Body = "Delivery [" .. ID .. "] failed." })
-					else
-						Functions.Notify({ Title = "Auto Honcho", Body = "Deposit [" .. ID .. "] completed." })
-					end
-					AutoHonchoState.Busy = false
-				end)
-				break
-			end
-		end
-	end
 end)
 
 
