@@ -404,7 +404,7 @@ if Library.ActiveLoading and Library.ActiveLoading.Destroyed ~= true then
 end
 local Loading = Library:CreateLoading({
 	Title = "lolcheat V4",
-	Icon = 77196040991392,
+	Icon = 95816097006870,
 	TotalSteps = 4,
 	ShowSidebar = true,
 	AlwaysOnTop = true,
