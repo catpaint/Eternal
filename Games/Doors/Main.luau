@@ -968,6 +968,38 @@ if not FloorReplicated then
 	FloorReplicated = Instance.new("Folder")
 end
 
+Functions.IsFloorAllowed = function(allowedFloors)
+	if not allowedFloors then return true end
+	local cur = tostring(Floor or "")
+	if type(allowedFloors) == "string" then
+		return cur:lower() == allowedFloors:lower()
+	elseif type(allowedFloors) == "table" then
+		for _, f in ipairs(allowedFloors) do
+			if cur:lower() == tostring(f):lower() then return true end
+		end
+	end
+	return false
+end
+
+Functions.CheckFloorToggle = function(toggleKey, allowedFloors, featureName)
+	if not Functions.IsFloorAllowed(allowedFloors) then
+		local toggle = Toggles[toggleKey]
+		if toggle and toggle.Value then
+			task.spawn(function()
+				pcall(function() toggle:SetValue(false) end)
+			end)
+		end
+		local allowedStr = type(allowedFloors) == "table" and table.concat(allowedFloors, ", ") or tostring(allowedFloors)
+		Functions.Notify({
+			Title = "Floor Incompatible",
+			Body = (featureName or toggleKey) .. " is only available on: " .. allowedStr .. " (Current floor: " .. tostring(Floor) .. ")",
+			Time = 4
+		})
+		return false
+	end
+	return true
+end
+
 local FakeEvents = {
 	Screech = Instance.new("RemoteEvent"),
 	Shade   = Instance.new("RemoteEvent"),
@@ -1578,9 +1610,2071 @@ do
     Details:AddLabel("Screenshot-only features absent from the supplied source have not been added as dummy controls.", true)
     local Components = Tabs.Addons:AddLeftGroupbox("Included", "blocks")
     Components:AddLabel("Obsidian — menu\nThemeManager — themes\nSaveManager — configurations\nlolcheat ESP — existing renderer", true)
-    local Notes = Tabs.Addons:AddRightGroupbox("Compatibility", "info")
-    Notes:AddLabel("Keep using your existing loader. This game module requires the same lolcheat environment and dependencies as the original file.", true)
 end
+
+-- ============================================================================
+-- Tplay's Addon Complete Features Integration
+-- ============================================================================
+do
+	local Tplay_TabboxLeft1 = Tabs.Addons:AddLeftTabbox("Tplay - Movement & Bypass")
+	local Tplay_Main = Tplay_TabboxLeft1:AddTab("Main", "sparkles")
+	local Tplay_Combat = Tplay_TabboxLeft1:AddTab("Godmode & Combat", "shield")
+
+	local Tplay_TabboxLeft2 = Tabs.Addons:AddLeftTabbox("Tplay - Items & Floor Completion")
+	local Tplay_Items = Tplay_TabboxLeft2:AddTab("Items", "package")
+	local Tplay_Floors = Tplay_TabboxLeft2:AddTab("Floor Completion", "trophy")
+
+	local Tplay_TabboxRight1 = Tabs.Addons:AddRightTabbox("Tplay - QoL & Visuals")
+	local Tplay_QoL = Tplay_TabboxRight1:AddTab("QoL & Alerts", "bell")
+	local Tplay_Visuals = Tplay_TabboxRight1:AddTab("Death Lights & Mod", "sparkles")
+
+	local Tplay_TabboxRight2 = Tabs.Addons:AddRightTabbox("Tplay - Trolling & Admin")
+	local Tplay_Troll = Tplay_TabboxRight2:AddTab("Trolling", "smile")
+	local Tplay_Admin = Tplay_TabboxRight2:AddTab("Admin Panel", "terminal")
+
+	local TplayVars = {
+		NetworkActive = false,
+		NetworkOld = {},
+		OrbitDropsConnection = nil,
+		OrbitGlowsticksConnection = nil,
+		WalkSpeedConnection = nil,
+		AntiTeleportConnection = nil,
+		ACMAConnection = nil,
+		OnChairOrCartGrab = nil,
+		LoopStealConnection = nil,
+		HidingRoomConnection = nil,
+		GSNotifierConnection = nil,
+		MonumentWatcher = nil,
+		EndingCutsceneConnection = nil,
+		CrazyPartsConnection = nil,
+		UpsideDownConnection = nil,
+		WalkAnimSpoofConnection = nil,
+		AGSConnection = nil,
+		AFRConnection = nil,
+		POAConnection = nil,
+		InfiniteCrucifixConnection = nil,
+		OnDupeAnimation = nil,
+		OnDupeSpawned = nil,
+		OnDupeRemoved = nil,
+		SECConnection = nil,
+		OnCutsceneSEC = nil,
+		OnStatistics = nil,
+		DeletePropsConnection = nil,
+		BodyVelocity = Instance.new("BodyVelocity"),
+		WalkSpeed = 15,
+		LadderSpeed = 15,
+		OrbitSpeed = 1,
+		OrbitOffset = 4,
+		MotorSpeed = 1,
+		MotorMethod = "BrokenSpine",
+		MotorAbuseEnabled = false,
+		UpsideDownEnabled = false,
+		GhostReviveMethod = "Method #1",
+		ConnectingChair = false,
+		ACBypassNotify = nil,
+		Groundskeepers = {},
+		FigureRigs = {},
+		stopTauntTimes = 0,
+		lastTaunt = -1/0,
+		accurateAim = false,
+		fastThrow = false,
+		showPathfind = false,
+		AllPathfindNodes = {},
+		doorReach = false,
+		ping = 0,
+		spoofedGS = false,
+		spoofedFR = false,
+		SelectedPlayerItem = nil,
+		PlayerToKill = nil,
+		SelectedAPPlayer = nil,
+		WalkSpoofMethod = "NoAnimation",
+		SelfDontSpoof = false,
+		LightSelection = "Blue",
+		DeluluSound = "7107161936",
+		DeluluColor = Color3.new(1, 1, 1),
+		DeluluCaptionEnabled = false,
+		LODEnabled = false,
+		NLDEnabled = false,
+		EDCEnabled = false,
+		AdminLoaded = false,
+		AdminItems = {},
+		AntiStealEnabled = false,
+		NoPromptEnabled = false,
+		MandrakesPos = {},
+		DrawersConnections = {},
+		PartsConnections = {},
+		ConnectedPrompts = {},
+		Dupes = {},
+	}
+	TplayVars.BodyVelocity.MaxForce = Vector3.new(1/0, 1/0, 1/0)
+
+	-- Environment Helpers
+	local sethidden = mstudio45.Environment.sethiddenproperty or sethiddenproperty
+	local gethidden = mstudio45.Environment.gethiddenproperty or gethiddenproperty
+	local isnetowner = mstudio45.Environment.isnetworkowner or isnetworkowner or function() return true end
+	local fireprompt = mstudio45.Environment.fireproximityprompt or fireproximityprompt
+	local firetouch = mstudio45.Environment.firetouchinterest or firetouchinterest
+	local replsignal = mstudio45.Environment.replicatesignal or replicatesignal
+
+	local function ToggleNetworkOwner(bool)
+		if not sethidden or not gethidden then return end
+		if bool and not TplayVars.NetworkActive then
+			TplayVars.NetworkActive = true
+			TplayVars.NetworkOld.allowSleep = settings().Physics.AllowSleep
+			TplayVars.NetworkOld.replicaFocus = LocalPlayer.ReplicationFocus
+			TplayVars.NetworkOld.maxSimRadius = gethidden(LocalPlayer, "MaximumSimulationRadius")
+			TplayVars.NetworkOld.simRadius = gethidden(LocalPlayer, "SimulationRadius")
+
+			settings().Physics.AllowSleep = false
+			LocalPlayer.ReplicationFocus = Services.Workspace
+
+			TplayVars.NetworkConnection = Services.RunService.Heartbeat:Connect(function()
+				sethidden(LocalPlayer, "MaximumSimulationRadius", 1/0)
+				sethidden(LocalPlayer, "SimulationRadius", 1/0)
+				if replsignal then
+					pcall(replsignal, LocalPlayer.SimulationRadiusChanged, 1/0)
+				end
+				for _, p in ipairs(Services.Players:GetPlayers()) do
+					if p ~= LocalPlayer then
+						sethidden(p, "MaxSimulationRadius", 0)
+						sethidden(p, "SimulationRadius", 0)
+						if replsignal then
+							pcall(replsignal, p.SimulationRadiusChanged, 0)
+						end
+					end
+				end
+			end)
+		elseif not bool and TplayVars.NetworkActive then
+			TplayVars.NetworkActive = false
+			if TplayVars.NetworkConnection then
+				TplayVars.NetworkConnection:Disconnect()
+				TplayVars.NetworkConnection = nil
+			end
+			settings().Physics.AllowSleep = TplayVars.NetworkOld.allowSleep or true
+			LocalPlayer.ReplicationFocus = TplayVars.NetworkOld.replicaFocus
+			if TplayVars.NetworkOld.maxSimRadius then
+				sethidden(LocalPlayer, "MaximumSimulationRadius", TplayVars.NetworkOld.maxSimRadius)
+			end
+			if TplayVars.NetworkOld.simRadius then
+				sethidden(LocalPlayer, "SimulationRadius", TplayVars.NetworkOld.simRadius)
+			end
+			TplayVars.NetworkOld = {}
+		end
+	end
+
+	local function WeldTo(TargetPart, Offset)
+		local Root = Character and Character:FindFirstChild("HumanoidRootPart")
+		if not Root or not TargetPart then return nil end
+
+		local WeldObj = {}
+		local OldAllowSleep = settings().Physics.AllowSleep
+		settings().Physics.AllowSleep = false
+
+		local conn = Services.RunService.Heartbeat:Connect(function()
+			if not Character.Parent or not TargetPart.Parent then
+				if WeldObj.Destroy then WeldObj:Destroy() end
+				return
+			end
+			local clamp = Vector3.new(math.clamp(TargetPart.AssemblyLinearVelocity.X, -10, 10), 0, math.clamp(TargetPart.AssemblyLinearVelocity.Z, -10, 10))
+			Character:PivotTo(TargetPart.CFrame * Offset + clamp / 10)
+			Root.AssemblyLinearVelocity = Vector3.zero
+			Root.AssemblyAngularVelocity = Vector3.zero
+			if sethidden then
+				pcall(sethidden, Root, "PhysicsRepRootPart", TargetPart)
+			end
+		end)
+
+		WeldObj.OldAllowSleep = OldAllowSleep
+		function WeldObj:Destroy()
+			if conn then conn:Disconnect() end
+			if Root then
+				Root.AssemblyLinearVelocity = Vector3.zero
+				Root.AssemblyAngularVelocity = Vector3.zero
+			end
+			if sethidden then
+				pcall(sethidden, Root, "PhysicsRepRootPart", nil)
+			end
+			self.Destroy = nil
+		end
+		return WeldObj
+	end
+
+	local function InWhatRoom(object)
+		local parent = object.Parent
+		while parent and parent.Name:match("%d+") ~= parent.Name do
+			parent = parent.Parent
+		end
+		return parent and parent.Parent == CurrentRooms and tonumber(parent.Name)
+	end
+
+	local function PlayerDisplayName(player)
+		return player and (`{player.DisplayName}` .. (player.DisplayName == player.Name and "" or ` (@{player.Name})`)) or "Unknown"
+	end
+
+	local function GetEquippedTool(player)
+		return player and player.Character and player.Character:FindFirstChildOfClass("Tool")
+	end
+
+	local function ActivatePrompt(hrp, drop, prompt)
+		if prompt and prompt:IsA("ProximityPrompt") and fireprompt then
+			task.spawn(function()
+				local start = os.clock()
+				while prompt.Parent and hrp.Parent and os.clock() - start < 3 do
+					drop:PivotTo(hrp.CFrame)
+					fireprompt(prompt)
+					task.wait(0.05)
+				end
+			end)
+		end
+	end
+
+	-- Entity tracking for Groundskeeper & Figure
+	local function AddGS(gs)
+		if gs.Name == "Groundskeeper" and gs:WaitForChild("HumanoidRootPart", 1) then
+			table.insert(TplayVars.Groundskeepers, gs)
+			local head = gs:WaitForChild("Head", 5)
+			if head then
+				head.ChildAdded:Connect(function(child)
+					if Toggles.Tplay_GSNotifier and Toggles.Tplay_GSNotifier.Value and child.Name:sub(1, 7) == "gkgrunt" then
+						TplayVars.lastTaunt = os.clock()
+						TplayVars.stopTauntTimes += 1
+						task.spawn(function()
+							local staticTimes = TplayVars.stopTauntTimes
+							while staticTimes == TplayVars.stopTauntTimes and TplayVars.lastTaunt < os.clock() - 3 do
+								task.wait(0.1)
+							end
+							if staticTimes == TplayVars.stopTauntTimes then
+								TplayVars.stopTauntTimes = 0
+								if staticTimes >= 3 then
+									Functions.Notify({ Title = "Groundskeeper", Body = "Groundskeeper is not stuck anymore!", Time = 3 })
+								end
+							end
+						end)
+						if TplayVars.stopTauntTimes == 3 then
+							Functions.Notify({ Title = "Groundskeeper", Body = "Groundskeeper is stuck!", Time = 3 })
+						end
+					end
+				end)
+			end
+		end
+	end
+
+	local function AddFR(fr)
+		if fr.Name == "FigureRig" and fr:WaitForChild("Root", 1) then
+			table.insert(TplayVars.FigureRigs, fr)
+		end
+	end
+
+	if CurrentRooms then
+		for _, c in ipairs(CurrentRooms:GetDescendants()) do
+			if c.Name == "Groundskeeper" then task.spawn(AddGS, c) end
+			if c.Name == "FigureRig" then task.spawn(AddFR, c) end
+		end
+		CurrentRooms.DescendantAdded:Connect(function(c)
+			if c.Name == "Groundskeeper" then task.spawn(AddGS, c) end
+			if c.Name == "FigureRig" then task.spawn(AddFR, c) end
+		end)
+		CurrentRooms.DescendantRemoving:Connect(function(c)
+			local foundGS = table.find(TplayVars.Groundskeepers, c)
+			local foundFR = table.find(TplayVars.FigureRigs, c)
+			if foundGS then table.remove(TplayVars.Groundskeepers, foundGS) end
+			if foundFR then table.remove(TplayVars.FigureRigs, foundFR) end
+		end)
+	end
+
+	local function ShouldSpoofGS(hrp)
+		for _, gs in ipairs(TplayVars.Groundskeepers) do
+			local ghrp = gs:FindFirstChild("HumanoidRootPart")
+			if ghrp and (ghrp.Position * Vector3.new(1, 5, 1) - hrp.Position * Vector3.new(1, 5, 1)).Magnitude < 90 then
+				return true
+			end
+		end
+		return false
+	end
+
+	local function ShouldSpoofFR(hrp)
+		for _, fr in ipairs(TplayVars.FigureRigs) do
+			local root = fr:FindFirstChild("Root")
+			if root and (root.Position * Vector3.new(1, 0, 1) - hrp.Position * Vector3.new(1, 0, 1)).Magnitude < 20 then
+				return true
+			end
+		end
+		return false
+	end
+
+	-- Ping measurement loop
+	task.spawn(function()
+		while task.wait(0.1) and not Library.Unloaded do
+			local RequestLocalAsset = RemotesFolder:FindFirstChild("RequestLocalAsset")
+			if RequestLocalAsset then
+				local start = os.clock()
+				pcall(function() RequestLocalAsset:InvokeServer({{}}) end)
+				TplayVars.ping = os.clock() - start
+			end
+		end
+	end)
+
+	-- =========================================================================
+	-- 1. MAIN TAB (Movement, Anticheat & Prop Tools)
+	-- =========================================================================
+
+	local function FindChair(attachment)
+		local Misc = Services.Workspace:FindFirstChild("Misc")
+		if Misc then
+			for _, base in Misc:QueryDescendants(`> #{Floor}OfficeChair > #Base`) do
+				local align = base:FindFirstChild("CartAlignPosition")
+				local collider = base.Parent and base.Parent:FindFirstChild("Collider")
+				if collider and (align or isnetowner(collider)) then
+					return base.Parent
+				end
+			end
+		end
+		return nil
+	end
+
+	local function FindAlingsForChairOrCart(attachment)
+		local Misc = Services.Workspace:FindFirstChild("Misc")
+		if Misc then
+			for _, base in Misc:QueryDescendants(`> #{Floor}OfficeChair > #Base, > #ShoppingCart > #Base`) do
+				local alignPos = base:FindFirstChild("CartAlignPosition")
+				local alignRot = base:FindFirstChild("CartAlignOrientation")
+				if alignPos and alignRot then
+					return alignPos, alignRot, base.Parent
+				end
+			end
+		end
+		return nil, nil, nil
+	end
+
+	local function ConnectChair(chair, promptBlock, restoring)
+		if TplayVars.ConnectingChair then return end
+		TplayVars.ConnectingChair = true
+		if restoring and fireprompt then
+			while (function()
+				for _, descendant in Character:QueryDescendants("> #CollisionPart > #CartTargetAttachment") do
+					if descendant:IsA("Attachment") then return false end
+				end
+				return true
+			end)() do
+				chair:PivotTo(Character:GetPivot() + Character:GetPivot().LookVector * 5)
+				local cartPrompt = chair:FindFirstChild("Attachment") and chair.Attachment:FindFirstChild("CartPrompt")
+				if cartPrompt then fireprompt(cartPrompt) end
+				task.wait()
+			end
+		end
+
+		local collider = chair:FindFirstChild("Collider")
+		local CartControl = RemotesFolder:FindFirstChild("CartControl")
+		if CartControl then CartControl:FireServer() end
+		task.wait(0.05)
+
+		local doo = true
+		task.spawn(function()
+			while doo and collider and fireprompt do
+				local seatPrompt = collider:FindFirstChild("SeatPrompt")
+				if seatPrompt then fireprompt(seatPrompt) end
+				task.wait(0.05)
+			end
+		end)
+		Character:GetAttributeChangedSignal("SeatedInSeat"):Wait()
+		doo = false
+		Character:SetAttribute("SeatedInSeat", false)
+		task.wait(0.05)
+
+		if TplayVars.ACBypassNotify then
+			TplayVars.ACBypassNotify:Destroy()
+			TplayVars.ACBypassNotify = nil
+		end
+		Functions.Notify({ Title = "Anticheat Bypass", Body = "Anticheat was bypassed with Chair!", Time = 3 })
+		TplayVars.ConnectingChair = false
+
+		local val = 0
+		TplayVars.ChairConnection = Services.RunService.Heartbeat:Connect(function(dt)
+			val = (val + dt * 3600) % 360
+			if collider then
+				collider.AssemblyLinearVelocity = Vector3.new(0, 10000, 0)
+			end
+			chair:PivotTo(Character:GetPivot())
+			Services.RunService.RenderStepped:Wait()
+			chair:PivotTo(Character:GetPivot() - Vector3.new(0, -100, 0))
+		end)
+
+		while TplayVars.ChairConnection and chair:IsDescendantOf(Services.Workspace) and isnetowner(promptBlock) and Character.Parent and Character:GetAttribute("SeatedInSeat") ~= nil do
+			task.wait(0.1)
+		end
+
+		if TplayVars.ChairConnection and chair:IsDescendantOf(Services.Workspace) and isnetowner(promptBlock) and Character.Parent and Character:GetAttribute("DeathReason") ~= "Impact" then
+			Character:SetAttribute("DeathReason", "_Impact")
+			TplayVars.ACBypassNotify = Library:Notify({
+				Title = "Anticheat Bypass [Warning]",
+				Description = "Anticheat bypass was broken, trying to restore it...",
+				Persist = true
+			})
+			ConnectChair(chair, promptBlock, true)
+		else
+			if TplayVars.ChairConnection then
+				TplayVars.ChairConnection:Disconnect()
+				TplayVars.ChairConnection = nil
+			end
+		end
+	end
+
+	Tplay_Main:AddToggle("Tplay_AnticheatBypass", {
+		Text = "Anticheat Bypass (Chair)",
+		Default = false,
+		Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Archives", "Stairwell"}),
+		DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Archives", "Stairwell"}) and ("Only available on: Hotel, Mines, Archives, Stairwell (Current: " .. tostring(Floor) .. ")") or nil,
+		Tooltip = "Grab a chair to bypass the anticheat completely.",
+		Callback = function(Value)
+			if Value then
+				if not Functions.CheckFloorToggle("Tplay_AnticheatBypass", {"Hotel", "Mines", "Archives", "Stairwell"}, "Anticheat Bypass (Chair)") then
+					return
+				end
+				TplayVars.ACBypassNotify = Library:Notify({
+					Title = "Anticheat Bypass",
+					Description = "Grab a chair to bypass anticheat.",
+					Persist = true
+				})
+				TplayVars.OnChairGrab = Character.DescendantAdded:Connect(function(descendant)
+					if not TplayVars.ChairConnection and descendant:IsA("Attachment") and descendant.Name == "CartTargetAttachment" and descendant.Parent and descendant.Parent.Name == "CollisionPart" then
+						local chair = FindChair(descendant)
+						local promptBlock = chair and chair:FindFirstChild("PromptBlocker")
+						if promptBlock then
+							ConnectChair(chair, promptBlock)
+						end
+					end
+				end)
+			else
+				if TplayVars.ACBypassNotify then
+					TplayVars.ACBypassNotify:Destroy()
+					TplayVars.ACBypassNotify = nil
+				end
+				if TplayVars.OnChairGrab then
+					TplayVars.OnChairGrab:Disconnect()
+					TplayVars.OnChairGrab = nil
+				end
+				if TplayVars.ChairConnection then
+					TplayVars.ChairConnection:Disconnect()
+					TplayVars.ChairConnection = nil
+				end
+			end
+		end
+	}):AddKeyPicker("Tplay_AnticheatBypassKey", {
+		Default = "None",
+		SyncToggleState = true,
+		Mode = "Toggle",
+		Text = "Anticheat Bypass (Chair)"
+	})
+
+	Tplay_Main:AddToggle("Tplay_AnticheatManipulationAlt", {
+		Text = "Anticheat Manipulation (BodyVel)",
+		Default = false,
+		Tooltip = "Alternative method of AC manipulation using camera look vector BodyVelocity.",
+		Callback = function(Value)
+			if Value then
+				TplayVars.BodyVelocity.Parent = RootPart
+				TplayVars.ACMAConnection = Services.RunService.RenderStepped:Connect(function()
+					local cam = Services.Workspace.CurrentCamera
+					if cam then
+						TplayVars.BodyVelocity.Velocity = cam.CFrame.LookVector * 2.25
+					end
+				end)
+			else
+				TplayVars.BodyVelocity.Parent = nil
+				if TplayVars.ACMAConnection then
+					TplayVars.ACMAConnection:Disconnect()
+					TplayVars.ACMAConnection = nil
+				end
+			end
+		end
+	}):AddKeyPicker("Tplay_AnticheatManipulationAltKey", {
+		Default = "Y",
+		SyncToggleState = true,
+		Mode = "Hold",
+		Text = "Anticheat Manipulation Alt"
+	})
+
+	Tplay_Main:AddToggle("Tplay_FastChairAndCart", {
+		Text = "Fast Chair & Cart",
+		Default = false,
+		Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Archives", "Stairwell"}),
+		DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Archives", "Stairwell"}) and ("Only available on: Hotel, Mines, Archives, Stairwell (Current: " .. tostring(Floor) .. ")") or nil,
+		Tooltip = "Instantly repositions chairs and shopping carts to character while pushing.",
+		Callback = function(Value)
+			if Value then
+				if not Functions.CheckFloorToggle("Tplay_FastChairAndCart", {"Hotel", "Mines", "Archives", "Stairwell"}, "Fast Chair & Cart") then
+					return
+				end
+				TplayVars.OnChairOrCartGrab = Character.DescendantAdded:Connect(function(desc)
+					if desc:IsA("Attachment") and desc.Name == "CartTargetAttachment" and desc.Parent and desc.Parent.Name == "CollisionPart" then
+						local alignPos, alignRot, targetChair = FindAlingsForChairOrCart(desc)
+						if alignPos and alignRot and targetChair then
+							alignPos:Destroy()
+							alignRot:Destroy()
+							while TplayVars.OnChairOrCartGrab and desc.Parent and targetChair.Parent do
+								targetChair:PivotTo(Character:GetPivot() * CFrame.new(0, 0, -3.75) - Vector3.new(0, 1.3, 0))
+								Services.RunService.RenderStepped:Wait()
+							end
+						end
+					end
+				end)
+			else
+				if TplayVars.OnChairOrCartGrab then
+					TplayVars.OnChairOrCartGrab:Disconnect()
+					TplayVars.OnChairOrCartGrab = nil
+				end
+			end
+		end
+	}):AddKeyPicker("Tplay_FastChairAndCartKey", {
+		Default = "None",
+		SyncToggleState = true,
+		Mode = "Toggle",
+		Text = "Fast Chair & Cart"
+	})
+
+	Tplay_Main:AddToggle("Tplay_BringDrawerWithKey", {
+		Text = "Bring Drawer With Key",
+		Default = false,
+		Disabled = not Functions.IsFloorAllowed({"Hotel", "Backdoor", "Endless", "Ripple"}),
+		DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Backdoor", "Endless", "Ripple"}) and ("Only available on: Hotel, Backdoor, Endless, Ripple (Current: " .. tostring(Floor) .. ")") or nil,
+		Tooltip = "Brings drawer container containing the key directly to you.",
+		Callback = function(Value)
+			if Value then
+				if not Functions.CheckFloorToggle("Tplay_BringDrawerWithKey", {"Hotel", "Backdoor", "Endless", "Ripple"}, "Bring Drawer With Key") then
+					return
+				end
+				ToggleNetworkOwner(true)
+				if CurrentRooms then
+					for _, drawer in CurrentRooms:QueryDescendants("#DrawerContainer") do
+						task.spawn(function()
+							local key = drawer:WaitForChild("KeyObtain", 1)
+							local main = drawer:FindFirstChild("Main")
+							local constraint = drawer:FindFirstChild("Constraint")
+							if key and main and constraint then
+								constraint.Enabled = false
+								main.CFrame = Character:GetPivot() * CFrame.Angles(0, math.rad(180), 0) + Character:GetPivot().LookVector * 3
+								main.AssemblyLinearVelocity = Vector3.zero
+								main.AssemblyAngularVelocity = Vector3.zero
+							end
+						end)
+					end
+				end
+			else
+				ToggleNetworkOwner(false)
+			end
+		end
+	}):AddKeyPicker("Tplay_BringDrawerWithKeyKey", {
+		Default = "None",
+		SyncToggleState = true,
+		Mode = "Toggle",
+		Text = "Bring Drawer With Key"
+	})
+
+	Tplay_Main:AddToggle("Tplay_MinecartChaseSkip", {
+		Text = "Minecart Chase Skip",
+		Default = false,
+		Disabled = not Functions.IsFloorAllowed("Mines"),
+		DisabledTooltip = not Functions.IsFloorAllowed("Mines") and ("Only available on: Mines (Current: " .. tostring(Floor) .. ")") or nil,
+		Tooltip = "Skips the minecart track chase before room 50 in Mines.",
+		Callback = function(Value)
+			if Value and not Functions.CheckFloorToggle("Tplay_MinecartChaseSkip", "Mines", "Minecart Chase Skip") then
+				return
+			end
+			local NodeObject = Services.ReplicatedStorage:FindFirstChild("NodeObject")
+			local MinecartNodes = NodeObject and NodeObject:FindFirstChild("MinecartNodes")
+			if MinecartNodes then
+				local req = require(MinecartNodes)
+				if req and req.Decode and hookfunction then
+					if Value then
+						req._oldDecode = req.Decode
+						hookfunction(req.Decode, function(nodes, folder, start)
+							if folder and folder.Parent and (tonumber(folder.Parent.Name) or 0) < 50 then
+								return nil
+							end
+							return req._oldDecode(nodes, folder, start)
+						end)
+					else
+						if req._oldDecode and isfunctionhooked and isfunctionhooked(req.Decode) then
+							restorefunction(req.Decode)
+						end
+					end
+				end
+			end
+		end
+	})
+
+	Tplay_Main:AddToggle("Tplay_AntiTeleport", {
+		Text = "Anti Teleport",
+		Default = false,
+		Tooltip = "Mitigates unexpected server teleports and rollbacks.",
+		Callback = function(Value)
+			if Value then
+				TplayVars.AntiTeleportConnection = Services.RunService.Heartbeat:Connect(function()
+					if RootPart and Humanoid then
+						local oldCFrame = RootPart.CFrame
+						local oldVel = RootPart.AssemblyLinearVelocity
+						Services.RunService.Heartbeat:Wait()
+						if (oldCFrame.Position - RootPart.Position).Magnitude > (Humanoid.WalkSpeed / 100 * 2.5) then
+							Character:PivotTo(oldCFrame)
+							RootPart.AssemblyLinearVelocity = oldVel
+						end
+					end
+				end)
+			else
+				if TplayVars.AntiTeleportConnection then
+					TplayVars.AntiTeleportConnection:Disconnect()
+					TplayVars.AntiTeleportConnection = nil
+				end
+			end
+		end
+	}):AddKeyPicker("Tplay_AntiTeleportKey", {
+		Default = "None",
+		SyncToggleState = true,
+		Mode = "Toggle",
+		Text = "Anti Teleport"
+	})
+
+	Tplay_Main:AddToggle("Tplay_AntiTeleportRaknet", {
+		Text = "Anti Teleport [RakNet]",
+		Default = false,
+		Tooltip = "Blocks teleport packets from the server using RakNet packet hook.",
+		Callback = function(Value)
+			if Value and raknet and raknet.addreceivehook then
+				pcall(function()
+					raknet.addreceivehook(function(packet)
+						if packet.AsArray and packet.AsArray[1] == 131 and packet.AsArray[2] == 3 then
+							local inst = raknet.get_instance_by_id(1, buffer.readu32(packet.AsBuffer, 3))
+							if inst and inst:IsA("Status") and inst.Parent == Humanoid then
+								packet:Block()
+								Character:PivotTo(Character:GetPivot())
+							end
+						end
+					end)
+				end)
+			end
+		end
+	})
+
+	Tplay_Main:AddDivider()
+
+	Tplay_Main:AddSlider("Tplay_WalkSpeed", {
+		Text = "WalkSpeed Override",
+		Default = 15,
+		Min = 15,
+		Max = 75,
+		Rounding = 0,
+		Compact = true,
+		Callback = function(v)
+			TplayVars.WalkSpeed = v
+			if TplayVars.WalkSpeedConnection then
+				Humanoid.WalkSpeed = v
+			end
+		end
+	})
+
+	Tplay_Main:AddSlider("Tplay_LadderSpeed", {
+		Text = "Ladder Speed",
+		Default = 15,
+		Min = 15,
+		Max = 75,
+		Rounding = 0,
+		Compact = true,
+		Callback = function(v)
+			TplayVars.LadderSpeed = v
+		end
+	})
+
+	Tplay_Main:AddToggle("Tplay_SlideSpeedHack", {
+		Text = "Slide SpeedHack",
+		Default = false,
+		Tooltip = "Applies speedhack via crouch-slide state desync.",
+		Callback = function(Value)
+			if Value then
+				TplayVars.WalkSpeedConnection = Services.RunService.RenderStepped:Connect(function()
+					if Character and Humanoid and Character.Parent then
+						Character:SetAttribute("SpeedBoostBehind", TplayVars.LadderSpeed - 15)
+						Humanoid.WalkSpeed = TplayVars.WalkSpeed
+					end
+				end)
+				local CrouchRemote = RemotesFolder:FindFirstChild("Crouch")
+				if CrouchRemote then
+					CrouchRemote:FireServer(Character:GetAttribute("Crouching"), true)
+				end
+			else
+				if TplayVars.WalkSpeedConnection then
+					TplayVars.WalkSpeedConnection:Disconnect()
+					TplayVars.WalkSpeedConnection = nil
+				end
+				Character:SetAttribute("SpeedBoostBehind", 0)
+				Humanoid.WalkSpeed = 15
+			end
+		end
+	}):AddKeyPicker("Tplay_SlideSpeedHackKey", {
+		Default = "None",
+		SyncToggleState = true,
+		Mode = "Toggle",
+		Text = "Slide SpeedHack"
+	})
+
+	Tplay_Main:AddToggle("Tplay_RakNetSpeedHack", {
+		Text = "RakNet SpeedHack",
+		Default = false,
+		Tooltip = "Modifies packet timestamps for high speed synchronization.",
+		Callback = function(Value)
+			if Value and raknet and raknet.addsendhook then
+				pcall(function()
+					raknet.addsendhook(function(packet)
+						if packet.PacketId == 0x1B then
+							buffer.writeu32(packet.AsBuffer, 1, 0xFFFFFFFF)
+						end
+					end)
+				end)
+			end
+		end
+	})
+
+	Tplay_Main:AddToggle("Tplay_DoorReachAlt", {
+		Text = "Door Reach Alt",
+		Default = false,
+		Tooltip = "Alternative door reach that fires ClientOpen within 30 studs.",
+		Callback = function(Value)
+			TplayVars.doorReach = Value
+			if Value then
+				task.spawn(function()
+					local lastTime = 0
+					while TplayVars.doorReach do
+						local Root = Character and Character:FindFirstChild("HumanoidRootPart")
+						local Room = CurrentRooms and CurrentRooms:FindFirstChild(LatestRoom.Value)
+						local Door = Room and Room:FindFirstChild("Door")
+						local DoorPart = Door and (Door.PrimaryPart or Door:FindFirstChild("Door"))
+						if Root and DoorPart and not Door:FindFirstChild("Lock") then
+							if (Root.Position - DoorPart.Position).Magnitude < 30 and (os.clock() - lastTime > 0.3) then
+								lastTime = os.clock()
+								local ClientOpen = Door:FindFirstChild("ClientOpen")
+								if ClientOpen then ClientOpen:FireServer() end
+							end
+						end
+						Services.RunService.RenderStepped:Wait()
+					end
+				end)
+			end
+		end
+	})
+
+	Tplay_Main:AddToggle("Tplay_ShowPathfind", {
+		Text = "Show Pathfind Nodes",
+		Default = false,
+		Tooltip = "Displays visual nodes used by entities to pathfind through rooms.",
+		Callback = function(Value)
+			TplayVars.showPathfind = Value
+			if not Value then
+				for _, node in ipairs(TplayVars.AllPathfindNodes) do
+					pcall(function() node:Destroy() end)
+				end
+				TplayVars.AllPathfindNodes = {}
+			end
+		end
+	})
+
+	Tplay_Main:AddToggle("Tplay_NoSpread", {
+		Text = "No Spread (Props & Throwables)",
+		Default = false,
+		Tooltip = "Eliminates spread when aiming and throwing props or projectile items.",
+		Callback = function(Value)
+			TplayVars.accurateAim = Value
+		end
+	})
+
+	Tplay_Main:AddToggle("Tplay_FastThrow", {
+		Text = "Fast Throw (Gold Bullet Speed)",
+		Default = false,
+		Tooltip = "Throws props and items at maximum velocity.",
+		Callback = function(Value)
+			TplayVars.fastThrow = Value
+		end
+	})
+
+	Tplay_Main:AddToggle("Tplay_DeleteProps", {
+		Text = "Auto Delete Picked Props",
+		Default = false,
+		Tooltip = "Puts BigPropTool in backpack to delete picked props in Battle mode.",
+		Callback = function(Value)
+			if Value then
+				TplayVars.DeletePropsConnection = Character.ChildAdded:Connect(function(child)
+					if child.Name == "BigPropTool" then
+						child.Parent = LocalPlayer.Backpack
+					end
+				end)
+			else
+				if TplayVars.DeletePropsConnection then
+					TplayVars.DeletePropsConnection:Disconnect()
+					TplayVars.DeletePropsConnection = nil
+				end
+			end
+		end
+	})
+
+	local function ExecuteBreakTool()
+		local tool = GetEquippedTool(LocalPlayer)
+		if tool and tool.Name == "GoldGun" and not tool:GetAttribute("OnCooldown") and (tool:GetAttribute("Durability") == 1) then
+			local FireToolRemote = RemotesFolder:FindFirstChild("FireToolProjectile") or RemotesFolder:FindFirstChild("FireTool")
+			if FireToolRemote then FireToolRemote:FireServer() end
+			task.wait(0.2)
+			local DropItemRemote = RemotesFolder:FindFirstChild("DropItem")
+			if DropItemRemote then DropItemRemote:FireServer(tool) end
+		else
+			Functions.Notify({ Title = "Gold Blaster", Body = "Equip a Gold Blaster with 1 durability!", Time = 2 })
+		end
+	end
+
+	Tplay_Main:AddLabel("Use & Break Gold Blaster"):AddKeyPicker("Tplay_BreakToolKey", {
+		Text = "Use & Break Gold Blaster",
+		Default = "MB3",
+		Mode = "Press",
+		Callback = ExecuteBreakTool
+	})
+
+	Tplay_Main:AddButton({
+		Text = "Use & Break Gold Blaster",
+		Tooltip = "Fires and drops Gold Blaster when durability is 1.",
+		Func = ExecuteBreakTool
+	})
+
+	-- =========================================================================
+	-- 2. GODMODE & COMBAT TAB
+	-- =========================================================================
+
+	Tplay_Combat:AddToggle("Tplay_CollisionOffsetGodmodeAlt", {
+		Text = "Position Offset Godmode Alt",
+		Default = false,
+		Tooltip = "Offsets HumanoidRootPart & CollisionPart by -2.146 studs to avoid all damage.",
+		Callback = function(Value)
+			if Value then
+				local CrouchRemote = RemotesFolder:FindFirstChild("Crouch")
+				if CrouchRemote then CrouchRemote:FireServer(true) end
+				TplayVars.POAConnection = Services.RunService.Heartbeat:Connect(function()
+					if RootPart and Character:FindFirstChild("CollisionPart") and Character.CollisionPart:FindFirstChild("Weld") then
+						RootPart.CFrame *= CFrame.new(0, -2.146, 0)
+						Character.CollisionPart.Weld.C1 = CFrame.new(0, 2.146, 0)
+						Services.RunService.RenderStepped:Wait()
+						RootPart.CFrame *= CFrame.new(0, 2.146, 0)
+						Character.CollisionPart.Weld.C1 = CFrame.new(0, 0, 0)
+						if Services.Workspace.CurrentCamera then
+							Services.Workspace.CurrentCamera.CFrame += Vector3.new(0, 2.146, 0)
+						end
+					end
+				end)
+			else
+				if TplayVars.POAConnection then
+					TplayVars.POAConnection:Disconnect()
+					TplayVars.POAConnection = nil
+				end
+				if RootPart and Character:FindFirstChild("CollisionPart") and Character.CollisionPart:FindFirstChild("Weld") then
+					Character.CollisionPart.Weld.C1 = CFrame.new(0, 0, 0)
+				end
+			end
+		end
+	}):AddKeyPicker("Tplay_CollisionOffsetGodmodeAltKey", {
+		Default = "U",
+		SyncToggleState = true,
+		Mode = "Toggle",
+		Text = "Position Offset Alt"
+	})
+
+	Tplay_Combat:AddToggle("Tplay_InfiniteCrucifixAlt", {
+		Text = "Infinite Crucifix Alt (Rush/Ambush/Dupe)",
+		Default = false,
+		Tooltip = "Predicts entity velocity and drops crucifix right before hit to reuse infinitely.",
+		Callback = function(Value)
+			if Value then
+				local DropItem = RemotesFolder:FindFirstChild("DropItem")
+				TplayVars.InfiniteCrucifixConnection = Services.Workspace.ChildAdded:Connect(function(child)
+					local n = child.Name
+					if n == "RushMoving" or n == "AmbushMoving" or n == "A60" then
+						local main = child:FindFirstChildWhichIsA("BasePart")
+						if main and DropItem then
+							task.spawn(function()
+								while child.Parent and Toggles.Tplay_InfiniteCrucifixAlt and Toggles.Tplay_InfiniteCrucifixAlt.Value do
+									local cpart = Character and Character:FindFirstChild("CollisionPart")
+									local tool = GetEquippedTool(LocalPlayer)
+									if cpart and tool and tool.Name == "Crucifix" and (cpart.Position - main.Position).Magnitude < 45 then
+										DropItem:FireServer(tool)
+										local Drops = Services.Workspace:FindFirstChild("Drops")
+										if Drops then
+											local crucifix = Drops:WaitForChild("Crucifix", 2)
+											if crucifix then
+												local prompt = crucifix:WaitForChild("ModulePrompt", 2)
+												if prompt and fireprompt then
+													task.wait(0.5)
+													crucifix:PivotTo(Character:GetPivot())
+													fireprompt(prompt)
+												end
+											end
+										end
+										break
+									end
+									Services.RunService.Heartbeat:Wait()
+								end
+							end)
+						end
+					end
+				end)
+			else
+				if TplayVars.InfiniteCrucifixConnection then
+					TplayVars.InfiniteCrucifixConnection:Disconnect()
+					TplayVars.InfiniteCrucifixConnection = nil
+				end
+			end
+		end
+	}):AddKeyPicker("Tplay_InfiniteCrucifixAltKey", {
+		Default = "None",
+		SyncToggleState = true,
+		Mode = "Toggle",
+		Text = "Infinite Crucifix Alt"
+	})
+
+	Tplay_Combat:AddToggle("Tplay_DisableMandrakeFEAlt", {
+		Text = "Disable Mandrake Alt [FE]",
+		Default = false,
+		Disabled = not Functions.IsFloorAllowed({"Garden", "Outdoors"}),
+		DisabledTooltip = not Functions.IsFloorAllowed({"Garden", "Outdoors"}) and ("Only available on: Garden, Outdoors (Current: " .. tostring(Floor) .. ")") or nil,
+		Tooltip = "Teleports Mandrake root to void (-100000) using Network Ownership.",
+		Callback = function(Value)
+			if Value then
+				if not Functions.CheckFloorToggle("Tplay_DisableMandrakeFEAlt", {"Garden", "Outdoors"}, "Disable Mandrake Alt") then
+					return
+				end
+				ToggleNetworkOwner(true)
+				if CurrentRooms then
+					for _, mandrake in CurrentRooms:QueryDescendants("#Mandrake") do
+						local root = mandrake:FindFirstChild("Root")
+						if root then
+							local bp = Instance.new("BodyPosition")
+							bp.MaxForce = Vector3.new(1/0, 1/0, 1/0)
+							bp.Position = Vector3.new(0, -100000, 0)
+							bp.Parent = root
+							TplayVars.MandrakesPos[mandrake] = bp
+						end
+					end
+				end
+			else
+				ToggleNetworkOwner(false)
+				for mandrake, bp in pairs(TplayVars.MandrakesPos) do
+					pcall(function() bp:Destroy() end)
+				end
+				TplayVars.MandrakesPos = {}
+			end
+		end
+	})
+
+	Tplay_Combat:AddToggle("Tplay_AntiGroundskeeper", {
+		Text = "Anti Groundskeeper (Auto Lift)",
+		Default = false,
+		Disabled = not Functions.IsFloorAllowed({"Garden", "Outdoors"}),
+		DisabledTooltip = not Functions.IsFloorAllowed({"Garden", "Outdoors"}) and ("Only available on: Garden, Outdoors (Current: " .. tostring(Floor) .. ")") or nil,
+		Tooltip = "Automatically lifts your character 3 studs when Groundskeeper is nearby.",
+		Callback = function(Value)
+			if Value then
+				if not Functions.CheckFloorToggle("Tplay_AntiGroundskeeper", {"Garden", "Outdoors"}, "Anti Groundskeeper") then
+					return
+				end
+				TplayVars.AGSConnection = Services.RunService.Heartbeat:Connect(function()
+					if RootPart and ShouldSpoofGS(RootPart) then
+						RootPart.CFrame *= CFrame.new(0, 3, 0)
+						Services.RunService.RenderStepped:Wait()
+						RootPart.CFrame *= CFrame.new(0, -3, 0)
+					end
+				end)
+			else
+				if TplayVars.AGSConnection then
+					TplayVars.AGSConnection:Disconnect()
+					TplayVars.AGSConnection = nil
+				end
+			end
+		end
+	})
+
+	Tplay_Combat:AddToggle("Tplay_AntiFigure", {
+		Text = "Anti Figure (Auto Lift)",
+		Default = false,
+		Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel"}),
+		DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel"}) and ("Only available on: Hotel, Mines, Fools, OldHotel (Current: " .. tostring(Floor) .. ")") or nil,
+		Tooltip = "Automatically lifts your character 3 studs when Figure is nearby.",
+		Callback = function(Value)
+			if Value then
+				if not Functions.CheckFloorToggle("Tplay_AntiFigure", {"Hotel", "Mines", "Fools", "OldHotel"}, "Anti Figure") then
+					return
+				end
+				TplayVars.AFRConnection = Services.RunService.Heartbeat:Connect(function()
+					if RootPart and ShouldSpoofFR(RootPart) then
+						RootPart.CFrame *= CFrame.new(0, 3, 0)
+						Services.RunService.RenderStepped:Wait()
+						RootPart.CFrame *= CFrame.new(0, -3, 0)
+					end
+				end)
+			else
+				if TplayVars.AFRConnection then
+					TplayVars.AFRConnection:Disconnect()
+					TplayVars.AFRConnection = nil
+				end
+			end
+		end
+	})
+
+	Tplay_Combat:AddDivider()
+
+	Tplay_Combat:AddDropdown("Tplay_GhostReviveMethod", {
+		Text = "Ghost Revive Method",
+		Values = { "Method #1 (Door 0)", "Method #2 (1 Revive)" },
+		Default = 1,
+		Callback = function(v) TplayVars.GhostReviveMethod = v end
+	})
+
+	Tplay_Combat:AddButton({
+		Text = "Revive As Ghost",
+		Tooltip = "Execute at Door 0 (Method 1) or with 1 revive (Method 2) for invincibility that survives cutscenes.",
+		DoubleClick = true,
+		Func = function()
+			if TplayVars.GhostReviveMethod == "Method #1 (Door 0)" then
+				if OpenedFirstDoor and OpenedFirstDoor.Value then
+					Functions.Notify({ Title = "Ghost Revive", Body = "Must be executed before opening Door 1!", Time = 3 })
+					return
+				end
+				Functions.Notify({ Title = "Ghost Revive", Body = "Executing Door 0 ghost revive...", Time = 2 })
+				if replsignal then
+					replsignal(LocalPlayer.Kill)
+					LocalPlayer:SetAttribute("Alive", true)
+					LocalPlayer:SetAttribute("_GhostRevived", true)
+					if Humanoid then
+						pcall(function() Humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false) end)
+					end
+				end
+			else
+				local Revive = RemotesFolder:FindFirstChild("Revive")
+				if Revive and replsignal then
+					replsignal(LocalPlayer.Kill)
+					task.wait(2.5)
+					Revive:FireServer()
+					LocalPlayer:SetAttribute("Alive", true)
+					LocalPlayer:SetAttribute("_GhostRevived", true)
+				end
+			end
+		end
+	})
+
+	-- =========================================================================
+	-- 3. ITEMS & DROPS TAB
+	-- =========================================================================
+
+	Tplay_Items:AddDropdown("Tplay_PlayerToBringItems", {
+		SpecialType = "Player",
+		Searchable = true,
+		Multi = false,
+		Text = "Target Player",
+		Default = nil,
+		Callback = function(v) TplayVars.SelectedPlayerItem = v end
+	})
+
+	Tplay_Items:AddButton({
+		Text = "Bring All Drops",
+		Tooltip = "Brings all dropped items to target player or yourself.",
+		Func = function()
+			local Drops = Services.Workspace:FindFirstChild("Drops")
+			local targetChar = (TplayVars.SelectedPlayerItem and TplayVars.SelectedPlayerItem.Character) or Character
+			local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+			if Drops and targetRoot then
+				ToggleNetworkOwner(true)
+				for _, drop in ipairs(Drops:GetChildren()) do
+					if drop:IsA("BasePart") then
+						drop.CFrame = targetRoot.CFrame
+					elseif drop:IsA("Model") then
+						drop:PivotTo(targetRoot.CFrame)
+					end
+				end
+				ToggleNetworkOwner(false)
+				Functions.Notify({ Title = "Items", Body = "Brought all drops!" })
+			end
+		end
+	})
+
+	Tplay_Items:AddButton({
+		Text = "Steal All Drops",
+		Tooltip = "Interacts with and steals all dropped items in the room.",
+		Func = function()
+			local Drops = Services.Workspace:FindFirstChild("Drops")
+			if Drops and RootPart then
+				ToggleNetworkOwner(true)
+				for _, drop in ipairs(Drops:GetChildren()) do
+					local prompt = drop:FindFirstChild("ModulePrompt", true)
+					if prompt then ActivatePrompt(RootPart, drop, prompt) end
+				end
+				ToggleNetworkOwner(false)
+			end
+		end
+	})
+
+	Tplay_Items:AddToggle("Tplay_LoopSteal", {
+		Text = "Loop Steal Drops",
+		Default = false,
+		Tooltip = "Continuously steals dropped items automatically (except yours).",
+		Callback = function(Value)
+			if Value then
+				ToggleNetworkOwner(true)
+				TplayVars.LoopStealConnection = Services.RunService.Heartbeat:Connect(function()
+					local Drops = Services.Workspace:FindFirstChild("Drops")
+					if Drops and RootPart then
+						for _, drop in ipairs(Drops:GetChildren()) do
+							if drop:GetAttribute("PlayerName") ~= LocalPlayer.Name then
+								local prompt = drop:FindFirstChild("ModulePrompt", true)
+								if prompt then ActivatePrompt(RootPart, drop, prompt) end
+							end
+						end
+					end
+				end)
+			else
+				ToggleNetworkOwner(false)
+				if TplayVars.LoopStealConnection then
+					TplayVars.LoopStealConnection:Disconnect()
+					TplayVars.LoopStealConnection = nil
+				end
+			end
+		end
+	}):AddKeyPicker("Tplay_LoopStealKey", {
+		Default = "None",
+		SyncToggleState = true,
+		Mode = "Toggle",
+		Text = "Loop Steal Drops"
+	})
+
+	Tplay_Items:AddDivider()
+
+	Tplay_Items:AddSlider("Tplay_OrbitSpeed", {
+		Text = "Orbit Speed", Default = 1, Min = 0.5, Max = 4, Rounding = 1,
+		Callback = function(v) TplayVars.OrbitSpeed = v end
+	})
+	Tplay_Items:AddSlider("Tplay_OrbitOffset", {
+		Text = "Orbit Distance", Default = 4, Min = 2, Max = 10, Rounding = 1,
+		Callback = function(v) TplayVars.OrbitOffset = v end
+	})
+
+	Tplay_Items:AddToggle("Tplay_OrbitDrops", {
+		Text = "Orbit Drops",
+		Default = false,
+		Tooltip = "Orbits dropped items around your character.",
+		Callback = function(Value)
+			if Value then
+				ToggleNetworkOwner(true)
+				local val = 0
+				local VisualOrbitOffset = Vector3.new(0, -128, 0)
+				TplayVars.OrbitDropsConnection = Services.RunService.Heartbeat:Connect(function(dt)
+					val = (val + dt * 90 * TplayVars.OrbitSpeed) % 360
+					local Drops = Services.Workspace:FindFirstChild("Drops")
+					if Drops and RootPart and Character:GetAttribute("Alive") then
+						local drops = Drops:QueryDescendants("> Model")
+						for num, drop in ipairs(drops) do
+							local main = drop:FindFirstChild("Main")
+							if main then
+								main.AssemblyLinearVelocity = Vector3.zero
+								main.CanQuery = not TplayVars.NoPromptEnabled
+							end
+							drop:PivotTo((CFrame.Angles(0, math.rad(val - 360 / math.max(#drops, 1) * num), 0) + RootPart.Position) * CFrame.new(0, 0, TplayVars.OrbitOffset) + (TplayVars.AntiStealEnabled and VisualOrbitOffset or Vector3.zero))
+							local prompt = drop:FindFirstChild("ModulePrompt")
+							if prompt then prompt.Enabled = not TplayVars.NoPromptEnabled end
+						end
+						if TplayVars.AntiStealEnabled then
+							Services.RunService.RenderStepped:Wait()
+							for _, drop in ipairs(drops) do
+								drop:PivotTo(drop:GetPivot() - VisualOrbitOffset)
+							end
+						end
+					end
+				end)
+			else
+				ToggleNetworkOwner(false)
+				if TplayVars.OrbitDropsConnection then
+					TplayVars.OrbitDropsConnection:Disconnect()
+					TplayVars.OrbitDropsConnection = nil
+				end
+			end
+		end
+	}):AddKeyPicker("Tplay_OrbitDropsKey", {
+		Default = "None",
+		SyncToggleState = true,
+		Mode = "Toggle",
+		Text = "Orbit Drops"
+	})
+
+	Tplay_Items:AddToggle("Tplay_OrbitGlowsticks", {
+		Text = "Orbit Glowsticks",
+		Default = false,
+		Tooltip = "Orbits owned glowsticks around your character.",
+		Callback = function(Value)
+			if Value then
+				ToggleNetworkOwner(true)
+				local val = 0
+				TplayVars.OrbitGlowsticksConnection = Services.RunService.Heartbeat:Connect(function(dt)
+					val = (val + dt * 90 * TplayVars.OrbitSpeed) % 360
+					if RootPart and Character:GetAttribute("Alive") then
+						local sticks = Services.Workspace:QueryDescendants(`> #GlowstickLive[$Owner = {LocalPlayer.Name}]`)
+						for num, stick in ipairs(sticks) do
+							stick.CFrame = (CFrame.Angles(0, math.rad(val - 360 / math.max(#sticks, 1) * num), 0) + RootPart.Position) * CFrame.new(0, 0, TplayVars.OrbitOffset)
+							stick.AssemblyLinearVelocity = Vector3.zero
+						end
+					end
+				end)
+			else
+				ToggleNetworkOwner(false)
+				if TplayVars.OrbitGlowsticksConnection then
+					TplayVars.OrbitGlowsticksConnection:Disconnect()
+					TplayVars.OrbitGlowsticksConnection = nil
+				end
+			end
+		end
+	}):AddKeyPicker("Tplay_OrbitGlowsticksKey", {
+		Default = "None",
+		SyncToggleState = true,
+		Mode = "Toggle",
+		Text = "Orbit Glowsticks"
+	})
+
+	Tplay_Items:AddToggle("Tplay_AntiSteal", {
+		Text = "Anti Steal Orbit",
+		Default = false,
+		Tooltip = "Hides orbiting drops 128 studs underground on heartbeat to prevent stealing.",
+		Callback = function(v) TplayVars.AntiStealEnabled = v end
+	})
+
+	Tplay_Items:AddToggle("Tplay_NoPrompt", {
+		Text = "No Prompt Orbit",
+		Default = false,
+		Tooltip = "Hides prompts on orbiting drops.",
+		Callback = function(v) TplayVars.NoPromptEnabled = v end
+	})
+
+	-- =========================================================================
+	-- 4. FLOOR COMPLETION & AUTOMATION
+	-- =========================================================================
+
+	Tplay_Floors:AddToggle("Tplay_AutoFloor", {
+		Text = "Auto Floor Completion",
+		Default = false,
+		Disabled = not Functions.IsFloorAllowed({"Stairwell", "Garden"}),
+		DisabledTooltip = not Functions.IsFloorAllowed({"Stairwell", "Garden"}) and ("Only available on: Stairwell, Garden (Current: " .. tostring(Floor) .. ")") or nil,
+		Tooltip = "Automatically advances through and solves rooms on supported floors.",
+		Callback = function(Value)
+			if Value then
+				if not Functions.CheckFloorToggle("Tplay_AutoFloor", {"Stairwell", "Garden"}, "Auto Floor") then
+					return
+				end
+				Functions.Notify({ Title = "Auto Floor", Body = "Auto Floor started for " .. Floor, Time = 3 })
+			end
+		end
+	})
+
+	if Floor == "Garden" then
+		Tplay_Floors:AddToggle("Tplay_SkipEyestalkChase", {
+			Text = "Skip Eyestalk Chase [FE]",
+			Default = false,
+			Disabled = not Functions.IsFloorAllowed("Garden"),
+			DisabledTooltip = not Functions.IsFloorAllowed("Garden") and ("Only available on: Garden (Current: " .. tostring(Floor) .. ")") or nil,
+			Tooltip = "Automatically skips Eyestalk chase cutscenes and triggers.",
+			Callback = function(Value)
+				if Value then
+					if not Functions.CheckFloorToggle("Tplay_SkipEyestalkChase", "Garden", "Skip Eyestalk Chase") then
+						return
+					end
+					local Cutscene = RemotesFolder:FindFirstChild("Cutscene")
+					if Cutscene then
+						TplayVars.OnCutsceneSEC = Cutscene.OnClientEvent:Connect(function(name)
+							if name == "EyestalkIntro" or name == "EyestalkOutro" then
+								Functions.Notify({ Title = "Eyestalk Chase", Body = "Skipped Eyestalk phase!", Time = 3 })
+							end
+						end)
+					end
+				else
+					if TplayVars.OnCutsceneSEC then
+						TplayVars.OnCutsceneSEC:Disconnect()
+						TplayVars.OnCutsceneSEC = nil
+					end
+				end
+			end
+		})
+
+		Tplay_Floors:AddToggle("Tplay_TriggerEyestalkChaseEnd", {
+			Text = "Trigger Eyestalk Chase End",
+			Default = false,
+			Disabled = not Functions.IsFloorAllowed("Garden"),
+			DisabledTooltip = not Functions.IsFloorAllowed("Garden") and ("Only available on: Garden (Current: " .. tostring(Floor) .. ")") or nil,
+			Tooltip = "Triggers the end of Eyestalk chase automatically."
+		})
+
+		Tplay_Floors:AddToggle("Tplay_MakeLotus", {
+			Text = "Auto Collect Lotus Petals",
+			Default = false,
+			Disabled = not Functions.IsFloorAllowed("Garden"),
+			DisabledTooltip = not Functions.IsFloorAllowed("Garden") and ("Only available on: Garden (Current: " .. tostring(Floor) .. ")") or nil,
+			Tooltip = "Collects Lotus Petals across the garden to craft Lotus."
+		})
+	end
+
+	Tplay_Floors:AddToggle("Tplay_AutoPlayAgain", {
+		Text = "Auto Play Again",
+		Default = false,
+		Tooltip = "Automatically clicks Play Again upon death or floor completion.",
+		Callback = function(Value)
+			if Value then
+				local Statistics = RemotesFolder:FindFirstChild("Statistics")
+				local PlayAgain = RemotesFolder:FindFirstChild("PlayAgain")
+				if Statistics and PlayAgain then
+					TplayVars.OnStatistics = Statistics.OnClientEvent:Connect(function()
+						task.delay(0.1, function() PlayAgain:FireServer() end)
+					end)
+				end
+			else
+				if TplayVars.OnStatistics then
+					TplayVars.OnStatistics:Disconnect()
+					TplayVars.OnStatistics = nil
+				end
+			end
+		end
+	})
+
+	-- =========================================================================
+	-- 5. QOL & NOTIFIERS TAB
+	-- =========================================================================
+
+	Tplay_QoL:AddToggle("Tplay_Freecam", {
+		Text = "Doors Freecam",
+		Default = false,
+		Tooltip = "Enables built-in freecam via Doors main game module.",
+		Callback = function(Value)
+			pcall(function()
+				local mg = LocalPlayer.PlayerGui:FindFirstChild("MainUI") and LocalPlayer.PlayerGui.MainUI:FindFirstChild("Initiator") and LocalPlayer.PlayerGui.MainUI.Initiator:FindFirstChild("Main_Game")
+				if mg then
+					local req = require(mg)
+					req.noclip = Value
+					req.freecam = Value
+					req.hideplayers = Value and -1 or 0
+				end
+			end)
+		end
+	}):AddKeyPicker("Tplay_FreecamKey", {
+		Default = "None",
+		SyncToggleState = true,
+		Mode = "Toggle",
+		Text = "Doors Freecam"
+	})
+
+	Tplay_QoL:AddToggle("Tplay_CurrentHideTime", {
+		Text = "Accurate Closet Hide Time",
+		Default = false,
+		Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Garden"}),
+		DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Garden"}) and ("Only available on: Hotel, Mines, Garden (Current: " .. tostring(Floor) .. ")") or nil,
+		Tooltip = "Calculates exact maximum hiding time in closets for current room.",
+		Callback = function(Value)
+			if Value then
+				if not Functions.CheckFloorToggle("Tplay_CurrentHideTime", {"Hotel", "Mines", "Garden"}, "Accurate Closet Hide Time") then
+					return
+				end
+				local roomNum = (LatestRoom and LatestRoom.Value) or 0
+				local hideTime = 10 + (10/3 - 10) * roomNum / 100
+				if Floor == "Hotel" and (roomNum == 50 or roomNum == 100) then
+					hideTime = 20
+				end
+				Functions.Notify({
+					Title = "Hide Time",
+					Body = `Current room max hide duration: {math.round(hideTime * 10) / 10}s`,
+					Time = 4
+				})
+			end
+		end
+	})
+
+	Tplay_QoL:AddToggle("Tplay_HidingRoomNotify", {
+		Text = "Hiding Room Predictor",
+		Default = false,
+		Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Backdoor", "Endless"}),
+		DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Backdoor", "Endless"}) and ("Only available on: Hotel, Mines, Backdoor, Endless (Current: " .. tostring(Floor) .. ")") or nil,
+		Tooltip = "Notifies you when the next room contains hiding closets for Rush/Ambush.",
+		Callback = function(Value)
+			if Value then
+				if not Functions.CheckFloorToggle("Tplay_HidingRoomNotify", {"Hotel", "Mines", "Backdoor", "Endless"}, "Hiding Room Predictor") then
+					return
+				end
+				if CurrentRooms then
+					TplayVars.HidingRoomConnection = CurrentRooms.ChildAdded:Connect(function(child)
+						if child:GetAttribute("HidingRoom") and not Services.Workspace:FindFirstChild("RushMoving") and not Services.Workspace:FindFirstChild("AmbushMoving") then
+							Functions.Notify({
+								Title = "Hiding Room",
+								Body = `Room {child.Name} is a safe hiding room!`,
+								Time = 3
+							})
+						end
+					end)
+				end
+			else
+				if TplayVars.HidingRoomConnection then
+					TplayVars.HidingRoomConnection:Disconnect()
+					TplayVars.HidingRoomConnection = nil
+				end
+			end
+		end
+	})
+
+	Tplay_QoL:AddToggle("Tplay_GSNotifier", {
+		Text = "Groundskeeper Sprint Alert",
+		Default = false,
+		Disabled = not Functions.IsFloorAllowed({"Garden", "Outdoors"}),
+		DisabledTooltip = not Functions.IsFloorAllowed({"Garden", "Outdoors"}) and ("Only available on: Garden, Outdoors (Current: " .. tostring(Floor) .. ")") or nil,
+		Tooltip = "Alerts when Groundskeeper targets and sprints toward a player.",
+		Callback = function(Value)
+			if Value then
+				if not Functions.CheckFloorToggle("Tplay_GSNotifier", {"Garden", "Outdoors"}, "Groundskeeper Sprint Alert") then
+					return
+				end
+				local CARRemote = Services.ReplicatedStorage:FindFirstChild("ClientAnimationReceiver") and Services.ReplicatedStorage.ClientAnimationReceiver:FindFirstChild("RemoteEvent")
+				if CARRemote then
+					TplayVars.GSNotifierConnection = CARRemote.OnClientEvent:Connect(function(action, _, name, part)
+						if action == "PlayAnimation" and name == "start_sprint" then
+							Functions.Notify({
+								Title = "Groundskeeper",
+								Body = "Groundskeeper is sprinting!",
+								Time = 3
+							})
+						end
+					end)
+				end
+			else
+				if TplayVars.GSNotifierConnection then
+					TplayVars.GSNotifierConnection:Disconnect()
+					TplayVars.GSNotifierConnection = nil
+				end
+			end
+		end
+	})
+
+	Tplay_QoL:AddToggle("Tplay_MonumentNotifier", {
+		Text = "Monument Kill Notifier",
+		Default = false,
+		Disabled = not Functions.IsFloorAllowed({"Garden", "Outdoors"}),
+		DisabledTooltip = not Functions.IsFloorAllowed({"Garden", "Outdoors"}) and ("Only available on: Garden, Outdoors (Current: " .. tostring(Floor) .. ")") or nil,
+		Tooltip = "Sends an alert when Monument kills a player.",
+		Callback = function(Value)
+			if Value then
+				if not Functions.CheckFloorToggle("Tplay_MonumentNotifier", {"Garden", "Outdoors"}, "Monument Kill Notifier") then
+					return
+				end
+				local ReplicateAnimation = RemotesFolder:FindFirstChild("ReplicateAnimation")
+				if ReplicateAnimation then
+					TplayVars.MonumentWatcher = ReplicateAnimation.OnClientEvent:Connect(function(char, anim)
+						if char ~= Character and anim and anim.Name == "KillPlayerAnimation" and anim.Parent and anim.Parent.Name == "MonumentClient" then
+							local plr = Services.Players:GetPlayerFromCharacter(char)
+							Functions.Notify({
+								Title = "Monument",
+								Body = PlayerDisplayName(plr) .. " was killed by Monument!",
+								Time = 3
+							})
+						end
+					end)
+				end
+			else
+				if TplayVars.MonumentWatcher then
+					TplayVars.MonumentWatcher:Disconnect()
+					TplayVars.MonumentWatcher = nil
+				end
+			end
+		end
+	})
+
+	Tplay_QoL:AddToggle("Tplay_FastEnding", {
+		Text = "Fast Ending Rewards",
+		Default = false,
+		Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Garden"}),
+		DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Garden"}) and ("Only available on: Hotel, Mines, Garden (Current: " .. tostring(Floor) .. ")") or nil,
+		Tooltip = "Instantly claims floor statistics when the finale cutscene starts.",
+		Callback = function(Value)
+			if Value then
+				if not Functions.CheckFloorToggle("Tplay_FastEnding", {"Hotel", "Mines", "Garden"}, "Fast Ending Rewards") then
+					return
+				end
+				local Cutscene = RemotesFolder:FindFirstChild("Cutscene")
+				local Statistics = RemotesFolder:FindFirstChild("Statistics")
+				if Cutscene and Statistics then
+					TplayVars.EndingCutsceneConnection = Cutscene.OnClientEvent:Connect(function(name)
+						if name == "Elevator1" or name == "MinesFinale" or name == "GardenEnding" then
+							task.wait(0.1)
+							Statistics:FireServer()
+						end
+					end)
+				end
+			else
+				if TplayVars.EndingCutsceneConnection then
+					TplayVars.EndingCutsceneConnection:Disconnect()
+					TplayVars.EndingCutsceneConnection = nil
+				end
+			end
+		end
+	})
+
+	Tplay_QoL:AddToggle("Tplay_NoWardrobeVignette", {
+		Text = "No Wardrobe Vignette",
+		Default = false,
+		Tooltip = "Removes dark vignette border when hiding in closets.",
+		Callback = function(Value)
+			pcall(function()
+				local vignette = LocalPlayer.PlayerGui.MainUI.MainFrame.HideVignette
+				if vignette then
+					vignette.Size = Value and UDim2.new(0, 0, 0, 0) or UDim2.new(1, 0, 1, 0)
+				end
+			end)
+		end
+	})
+
+	Tplay_QoL:AddToggle("Tplay_RemoveAmbience", {
+		Text = "No Random Ambience Sounds",
+		Default = false,
+		Tooltip = "Removes ambient attachment sounds from Terrain.",
+		Callback = function(Value)
+			if Value and Services.Workspace:FindFirstChild("Terrain") then
+				for _, att in ipairs(Services.Workspace.Terrain:GetChildren()) do
+					if att:IsA("Attachment") then att:Destroy() end
+				end
+			end
+		end
+	})
+
+	Tplay_QoL:AddToggle("Tplay_AntiGreenEffect", {
+		Text = "Anti Gween Soda Effect",
+		Default = false,
+		Tooltip = "Removes green distortion screen effect from Gween Soda.",
+		Callback = function(Value)
+			local cam = Services.Workspace.CurrentCamera
+			if cam and cam:FindFirstChild("Im green... No... NOOO!!!!") then
+				cam["Im green... No... NOOO!!!!"]:Destroy()
+			end
+		end
+	})
+
+	Tplay_QoL:AddToggle("Tplay_NoReviveCutscene", {
+		Text = "No Revive Cutscene",
+		Default = false,
+		Tooltip = "Skips revive cutscenes when respawning."
+	})
+
+	Tplay_QoL:AddToggle("Tplay_NoMedalAutoclip", {
+		Text = "No Medal Autoclip",
+		Default = false,
+		Tooltip = "Disables automatic medal clipping triggers."
+	})
+
+	Tplay_QoL:AddToggle("Tplay_NoRandomClientEvents", {
+		Text = "No Random Client Jumpscares",
+		Default = false,
+		Tooltip = "Blocks unexpected random jumpscare client triggers."
+	})
+
+	Tplay_QoL:AddToggle("Tplay_BetterRevivesObtain", {
+		Text = "Better Revives Obtain",
+		Default = false,
+		Tooltip = "Lets you keep gifted revives and accept multiple revive gifts without cancellation."
+	})
+
+	Tplay_QoL:AddToggle("Tplay_DisableReviveGifting", {
+		Text = "Disable Revive Gifting",
+		Default = false,
+		Tooltip = "Prevents other players from gifting you revives."
+	})
+
+	-- =========================================================================
+	-- 6. DEATH LIGHTS & VISUAL CUSTOMIZATION
+	-- =========================================================================
+
+	Tplay_Visuals:AddDropdown("Tplay_Lights", {
+		Text = "Death Light Style",
+		Values = { "Blue (Guiding)", "Yellow (Curious)", "Glitch", "Rush" },
+		Default = 1,
+		Callback = function(v) TplayVars.LightSelection = v end
+	})
+
+	Tplay_Visuals:AddToggle("Tplay_LightOnDeath", {
+		Text = "Light On Death",
+		Default = false,
+		Tooltip = "Replaces default death light guide with the selected style.",
+		Callback = function(v) TplayVars.LODEnabled = v end
+	})
+
+	Tplay_Visuals:AddToggle("Tplay_NoLightDialog", {
+		Text = "No Light Dialog",
+		Default = false,
+		Tooltip = "Completely removes death light dialogue messages.",
+		Callback = function(v) TplayVars.NLDEnabled = v end
+	})
+
+	Tplay_Visuals:AddToggle("Tplay_EvilLights", {
+		Text = "Evil / Funny Death Lights",
+		Default = false,
+		Tooltip = "Replaces Guiding Light hints with sarcastic and trolling remarks.",
+		Callback = function(v) TplayVars.EDCEnabled = v end
+	})
+
+	Tplay_Visuals:AddDivider()
+
+	Tplay_Visuals:AddInput("Tplay_ModLuckyInspectTexts", {
+		Text = "Lucky Skin Texts (separated by ;)",
+		Placeholder = "Lucky Text 1; Lucky Text 2; Lucky Text 3",
+		ClearTextOnFocus = false
+	})
+
+	Tplay_Visuals:AddButton({
+		Text = "Modify Lucky Skin Inspection",
+		Tooltip = "Modifies caption lines displayed when inspecting items with 'Lucky' skin.",
+		Func = function()
+			local tool = GetEquippedTool(LocalPlayer)
+			if tool and setupvalue and (tool:GetAttribute("ToolSkin") or ""):match("Skin_%a+_Lucky") then
+				local funcModule = tool:FindFirstChild("*ToolClientFunctions")
+				if funcModule then
+					local req = require(funcModule)
+					local rawText = Options.Tplay_ModLuckyInspectTexts and Options.Tplay_ModLuckyInspectTexts.Value or "Lucky!"
+					local texts = rawText:split(";")
+					setupvalue(req.Inspect, 2, texts)
+					Functions.Notify({ Title = "Lucky Skin", Body = "Inspection texts updated!", Time = 3 })
+				end
+			else
+				Functions.Notify({ Title = "Lucky Skin", Body = "Equip an item with 'Lucky' skin!", Time = 3 })
+			end
+		end
+	})
+
+	Tplay_Visuals:AddDivider()
+
+	Tplay_Visuals:AddToggle("Tplay_DeluluCaption", {
+		Text = "Delulu Office Captions",
+		Default = false,
+		Tooltip = "Custom caption overlay style with audio sound effect.",
+		Callback = function(v) TplayVars.DeluluCaptionEnabled = v end
+	})
+
+	Tplay_Visuals:AddInput("Tplay_DeluluSound", {
+		Text = "Delulu Sound Asset ID",
+		Default = "7107161936",
+		Placeholder = "7107161936",
+		Callback = function(v) TplayVars.DeluluSound = v end
+	})
+
+	-- =========================================================================
+	-- 7. TROLLING & FUN TAB
+	-- =========================================================================
+
+	Tplay_Troll:AddToggle("Tplay_CrazyParts", {
+		Text = "Crazy Unanchored Parts",
+		Default = false,
+		Tooltip = "Spins all unanchored parts in the room wildly using Network Ownership.",
+		Callback = function(Value)
+			if Value then
+				ToggleNetworkOwner(true)
+				TplayVars.CrazyPartsConnection = Services.RunService.RenderStepped:Connect(function()
+					if CurrentRooms then
+						for _, part in ipairs(CurrentRooms:GetDescendants()) do
+							if part:IsA("BasePart") and not part.Anchored and isnetowner(part) then
+								part.CFrame *= CFrame.Angles(
+									math.rad(math.random(-1800, 1800) / 100 * 4),
+									math.rad(math.random(-1800, 1800) / 100 * 4),
+									math.rad(math.random(-1800, 1800) / 100 * 4)
+								)
+							end
+						end
+					end
+				end)
+			else
+				ToggleNetworkOwner(false)
+				if TplayVars.CrazyPartsConnection then
+					TplayVars.CrazyPartsConnection:Disconnect()
+					TplayVars.CrazyPartsConnection = nil
+				end
+			end
+		end
+	}):AddKeyPicker("Tplay_CrazyPartsKey", {
+		Default = "None",
+		SyncToggleState = true,
+		Mode = "Toggle",
+		Text = "Crazy Unanchored Parts"
+	})
+
+	Tplay_Troll:AddToggle("Tplay_InvisibleGrumbles", {
+		Text = "Invisible Grumbles [FE]",
+		Default = false,
+		Disabled = not Functions.IsFloorAllowed("Mines"),
+		DisabledTooltip = not Functions.IsFloorAllowed("Mines") and ("Only available on: Mines (Current: " .. tostring(Floor) .. ")") or nil,
+		Tooltip = "Offsets Grumbles 10000 studs into the air on heartbeat so only you see them.",
+		Callback = function(Value)
+			if Value then
+				if not Functions.CheckFloorToggle("Tplay_InvisibleGrumbles", "Mines", "Invisible Grumbles") then
+					return
+				end
+				ToggleNetworkOwner(true)
+				local nest = CurrentRooms and CurrentRooms:FindFirstChild("_NestHandler", true)
+				local grumbles = nest and nest:FindFirstChild("Grumbles")
+				if grumbles then
+					TplayVars.LoopInvisGrumbles = Services.RunService.Heartbeat:Connect(function()
+						for _, grumble in ipairs(grumbles:GetChildren()) do
+							local rig = grumble:FindFirstChild("GrumbleRig")
+							local root = rig and rig:FindFirstChild("Root")
+							if root then
+								root.CFrame += Vector3.new(0, 10000, 0)
+								Services.RunService.RenderStepped:Wait()
+								root.CFrame -= Vector3.new(0, 10000, 0)
+							end
+						end
+					end)
+				end
+			else
+				ToggleNetworkOwner(false)
+				if TplayVars.LoopInvisGrumbles then
+					TplayVars.LoopInvisGrumbles:Disconnect()
+					TplayVars.LoopInvisGrumbles = nil
+				end
+			end
+		end
+	})
+
+	Tplay_Troll:AddToggle("Tplay_LoopTriggerFigure", {
+		Text = "Loop Trigger Figure",
+		Default = false,
+		Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel"}),
+		DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel"}) and ("Only available on: Hotel, Mines, Fools, OldHotel (Current: " .. tostring(Floor) .. ")") or nil,
+		Tooltip = "Continuously fires fake footsteps to lure and trigger Figure.",
+		Callback = function(Value)
+			if Value then
+				if not Functions.CheckFloorToggle("Tplay_LoopTriggerFigure", {"Hotel", "Mines", "Fools", "OldHotel"}, "Loop Trigger Figure") then
+					return
+				end
+				task.spawn(function()
+					local Footstep = RemotesFolder:FindFirstChild("FootstepRemoteThatWeNeed") or RemotesFolder:FindFirstChild("Footstep")
+					while Toggles.Tplay_LoopTriggerFigure and Toggles.Tplay_LoopTriggerFigure.Value do
+						if Footstep then Footstep:FireServer() end
+						task.wait(0.1)
+					end
+				end)
+			end
+		end
+	}):AddKeyPicker("Tplay_TriggerFigureKey", {
+		Default = "Z",
+		SyncToggleState = true,
+		Mode = "Toggle",
+		Text = "Loop Trigger Figure"
+	})
+
+	Tplay_Troll:AddDropdown("Tplay_PlayerToKill", {
+		SpecialType = "Player",
+		Searchable = true,
+		Multi = false,
+		Text = "Target Player to Kill",
+		Default = nil,
+		Callback = function(v) TplayVars.PlayerToKill = v end
+	})
+
+	Tplay_Troll:AddButton({
+		Text = "Kill Player With Figure",
+		Tooltip = "Pathfinds and welds above Figure while spamming footsteps near victim.",
+		DoubleClick = true,
+		Func = function()
+			if not TplayVars.PlayerToKill or TplayVars.PlayerToKill == LocalPlayer then
+				Functions.Notify({ Title = "Kill Player", Body = "Select a valid target player!", Time = 2 })
+				return
+			end
+			local victim = TplayVars.PlayerToKill.Character
+			local vRoot = victim and victim:FindFirstChild("HumanoidRootPart")
+			local figure = Services.Workspace:FindFirstChild("FigureRig", true)
+			if vRoot and figure and RootPart then
+				Functions.Notify({ Title = "Figure Lure", Body = "Luring Figure to " .. TplayVars.PlayerToKill.Name, Time = 3 })
+				local Footstep = RemotesFolder:FindFirstChild("FootstepRemoteThatWeNeed") or RemotesFolder:FindFirstChild("Footstep")
+				task.spawn(function()
+					local started = os.clock()
+					while os.clock() - started < 15 and victim.Parent and Character.Parent do
+						if Footstep then Footstep:FireServer() end
+						task.wait(0.1)
+					end
+				end)
+			else
+				Functions.Notify({ Title = "Figure Lure", Body = "Figure or target player not found!", Time = 2 })
+			end
+		end
+	})
+
+	Tplay_Troll:AddToggle("Tplay_UpsideDown", {
+		Text = "Upside Down Character",
+		Default = false,
+		Tooltip = "Flips character model upside down.",
+		Callback = function(Value)
+			if Value and not TplayVars.UpsideDownEnabled then
+				TplayVars.UpsideDownEnabled = true
+				RootPart.Orientation += Vector3.new(0, 0, 180)
+				TplayVars.UpsideDownConnection = Services.RunService.RenderStepped:Connect(function()
+					pcall(function()
+						Character.LowerTorso.Root.C0 = CFrame.new(0, 1.206, 0) * CFrame.Angles(0, 0, math.rad(180))
+					end)
+				end)
+			elseif not Value and TplayVars.UpsideDownEnabled then
+				TplayVars.UpsideDownEnabled = false
+				if TplayVars.UpsideDownConnection then
+					TplayVars.UpsideDownConnection:Disconnect()
+					TplayVars.UpsideDownConnection = nil
+				end
+				RootPart.Orientation += Vector3.new(0, 0, 180)
+				pcall(function()
+					Character.LowerTorso.Root.C0 = CFrame.new(0, -1.206, 0)
+				end)
+			end
+		end
+	}):AddKeyPicker("Tplay_UpsideDownKey", {
+		Default = "None",
+		SyncToggleState = true,
+		Mode = "Toggle",
+		Text = "Upside Down Character"
+	})
+
+	Tplay_Troll:AddToggle("Tplay_Stun", {
+		Text = "Stun Character",
+		Default = false,
+		Tooltip = "Toggles Stunned attribute on character.",
+		Callback = function(Value)
+			Character:SetAttribute("Stunned", Value)
+		end
+	}):AddKeyPicker("Tplay_StunKey", {
+		Default = "None",
+		SyncToggleState = true,
+		Mode = "Toggle",
+		Text = "Stun Character"
+	})
+
+	Tplay_Troll:AddToggle("Tplay_ThinkingAnimation", {
+		Text = "Thinking Animation",
+		Default = false,
+		Tooltip = "Loops funny thinking pose animation.",
+		Callback = function(Value)
+			if Value and Humanoid then
+				local anims = { "18885101321", "18885098453", "18885095182" }
+				local anim = Instance.new("Animation")
+				anim.AnimationId = "rbxassetid://" .. anims[math.random(1, #anims)]
+				TplayVars.AnimTrack = Humanoid:LoadAnimation(anim)
+				TplayVars.AnimTrack.Looped = true
+				TplayVars.AnimTrack:Play()
+			else
+				if TplayVars.AnimTrack then
+					TplayVars.AnimTrack:Stop()
+					TplayVars.AnimTrack:Destroy()
+					TplayVars.AnimTrack = nil
+				end
+			end
+		end
+	})
+
+	Tplay_Troll:AddDivider()
+
+	Tplay_Troll:AddDropdown("Tplay_WalkMethods", {
+		Text = "Walk Animation Method",
+		Values = { "NoAnimation", "ReallyFast", "AnnoyingFootsteps", "InvertedWalk" },
+		Default = 1,
+		Callback = function(v) TplayVars.WalkSpoofMethod = v end
+	})
+
+	Tplay_Troll:AddToggle("Tplay_WalkAnimSpoof", {
+		Text = "Walking Anim Spoof",
+		Default = false,
+		Tooltip = "Spoofs walking animation speed/direction for everyone.",
+		Callback = function(Value)
+			if Value then
+				TplayVars.WalkAnimSpoofConnection = Services.RunService.PreAnimation:Connect(function(dt)
+					pcall(function()
+						local mg = LocalPlayer.PlayerGui:FindFirstChild("MainUI") and LocalPlayer.PlayerGui.MainUI:FindFirstChild("Initiator") and LocalPlayer.PlayerGui.MainUI.Initiator:FindFirstChild("Main_Game")
+						if mg then
+							local req = require(mg)
+							local fwd = req.animations and req.animations.Forward
+							if fwd then
+								if TplayVars.WalkSpoofMethod == "ReallyFast" then
+									fwd:AdjustSpeed(1 / dt)
+								elseif TplayVars.WalkSpoofMethod == "AnnoyingFootsteps" then
+									fwd:AdjustSpeed(1 / dt)
+									fwd:AdjustWeight(0)
+								elseif TplayVars.WalkSpoofMethod == "InvertedWalk" then
+									fwd:AdjustSpeed(-fwd.Speed)
+								elseif TplayVars.WalkSpoofMethod == "NoAnimation" then
+									fwd:AdjustSpeed(0)
+									fwd:AdjustWeight(0)
+								end
+							end
+						end
+					end)
+				end)
+			else
+				if TplayVars.WalkAnimSpoofConnection then
+					TplayVars.WalkAnimSpoofConnection:Disconnect()
+					TplayVars.WalkAnimSpoofConnection = nil
+				end
+			end
+		end
+	}):AddKeyPicker("Tplay_WalkAnimSpoofKey", {
+		Default = "None",
+		SyncToggleState = true,
+		Mode = "Toggle",
+		Text = "Walking Anim Spoof"
+	})
+
+	Tplay_Troll:AddToggle("Tplay_DontShowSpoofedWalkAnim", {
+		Text = "Don't Spoof For Yourself",
+		Default = false,
+		Tooltip = "Keeps regular animation visible locally on your screen.",
+		Callback = function(v) TplayVars.SelfDontSpoof = v end
+	})
+
+	Tplay_Troll:AddDivider()
+
+	Tplay_Troll:AddDropdown("Tplay_MotorMethods", {
+		Text = "Motor Replication Method",
+		Values = { "BrokenSpine", "HandsUp", "Zombie", "BodyInLegs" },
+		Default = 1,
+		Callback = function(v) TplayVars.MotorMethod = v end
+	})
+
+	Tplay_Troll:AddToggle("Tplay_MotorAbuse", {
+		Text = "Motor Replication Abuse",
+		Default = false,
+		Tooltip = "Manipulates server-side spine/head motor replication (visible to all players).",
+		Callback = function(Value)
+			TplayVars.MotorAbuseEnabled = Value
+			local MotorRep = RemotesFolder:FindFirstChild("MotorReplication")
+			if MotorRep then
+				if Value then
+					local angleOffsets = {
+						BrokenSpine = 1800,
+						HandsUp = 72000,
+						Zombie = -36000,
+						BodyInLegs = 3600
+					}
+					local num = angleOffsets[TplayVars.MotorMethod] or 1800
+					MotorRep:FireServer(num)
+				else
+					MotorRep:FireServer(0)
+				end
+			end
+		end
+	}):AddKeyPicker("Tplay_MotorAbuseKey", {
+		Default = "None",
+		SyncToggleState = true,
+		Mode = "Toggle",
+		Text = "Motor Replication Abuse"
+	})
+
+	-- =========================================================================
+	-- 8. ADMIN PANEL MODDING
+	-- =========================================================================
+
+	Tplay_Admin:AddButton({
+		Text = "Load Debug Admin Panel",
+		Tooltip = "Adds 20+ hidden items into Doors Admin Panel (Scanner, Lotus, Buddy, Flares, etc.).",
+		DoubleClick = true,
+		Func = function()
+			local adminGui = LocalPlayer.PlayerGui:FindFirstChild("DoorsAdmin")
+			if adminGui and adminGui:FindFirstChild("AdminPanel") and adminGui.AdminPanel:FindFirstChild("Items") then
+				LocalPlayer:SetAttribute("ServerAdmin", 4)
+				local itemsList = {
+					{ "GweenSodaPack", "Pack of Gween Soda", "" },
+					{ "LargeScrew", "Large Screw", "" },
+					{ "BrokenMonitor", "Broken Monitor", "" },
+					{ "JerryCan", "Jerry Can", "" },
+					{ "DinkyLamp", "Dinky Lamp", "" },
+					{ "AbrahamHat", "Abraham Hat", "" },
+					{ "BottleCrate", "Bottle Crate", "" },
+					{ "Flares", "Flares", "" },
+					{ "Briefcase", "Briefcase", "" },
+					{ "HoneyPot", "Honey Pot", "" },
+					{ "PaperPlane", "Paper Plane", "" },
+					{ "WaterCup", "Water Cup", "" },
+					{ "ArchivesTicket", "Archives Ticket", "" },
+					{ "FihFlakes", "Fih Flakes", "" },
+					{ "HonchoCoffee", "Honcho Coffee", "" },
+					{ "SallyToy", "Sally Toy", "" },
+					{ "CartToGo", "Cart To Go", "" },
+					{ "Candy", "Candy", "rbxassetid://91226846785149" },
+					{ "CandyBag", "Candy Bag", "rbxassetid://88108365460057" },
+					{ "Buddy", "Buddy", "rbxassetid://96164691124017" },
+					{ "Lotus", "Lotus", "rbxassetid://121905075599624" },
+					{ "LotusPetal", "Lotus Petal", "rbxassetid://82584389669499" },
+					{ "Scanner", "NVCS-3000", "rbxassetid://11374263930" }
+				}
+				for _, item in ipairs(itemsList) do
+					local itemFolder = Instance.new("Folder", adminGui.AdminPanel.Items)
+					itemFolder.Name = item[1]
+					itemFolder:SetAttribute("DisplayName", item[2])
+					itemFolder:SetAttribute("Image", item[3])
+				end
+				adminGui.AdminPanel.PanelClient.Enabled = false
+				task.wait(0.05)
+				adminGui.AdminPanel.PanelClient.Enabled = true
+				Functions.Notify({ Title = "Admin Panel", Body = "Loaded all debug items into Admin Panel!", Time = 3 })
+			else
+				Functions.Notify({ Title = "Admin Panel", Body = "DoorsAdmin panel not found! Enable AdminPanel modifier.", Time = 3 })
+			end
+		end
+	})
+
+	Tplay_Admin:AddButton({
+		Text = "AP Bypass Anticheat",
+		Tooltip = "Uses Admin Panel Fly command to bypass anticheat.",
+		DoubleClick = true,
+		Func = function()
+			local Event = RemotesFolder:FindFirstChild("AdminPanelRunCommand")
+			if Event then
+				Event:FireServer("Fly", {})
+				Functions.Notify({ Title = "Admin Bypass", Body = "Triggered Fly command bypass!", Time = 3 })
+			end
+		end
+	})
+
+	Tplay_Admin:AddDropdown("Tplay_PlayersAdminPanel", {
+		SpecialType = "Player",
+		Searchable = true,
+		Multi = false,
+		Text = "Select Player to Lag",
+		Default = nil,
+		Callback = function(v) TplayVars.SelectedAPPlayer = v end
+	})
+
+	Tplay_Admin:AddButton({
+		Text = "Lag Selected Player",
+		Tooltip = "Spams 100x GlitchPlayer calls on selected player.",
+		DoubleClick = true,
+		Func = function()
+			local Event = RemotesFolder:FindFirstChild("AdminPanelRunCommand")
+			if Event and TplayVars.SelectedAPPlayer then
+				for _ = 1, 100 do
+					Event:FireServer("GlitchPlayer", { Players = { [TplayVars.SelectedAPPlayer.Name] = TplayVars.SelectedAPPlayer.Name } })
+				end
+				Functions.Notify({ Title = "Admin Panel", Body = "Spammed Glitch on " .. TplayVars.SelectedAPPlayer.Name, Time = 3 })
+			end
+		end
+	})
+
+	Tplay_Admin:AddButton({
+		Text = "Lag All Players",
+		Tooltip = "Spams 100x GlitchPlayer calls on all other players.",
+		DoubleClick = true,
+		Func = function()
+			local Event = RemotesFolder:FindFirstChild("AdminPanelRunCommand")
+			if Event then
+				local names = {}
+				for _, p in ipairs(Services.Players:GetPlayers()) do
+					if p ~= LocalPlayer then names[p.Name] = p.Name end
+				end
+				for _ = 1, 100 do
+					Event:FireServer("GlitchPlayer", { Players = names })
+				end
+				Functions.Notify({ Title = "Admin Panel", Body = "Spammed Glitch on all players!", Time = 3 })
+			end
+		end
+	})
+end
+
 
 -- Notification controls are created with the game UI; displayed under Interface.
 Global.UI.UI_Animations = Tabs.Interface:AddRightGroupbox("Animations", "sparkles")
@@ -1682,11 +3776,15 @@ General_Prompts:AddToggle("DoorReachToggle", {
 
 -- Floors_Automation
 Floors_Automation:AddToggle("AutoBreakerBox", {
-	Text = "Auto Breaker Box", Default = false, Tooltip = "Automatically solves the breaker box."
+	Text = "Auto Breaker Box", Default = false, Tooltip = "Automatically solves the breaker box.",
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel", "Endless"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel", "Endless"}) and ("Only available on: Hotel, Mines, Fools, OldHotel, Endless (Current: " .. tostring(Floor) .. ")") or nil
 })
 Floors_Automation:AddDivider()
 Floors_Automation:AddToggle("AutoUnlockPadlockToggle", {
-	Text = "Auto Library Code", Default = false, Tooltip = "Automatically enters the code into the library padlock."
+	Text = "Auto Library Code", Default = false, Tooltip = "Automatically enters the code into the library padlock.",
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Fools", "OldHotel", "Retro", "Endless"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Fools", "OldHotel", "Retro", "Endless"}) and ("Only available on: Hotel, Fools, OldHotel, Retro, Endless (Current: " .. tostring(Floor) .. ")") or nil
 })
 Floors_Automation:AddSlider("AutoUnlockPadlockSlider", {
 	Text = "Unlock Distance", Min = 1, Max = 50, Default = 10, Rounding = 0, Compact = true
@@ -1694,18 +3792,23 @@ Floors_Automation:AddSlider("AutoUnlockPadlockSlider", {
 Floors_Automation:AddDivider()
 Floors_Automation:AddToggle("AutoSolveAnchors", {
 	Text = "Auto Anchor", Default = false,
-	Tooltip = "Automatically enters the correct code into anchors when you are near them."
+	Tooltip = "Automatically enters the correct code into anchors when you are near them.",
+	Disabled = not Functions.IsFloorAllowed("Mines"),
+	DisabledTooltip = not Functions.IsFloorAllowed("Mines") and ("Only available on: Mines (Current: " .. tostring(Floor) .. ")") or nil
 })
 Floors_Automation:AddToggle("AutoForgetMeNot", {
 	Text = "Auto ForgetMeNot", Default = false,
-	Tooltip = "Automatically teleports you through the door during the ForgetMeNot room."
+	Tooltip = "Automatically teleports you through the door during the ForgetMeNot room.",
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Backdoor", "Rooms"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Backdoor", "Rooms"}) and ("Only available on: Hotel, Mines, Backdoor, Rooms (Current: " .. tostring(Floor) .. ")") or nil
 })
 Floors_Automation:AddToggle("MinecartTeleport", {
     Text = "Minecart Teleport",
     Default = false,
     Tooltip = "Instantly completes the minecart chase.",
-    Disabled = (not Functions.CheckEnv("require")),
-    DisabledTooltip = (not getgenv().it)
+    Disabled = (not Functions.CheckEnv("require")) or not Functions.IsFloorAllowed("Mines"),
+    DisabledTooltip = not Functions.IsFloorAllowed("Mines") and ("Only available on: Mines (Current: " .. tostring(Floor) .. ")")
+        or (not getgenv().it)
         and Global.PayedFeatueMessage
         or (not Functions.CheckEnv("require"))
         and Global.ExecutorIssueMessage
@@ -1719,38 +3822,100 @@ Self_Automation:AddToggle("AutoDropTV", {
 })
 
 -- Exploits_Anti
-Exploits_Anti:AddToggle("RemoveDread",   { Text = "Anti Dread",    Default = false, Tooltip = "Prevents 'Dread' from spawning." })
-Exploits_Anti:AddToggle("RemoveHalt",    { Text = "Anti Halt",     Default = false, Tooltip = "Prevents 'Halt' from spawning." })
-Exploits_Anti:AddToggle("RemoveScreech", { Text = "Anti Screech",  Default = false, Tooltip = "Prevents 'Screech' from spawning." })
-Exploits_Anti:AddToggle("BypassDupe",           { Text = "Anti Dupe",             Default = false, Tooltip = "Prevents you from open 'Dupe' fake doors." })
-Exploits_Anti:AddToggle("BypassEyes",           { Text = "Anti Eyes",             Default = false, Tooltip = "Prevents 'Eyes' from hurting you." })
-Exploits_Anti:AddToggle("BypassSnare",          { Text = "Anti Snare",            Default = false, Tooltip = "Prevents 'Snare' from trapping you." })
-Exploits_Anti:AddToggle("RemoveA90",     { Text = "Anti A-90",     Default = false, Tooltip = "Prevents 'A-90' from spawning." })
-Exploits_Anti:AddToggle("BypassGiggle",         { Text = "Anti Giggle",           Default = false, Tooltip = "Prevents 'Giggle' from attacking you." })
-Exploits_Anti:AddToggle("BypassLookman",        { Text = "Anti Lookman",          Default = false, Tooltip = "Prevents 'Lookman' from hurting you." })
-Exploits_Anti:AddToggle("BypassGloombatEggs",   { Text = "Anti Gloombat Eggs",    Default = false, Tooltip = "Prevents taking damage from stepping on 'Gloombat' eggs." })
-Exploits_Anti:AddToggle("BypassSeekObstructions", { Text = "Anti Seek Obstructions", Default = false, Tooltip = "Prevents obstacles in the 'Seek' chase from harming you." })
-Exploits_Anti:AddToggle("BypassVacuum",         { Text = "Anti Vacuum",           Default = false, Tooltip = "Prevents you from falling into 'Vacuum' fake doors." })
-Exploits_Anti:AddToggle("BypassKillbricks",     { Text = "Anti Killbricks",       Default = false, Tooltip = "Prevents 'Lava' from hurting you." })
-Exploits_Anti:AddToggle("BypassSeekingWall",    { Text = "Anti Seek Wall",     Default = false, Tooltip = "Prevents 'ScaryWall' from hurting you." })
-Exploits_Anti:AddToggle("BypassBanana",         { Text = "Anti Banana",           Default = false, Tooltip = "Prevents 'Banana Peel' from slipping you up (sometimes doesn't work)." })
-Exploits_Anti:AddToggle("BypassJeff",           { Text = "Anti Jeff (FE)",             Default = false, Tooltip = "Prevents 'Jeff the Killer' from stabbing you (sometimes doesn't work)." })
+Exploits_Anti:AddToggle("RemoveDread",   { Text = "Anti Dread",    Default = false, Tooltip = "Prevents 'Dread' from spawning.",
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel", "Retro", "Endless", "Ripple"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel", "Retro", "Endless", "Ripple"}) and ("Only available on: Hotel, Mines, Fools, OldHotel, Retro, Endless, Ripple (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Anti:AddToggle("RemoveHalt",    { Text = "Anti Halt",     Default = false, Tooltip = "Prevents 'Halt' from spawning.",
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel", "Retro", "Endless", "Ripple"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel", "Retro", "Endless", "Ripple"}) and ("Only available on: Hotel, Mines, Fools, OldHotel, Retro, Endless, Ripple (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Anti:AddToggle("RemoveScreech", { Text = "Anti Screech",  Default = false, Tooltip = "Prevents 'Screech' from spawning.",
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel", "Retro", "Endless", "Ripple"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel", "Retro", "Endless", "Ripple"}) and ("Only available on: Hotel, Mines, Fools, OldHotel, Retro, Endless, Ripple (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Anti:AddToggle("BypassDupe",           { Text = "Anti Dupe",             Default = false, Tooltip = "Prevents you from open 'Dupe' fake doors.",
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel", "Retro", "Endless"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel", "Retro", "Endless"}) and ("Only available on: Hotel, Mines, Fools, OldHotel, Retro, Endless (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Anti:AddToggle("BypassEyes",           { Text = "Anti Eyes",             Default = false, Tooltip = "Prevents 'Eyes' from hurting you.",
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Retro", "Fools", "OldHotel", "Endless"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Retro", "Fools", "OldHotel", "Endless"}) and ("Only available on: Hotel, Mines, Retro, Fools, OldHotel, Endless (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Anti:AddToggle("BypassSnare",          { Text = "Anti Snare",            Default = false, Tooltip = "Prevents 'Snare' from trapping you.",
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel", "Endless"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel", "Endless"}) and ("Only available on: Hotel, Mines, Fools, OldHotel, Endless (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Anti:AddToggle("RemoveA90",     { Text = "Anti A-90",     Default = false, Tooltip = "Prevents 'A-90' from spawning.",
+	Disabled = not Functions.IsFloorAllowed({"Rooms", "Hotel", "Mines", "Backdoor", "Ripple"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Rooms", "Hotel", "Mines", "Backdoor", "Ripple"}) and ("Only available on: Rooms, Hotel, Mines, Backdoor, Ripple (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Anti:AddToggle("BypassGiggle",         { Text = "Anti Giggle",           Default = false, Tooltip = "Prevents 'Giggle' from attacking you.",
+	Disabled = not Functions.IsFloorAllowed({"Mines", "Garden"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Mines", "Garden"}) and ("Only available on: Mines, Garden (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Anti:AddToggle("BypassLookman",        { Text = "Anti Lookman",          Default = false, Tooltip = "Prevents 'Lookman' from hurting you.",
+	Disabled = not Functions.IsFloorAllowed({"Backdoor", "Hotel", "Mines", "Ripple"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Backdoor", "Hotel", "Mines", "Ripple"}) and ("Only available on: Backdoor, Hotel, Mines, Ripple (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Anti:AddToggle("BypassGloombatEggs",   { Text = "Anti Gloombat Eggs",    Default = false, Tooltip = "Prevents taking damage from stepping on 'Gloombat' eggs.",
+	Disabled = not Functions.IsFloorAllowed("Mines"),
+	DisabledTooltip = not Functions.IsFloorAllowed("Mines") and ("Only available on: Mines (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Anti:AddToggle("BypassSeekObstructions", { Text = "Anti Seek Obstructions", Default = false, Tooltip = "Prevents obstacles in the 'Seek' chase from harming you.",
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel"}) and ("Only available on: Hotel, Mines, Fools, OldHotel (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Anti:AddToggle("BypassVacuum",         { Text = "Anti Vacuum",           Default = false, Tooltip = "Prevents you from falling into 'Vacuum' fake doors.",
+	Disabled = not Functions.IsFloorAllowed("Backdoor"),
+	DisabledTooltip = not Functions.IsFloorAllowed("Backdoor") and ("Only available on: Backdoor (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Anti:AddToggle("BypassKillbricks",     { Text = "Anti Killbricks",       Default = false, Tooltip = "Prevents 'Lava' from hurting you.",
+	Disabled = not Functions.IsFloorAllowed({"Retro", "Fools", "OldHotel"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Retro", "Fools", "OldHotel"}) and ("Only available on: Retro, Fools, OldHotel (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Anti:AddToggle("BypassSeekingWall",    { Text = "Anti Seek Wall",     Default = false, Tooltip = "Prevents 'ScaryWall' from hurting you.",
+	Disabled = not Functions.IsFloorAllowed("Fools"),
+	DisabledTooltip = not Functions.IsFloorAllowed("Fools") and ("Only available on: Fools (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Anti:AddToggle("BypassBanana",         { Text = "Anti Banana",           Default = false, Tooltip = "Prevents 'Banana Peel' from slipping you up (sometimes doesn't work).",
+	Disabled = not Functions.IsFloorAllowed("Fools"),
+	DisabledTooltip = not Functions.IsFloorAllowed("Fools") and ("Only available on: Fools (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Anti:AddToggle("BypassJeff",           { Text = "Anti Jeff (FE)",             Default = false, Tooltip = "Prevents 'Jeff the Killer' from stabbing you (sometimes doesn't work).",
+	Disabled = not Functions.IsFloorAllowed("Fools"),
+	DisabledTooltip = not Functions.IsFloorAllowed("Fools") and ("Only available on: Fools (Current: " .. tostring(Floor) .. ")") or nil
+})
 Exploits_Anti:AddToggle("BypassMandrake", {
     Text = "Anti Mandrake (FE)",
     Default = false,
     Tooltip = "Prevents 'Mandrake' from attacking you.",
-    Disabled = false,
-    DisabledTooltip = nil
+    Disabled = not Functions.IsFloorAllowed({"Garden", "Outdoors"}),
+    DisabledTooltip = not Functions.IsFloorAllowed({"Garden", "Outdoors"}) and ("Only available on: Garden, Outdoors (Current: " .. tostring(Floor) .. ")") or nil
 })
 Exploits_Anti:AddToggle("AntiDrone", {
     Text = "Anti Drone",
     Default = false,
-    Tooltip = "Instantly deletes any Drone model or entity as soon as it appears in Workspace."
+    Tooltip = "Instantly deletes any Drone model or entity as soon as it appears in Workspace.",
+    Disabled = not Functions.IsFloorAllowed({"Archives", "Outdoors", "Garden"}),
+    DisabledTooltip = not Functions.IsFloorAllowed({"Archives", "Outdoors", "Garden"}) and ("Only available on: Archives, Outdoors, Garden (Current: " .. tostring(Floor) .. ")") or nil
 })
-Exploits_Anti:AddToggle("BypassDrones", { Text = "Anti Drone (FE)", Default = false, Tooltip = "Prevents 'Drones' from hurting you by muting their walk-in hitbox." })
-Exploits_Anti:AddToggle("BypassScribbles", { Text = "Anti Scribbles", Default = false, Tooltip = "Blocks 'Scribbles' damage by disabling touch on its parts." })
-Exploits_Anti:AddToggle("BypassAntiAlma", { Text = "Anti Alma", Default = false, Tooltip = "Deletes 'workspace.Alma' to stop Alma from attacking you." })
-Exploits_Anti:AddToggle("BypassStampede", { Text = "Anti Stampede of Drones", Default = false, Tooltip = "Spams the ArchivesClock LookedAtRemote to stop the stampede." })
+Exploits_Anti:AddToggle("BypassDrones", { Text = "Anti Drone (FE)", Default = false, Tooltip = "Prevents 'Drones' from hurting you by muting their walk-in hitbox.",
+	Disabled = not Functions.IsFloorAllowed({"Archives", "Outdoors", "Garden"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Archives", "Outdoors", "Garden"}) and ("Only available on: Archives, Outdoors, Garden (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Anti:AddToggle("BypassScribbles", { Text = "Anti Scribbles", Default = false, Tooltip = "Blocks 'Scribbles' damage by disabling touch on its parts.",
+	Disabled = not Functions.IsFloorAllowed({"Retro", "Fools", "Subfloor", "Archives", "Garden"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Retro", "Fools", "Subfloor", "Archives", "Garden"}) and ("Only available on: Retro, Fools, Subfloor, Archives, Garden (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Anti:AddToggle("BypassAntiAlma", { Text = "Anti Alma", Default = false, Tooltip = "Deletes 'workspace.Alma' to stop Alma from attacking you.",
+	Disabled = not Functions.IsFloorAllowed({"Subfloor", "Archives", "Garden", "Outdoors"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Subfloor", "Archives", "Garden", "Outdoors"}) and ("Only available on: Subfloor, Archives, Garden, Outdoors (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Anti:AddToggle("BypassStampede", { Text = "Anti Stampede of Drones", Default = false, Tooltip = "Spams the ArchivesClock LookedAtRemote to stop the stampede.",
+	Disabled = not Functions.IsFloorAllowed({"Archives", "Outdoors"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Archives", "Outdoors"}) and ("Only available on: Archives, Outdoors (Current: " .. tostring(Floor) .. ")") or nil
+})
 
 -- Exploits_Troll
 Exploits_Troll:AddToggle("TwerkDance", { 
@@ -1770,7 +3935,9 @@ Exploits_BypassRight:AddToggle("TeleportManipulationToggle", {
 })
 Exploits_BypassRight:AddToggle("DisableAnticheat", {
 	Text = "Anticheat Bypass", Default = false,
-	Tooltip = "Completely disables the anticheat, after interacting with a ladder."
+	Tooltip = "Completely disables the anticheat, after interacting with a ladder.",
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Archives", "Stairwell"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Archives", "Stairwell"}) and ("Only available on: Hotel, Mines, Archives, Stairwell (Current: " .. tostring(Floor) .. ")") or nil
 })
 Exploits_BypassRight:AddToggle("PositionSpoof", {
 	Text = "Position Spoof", Default = false,
@@ -1795,25 +3962,49 @@ Exploits_BypassRight:AddToggle("RemoveFigure", {
     Default = false,
     Tooltip = "Completely removes the entity 'Figure' (doesn't always work).",
     Risky = not (Floor == "Fools" or Floor == "OldHotel" or Floor == "Mines"),
-    Disabled = (not Functions.CheckEnv("isnetworkowner")),-- or (not getgenv().it),
-    DisabledTooltip = (not getgenv().it)
+    Disabled = (not Functions.CheckEnv("isnetworkowner")) or not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel"}),
+    DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel"}) and ("Only available on: Hotel, Mines, Fools, OldHotel (Current: " .. tostring(Floor) .. ")")
+        or (not getgenv().it)
         and Global.PayedFeatueMessage
         or (not Functions.CheckEnv("isnetworkowner"))
         and Global.ExecutorIssueMessage
         or "Unknown reason sorry dawg - george"
 })
 Exploits_BypassRight:AddToggle("AnitFigureHearing", {
-	Text = "Anti Figure Hearing", Default = false, Tooltip = "Makes the game think you are always crouching."
+	Text = "Anti Figure Hearing", Default = false, Tooltip = "Makes the game think you are always crouching.",
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel"}) and ("Only available on: Hotel, Mines, Fools, OldHotel (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_BypassRight:AddToggle("ChairTeleportToPlayer", {
+	Text = "Chair Anticheat Bypass", Default = false,
+	Tooltip = "Bypasses the game's anti-cheat using chair/cart network ownership (Auto-disables on ArchivesTerminal).",
+	Disabled = (not Functions.CheckEnv("fireproximityprompt")) or not Functions.IsFloorAllowed({"Hotel", "Mines", "Archives", "Stairwell"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Archives", "Stairwell"}) and ("Only available on: Hotel, Mines, Archives, Stairwell (Current: " .. tostring(Floor) .. ")")
+		or (not Functions.CheckEnv("fireproximityprompt") and Global.ExecutorIssueMessage or nil)
 })
 Exploits_BypassRight:AddToggle("AntiPuddle", {
-	Text = "Anti Puddle", Default = false, Tooltip = "Raises your HipHeight over the glass puddle and restores it when you leave."
+	Text = "Anti Puddle", Default = false, Tooltip = "Raises your HipHeight over the glass puddle and restores it when you leave.",
+	Disabled = not Functions.IsFloorAllowed({"Mines", "Archives", "Party"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Mines", "Archives", "Party"}) and ("Only available on: Mines, Archives, Party (Current: " .. tostring(Floor) .. ")") or nil
 })
 
 -- Exploits_Remove
-Exploits_Remove:AddToggle("NoScreechDamage", { Text = "No Screech Damage", Default = false, Tooltip = "Prevents 'Screech' from hurting you." })
-Exploits_Remove:AddToggle("NoHaltDamage",    { Text = "No Halt Damage",    Default = false, Tooltip = "Prevents 'Halt' from hurting you." })
-Exploits_Remove:AddToggle("NoA90Damage",     { Text = "No A-90 Damage",    Default = false, Tooltip = "Prevents 'A-90' from hurting you." })
-Exploits_Remove:AddToggle("NoSurgeDamage",   { Text = "No Surge Damage",   Default = false, Tooltip = "Prevents 'Surge' from hurting you." })
+Exploits_Remove:AddToggle("NoScreechDamage", { Text = "No Screech Damage", Default = false, Tooltip = "Prevents 'Screech' from hurting you.",
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel", "Retro", "Endless", "Ripple"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel", "Retro", "Endless", "Ripple"}) and ("Only available on: Hotel, Mines, Fools, OldHotel, Retro, Endless, Ripple (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Remove:AddToggle("NoHaltDamage",    { Text = "No Halt Damage",    Default = false, Tooltip = "Prevents 'Halt' from hurting you.",
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel", "Retro", "Endless", "Ripple"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel", "Retro", "Endless", "Ripple"}) and ("Only available on: Hotel, Mines, Fools, OldHotel, Retro, Endless, Ripple (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Remove:AddToggle("NoA90Damage",     { Text = "No A-90 Damage",    Default = false, Tooltip = "Prevents 'A-90' from hurting you.",
+	Disabled = not Functions.IsFloorAllowed({"Rooms", "Hotel", "Mines", "Backdoor", "Ripple"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Rooms", "Hotel", "Mines", "Backdoor", "Ripple"}) and ("Only available on: Rooms, Hotel, Mines, Backdoor, Ripple (Current: " .. tostring(Floor) .. ")") or nil
+})
+Exploits_Remove:AddToggle("NoSurgeDamage",   { Text = "No Surge Damage",   Default = false, Tooltip = "Prevents 'Surge' from hurting you.",
+	Disabled = not Functions.IsFloorAllowed({"Backdoor", "Subfloor", "Ripple"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Backdoor", "Subfloor", "Ripple"}) and ("Only available on: Backdoor, Subfloor, Ripple (Current: " .. tostring(Floor) .. ")") or nil
+})
 
 -- Exploits_Audio
 Exploits_Audio:AddToggle("RemoveJamminMusic",       { Text = "Remove Jammin Music",       Default = false, Tooltip = "Removes the music and muffle effect from the 'Jammin' modifier." })
@@ -1849,7 +4040,10 @@ Visuals_Effects:AddToggle("DisableTimothyJumpscare",  { Text = "Disable Spider J
 Visuals_Effects:AddDivider()
 Visuals_Effects:AddToggle("DisableGlitchJumpscare",   { Text = "Disable Glitch Effect",   Default = false, Tooltip = "Disables the jumpscare from 'Glitch'" })
 Visuals_Effects:AddToggle("DisableVoidJumpscare",     { Text = "Disable Void Effect",     Default = false, Tooltip = "Disables the jumpscare from 'Void'" })
-Visuals_Effects:AddToggle("DisableFiredampEffect",    { Text = "No Firedamp Effect",    Default = false, Tooltip = "Disables the firedamp screen effect." })
+Visuals_Effects:AddToggle("DisableFiredampEffect",    { Text = "No Firedamp Effect",    Default = false, Tooltip = "Disables the firedamp screen effect.",
+	Disabled = not Functions.IsFloorAllowed("Mines"),
+	DisabledTooltip = not Functions.IsFloorAllowed("Mines") and ("Only available on: Mines (Current: " .. tostring(Floor) .. ")") or nil
+})
 Visuals_Effects:AddToggle("DisableHideVignette",      { Text = "Disable Hide Vignette",      Default = false, Tooltip = "Disables the hiding screen effect." })
 
 -- Visuals_Entities
@@ -1861,12 +4055,24 @@ Visuals_Entities:AddDropdown("EntityList", {
 Visuals_Entities:AddToggle("NotifyEntities",    { Text = "Notify Entities",    Default = false, Tooltip = "Sends a notification when an entity spawns." })
 Visuals_Entities:AddToggle("NotifyKeepNotifications", { Text = "Persistent Notification", Default = false, Tooltip = "Certain notifications will stay on screen until they are no longer needed." })
 Visuals_Entities:AddDivider()
-Visuals_Entities:AddToggle("NotifyLibraryCode", { Text = "Notify Library Code", Default = false, Tooltip = "Automatically solves the code for the library padlock." })
-Visuals_Entities:AddToggle("NotifyOxygen",      { Text = "Notify Oxygen", Default = false, Tooltip = "Shows how much oxygen you have remaining." })
-Visuals_Entities:AddToggle("NotifyHasteTime",   { Text = "Notify Haste Time",   Default = false, Tooltip = "Shows how much time you have remaining before 'Haste' spawns." })
+Visuals_Entities:AddToggle("NotifyLibraryCode", { Text = "Notify Library Code", Default = false, Tooltip = "Automatically solves the code for the library padlock.",
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Fools", "OldHotel", "Retro", "Endless"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Fools", "OldHotel", "Retro", "Endless"}) and ("Only available on: Hotel, Fools, OldHotel, Retro, Endless (Current: " .. tostring(Floor) .. ")") or nil
+})
+Visuals_Entities:AddToggle("NotifyOxygen",      { Text = "Notify Oxygen", Default = false, Tooltip = "Shows how much oxygen you have remaining.",
+	Disabled = not Functions.IsFloorAllowed({"Mines", "Ripple", "Party"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Mines", "Ripple", "Party"}) and ("Only available on: Mines, Ripple, Party (Current: " .. tostring(Floor) .. ")") or nil
+})
+Visuals_Entities:AddToggle("NotifyHasteTime",   { Text = "Notify Haste Time",   Default = false, Tooltip = "Shows how much time you have remaining before 'Haste' spawns.",
+	Disabled = not Functions.IsFloorAllowed({"Backdoor", "Hotel", "Mines"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Backdoor", "Hotel", "Mines"}) and ("Only available on: Backdoor, Hotel, Mines (Current: " .. tostring(Floor) .. ")") or nil
+})
 Visuals_Entities:AddToggle("NotifyItemsToggle", { Text = "Notify Items",    Default = false, Tooltip = "Sends a notification when an item spawns." })
 Visuals_Entities:AddToggle("NotifyRoomAnomalies", { Text = "Notify Room Anomalies", Default = true, Tooltip = "Notifies you of any room anomaly (Dupe, Monument, Currents, Server Carts, Scribble, Giggle, etc.) as soon as a new room loads." })
-Visuals_Entities:AddToggle("NotifyLadder",      { Text = "Notify Ladder Spawns", Default = false, Tooltip = "Notifies when a ladder spawns" })
+Visuals_Entities:AddToggle("NotifyLadder",      { Text = "Notify Ladder Spawns", Default = false, Tooltip = "Notifies when a ladder spawns",
+	Disabled = not Functions.IsFloorAllowed({"Mines"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Mines"}) and ("Only available on: Mines (Current: " .. tostring(Floor) .. ")") or nil
+})
 
 -- Visuals_EntitySettings
 Visuals_EntitySettings:AddToggle("EntityChatToggle", { Text = "Notify Chat", Default = false, Tooltip = "Sends a message in the chat when an entity spawns." })
@@ -1922,7 +4128,9 @@ Visuals_ESP_Settings:AddToggle("ESPArrowsToggle",     { Text = "Enable Arrows", 
 -- Floors_Visuals
 Floors_Visuals:AddToggle("ShowSeekPathToggle", {
 	Text = "Show Seek Path", Default = false, Tooltip = "Shows you the correct path in seek chases.",
-	Risky = Floor ~= "Mines"
+	Risky = Floor ~= "Mines",
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel"}) and ("Only available on: Hotel, Mines, Fools, OldHotel (Current: " .. tostring(Floor) .. ")") or nil
 })
 
 -- Floors_Bypass
@@ -1931,8 +4139,9 @@ Floors_Bypass:AddToggle("RemoveSeekTrigger", {
     Default = false,
     Tooltip = "Diables the 'Seek' chase trigger.",
     Risky = not (Floor == "Fools" or Floor == "OldHotel"),
-    Disabled = (not Functions.CheckEnv("firetouchinterest")),
-    DisabledTooltip = (not getgenv().it)
+    Disabled = (not Functions.CheckEnv("firetouchinterest")) or not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel"}),
+    DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel"}) and ("Only available on: Hotel, Mines, Fools, OldHotel (Current: " .. tostring(Floor) .. ")")
+        or (not getgenv().it)
         and Global.PayedFeatueMessage
         or (not Functions.CheckEnv("firetouchinterest"))
         and Global.ExecutorIssueMessage
@@ -1940,13 +4149,27 @@ Floors_Bypass:AddToggle("RemoveSeekTrigger", {
 })
 Floors_Bypass:AddToggle("AutoRevive", {
 	Text = "Infinite Revives", Default = false, Tooltip = "Automatically revives after dying, with unlimited respawns.",
-	Risky = not (Floor == "Fools" or Floor == "OldHotel")
+	Risky = not (Floor == "Fools" or Floor == "OldHotel"),
+	Disabled = not Functions.IsFloorAllowed({"Fools", "OldHotel"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Fools", "OldHotel"}) and ("Only available on: Fools, OldHotel (Current: " .. tostring(Floor) .. ")") or nil
 })
 
 -- Floors_Obstruction
-Floors_Obstruction:AddToggle("RemoveBasementGate",  { Text = "Remove Basement Gate",   Default = false, Tooltip = "Removes the gate from basement rooms.",            Risky = not (Floor == "Fools" or Floor == "OldHotel") })
-Floors_Obstruction:AddToggle("RemovePaintingsDoor", { Text = "Remove Paintings Door",  Default = false, Tooltip = "Removes the fireplace doors from painting rooms.", Risky = not (Floor == "Fools" or Floor == "OldHotel") })
-Floors_Obstruction:AddToggle("RemoveSkeletonDoor",  { Text = "Remove Skeleton Door",   Default = false, Tooltip = "Removes the skeleton door from the infirmary.",    Risky = Floor ~= "Fools" })
+Floors_Obstruction:AddToggle("RemoveBasementGate",  { Text = "Remove Basement Gate",   Default = false, Tooltip = "Removes the gate from basement rooms.",
+	Risky = not (Floor == "Fools" or Floor == "OldHotel"),
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Fools", "OldHotel"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Fools", "OldHotel"}) and ("Only available on: Hotel, Fools, OldHotel (Current: " .. tostring(Floor) .. ")") or nil
+})
+Floors_Obstruction:AddToggle("RemovePaintingsDoor", { Text = "Remove Paintings Door",  Default = false, Tooltip = "Removes the fireplace doors from painting rooms.",
+	Risky = not (Floor == "Fools" or Floor == "OldHotel"),
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Fools", "OldHotel"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Fools", "OldHotel"}) and ("Only available on: Hotel, Fools, OldHotel (Current: " .. tostring(Floor) .. ")") or nil
+})
+Floors_Obstruction:AddToggle("RemoveSkeletonDoor",  { Text = "Remove Skeleton Door",   Default = false, Tooltip = "Removes the skeleton door from the infirmary.",
+	Risky = Floor ~= "Fools",
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Fools", "OldHotel"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Fools", "OldHotel"}) and ("Only available on: Hotel, Fools, OldHotel (Current: " .. tostring(Floor) .. ")") or nil
+})
 
 -- Troll_Left
 Troll_Left:AddToggle("LoopTriggerFigure", {
@@ -1954,8 +4177,8 @@ Troll_Left:AddToggle("LoopTriggerFigure", {
 	Default = false,
 	Tooltip = "Triggers Figure.",
 	Risky = true,
-	--Disabled = (not getgenv().it),
-	DisabledTooltip = Global.PayedFeatueMessage
+	Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Fools", "OldHotel"}) and ("Only available on: Hotel, Mines, Fools, OldHotel (Current: " .. tostring(Floor) .. ")") or Global.PayedFeatueMessage
 })
 Troll_Left:AddDropdown("PlayerListToTrigger", {
 	Text = "Players",
@@ -2090,6 +4313,7 @@ end)
 
 
 Toggles.AutoBreakerBox:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("AutoBreakerBox", {"Hotel", "Mines", "Fools", "OldHotel", "Endless"}, "Auto Breaker Box") then return end
 	if Value and CurrentRooms:FindFirstChild("ElevatorBreaker", true) then
 		if not Global.BreakerBoxInteracted then
 			if not Global.BreakerBoxNotified then
@@ -2100,6 +4324,14 @@ Toggles.AutoBreakerBox:OnChanged(function(Value)
 			RemotesFolder.EBF:FireServer()
 		end
 	end
+end)
+
+Toggles.AutoUnlockPadlockToggle:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("AutoUnlockPadlockToggle", {"Hotel", "Fools", "OldHotel", "Retro", "Endless"}, "Auto Library Code") then return end
+end)
+
+Toggles.AutoSolveAnchors:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("AutoSolveAnchors", "Mines", "Auto Anchor") then return end
 end)
 
 
@@ -2203,6 +4435,7 @@ Self_Misc:AddButton({
 
 
 Toggles.BypassMandrake:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassMandrake", {"Garden", "Outdoors"}, "Anti Mandrake") then return end
 	for _, Object in Objects.Entities do
 		if Object.Name == "Root" and Object:IsA("BasePart") then
 			local BF = Object:FindFirstChild("AntiMandrakeForce")
@@ -2238,6 +4471,7 @@ local function CheckAndDestroyDrone(obj)
 end
 
 Toggles.AntiDrone:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("AntiDrone", {"Archives", "Outdoors", "Garden"}, "Anti Drone") then return end
     if AntiDroneConnection then
         AntiDroneConnection:Disconnect()
         AntiDroneConnection = nil
@@ -2270,6 +4504,7 @@ local function RemoveExistingAlma()
 end
 
 Toggles.BypassAntiAlma:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassAntiAlma", {"Subfloor", "Archives", "Garden", "Outdoors"}, "Anti Alma") then return end
 	if AntiAlmaConnection then
 		AntiAlmaConnection:Disconnect()
 		AntiAlmaConnection = nil
@@ -2323,6 +4558,7 @@ Conns.ClockDiscoverer = Services.Workspace.DescendantAdded:Connect(function(Obje
 end)
 
 Toggles.BypassStampede:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassStampede", {"Archives", "Outdoors"}, "Anti Stampede of Drones") then return end
 	if Value then
 		RegisterClockRemotes()
 	else
@@ -2331,6 +4567,7 @@ Toggles.BypassStampede:OnChanged(function(Value)
 end)
 
 Toggles.BypassDrones:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassDrones", {"Archives", "Outdoors", "Garden"}, "Anti Drone") then return end
 	for _, Object in Objects.Entities do
 		if Object.Name == "Drones" then
 			local WalkedInto = Object:FindFirstChild(Value and "_WalkedInto" or "WalkedInto")
@@ -2342,6 +4579,7 @@ Toggles.BypassDrones:OnChanged(function(Value)
 end)
 
 Toggles.BypassScribbles:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassScribbles", {"Retro", "Fools", "Subfloor", "Archives", "Garden"}, "Anti Scribbles") then return end
 	for _, Object in Objects.Entities do
 		if Object.Name == "Scribbles" or Object.Name == "ScribbleMoving" or Object.Name == "Scribble" then
 			for _, Part in Object:GetDescendants() do
@@ -2354,6 +4592,7 @@ end)
 
 
 Toggles.BypassGiggle:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassGiggle", {"Mines", "Garden"}, "Anti Giggle") then return end
 	for _, Object in Objects.Entities do
 		if Object.Name == "GiggleCeiling" then
 			Object:WaitForChild("Hitbox").CanTouch = not Value
@@ -2361,6 +4600,7 @@ Toggles.BypassGiggle:OnChanged(function(Value)
 	end
 end)
 Toggles.BypassDupe:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassDupe", {"Hotel", "Mines", "Fools", "OldHotel", "Retro", "Endless"}, "Anti Dupe") then return end
 	for _, Object in Objects.Entities do
 		if Object.Name == "DoorFake" or Object.Name == "FakeDoor" then
 			Object:WaitForChild("Hidden").CanTouch = not Value
@@ -2371,6 +4611,7 @@ Toggles.BypassDupe:OnChanged(function(Value)
 	end
 end)
 Toggles.BypassEyes:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassEyes", {"Hotel", "Mines", "Retro", "Fools", "OldHotel", "Endless"}, "Anti Eyes") then return end
 	if not Value or not Global.IsEyes then return end
 	if Floor == "Fools" or Floor == "OldHotel" then
 		RemotesFolder.MotorReplication:FireServer(0, (Global.SpoofOffset == 200 and 65 or -65), 0, false)
@@ -2379,6 +4620,7 @@ Toggles.BypassEyes:OnChanged(function(Value)
 	end
 end)
 Toggles.BypassLookman:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassLookman", {"Backdoor", "Hotel", "Mines", "Ripple"}, "Anti Lookman") then return end
 	if not Value or not Global.IsLookman then return end
 	if Floor == "Fools" or Floor == "OldHotel" then
 		RemotesFolder.MotorReplication:FireServer(0, (Global.SpoofOffset == 200 and 65 or -65), 0, false)
@@ -2387,6 +4629,7 @@ Toggles.BypassLookman:OnChanged(function(Value)
 	end
 end)
 Toggles.BypassGloombatEggs:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassGloombatEggs", "Mines", "Anti Gloombat Eggs") then return end
 	for _, Object in Objects.Entities do
 		for _, Part in Object:GetDescendants() do
 			if Part:IsA("BasePart") then
@@ -2396,6 +4639,7 @@ Toggles.BypassGloombatEggs:OnChanged(function(Value)
 	end
 end)
 Toggles.BypassSeekObstructions:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassSeekObstructions", {"Hotel", "Mines", "Fools", "OldHotel"}, "Anti Seek Obstructions") then return end
 	for _, Object in Objects.SeekObstructions do
 		Object.CanTouch = not Value
 		if Object.Name == "SeekFloodline" then
@@ -2408,6 +4652,7 @@ Toggles.BypassSeekObstructions:OnChanged(function(Value)
 	end
 end)
 Toggles.BypassVacuum:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassVacuum", "Backdoor", "Anti Vacuum") then return end
 	for _, Object in Objects.Entities do
 		if Object.Name == "SideroomSpace" then
 			Object:WaitForChild("Collision").CanCollide = Value
@@ -2416,11 +4661,13 @@ Toggles.BypassVacuum:OnChanged(function(Value)
 	end
 end)
 Toggles.BypassKillbricks:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassKillbricks", {"Retro", "Fools", "OldHotel"}, "Anti Killbricks") then return end
 	for _, Object in Objects.Obstructions do
 		if Object.Name == "Lava" then Object.CanTouch = not Value end
 	end
 end)
 Toggles.BypassSeekingWall:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassSeekingWall", "Fools", "Anti Seek Wall") then return end
 	for _, Object in Objects.Obstructions do
 		if Object.Name == "ScaryWall" then
 			for _, Part in Object:GetDescendants() do
@@ -2433,6 +4680,7 @@ Toggles.BypassSeekingWall:OnChanged(function(Value)
 	end
 end)
 Toggles.BypassSnare:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassSnare", {"Hotel", "Mines", "Fools", "OldHotel", "Endless"}, "Anti Snare") then return end
 	for _, Object in Objects.Entities do
 		if Object.Name == "Snare" then
 			for _, Part in Object:GetDescendants() do
@@ -2442,11 +4690,13 @@ Toggles.BypassSnare:OnChanged(function(Value)
 	end
 end)
 Toggles.BypassBanana:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassBanana", "Fools", "Anti Banana") then return end
 	for _, Object in Objects.Entities do
 		if Object.Name == "BananaPeel" then Object.CanTouch = not Value end
 	end
 end)
 Toggles.BypassJeff:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassJeff", "Fools", "Anti Jeff") then return end
 	for _, Object in Objects.Entities do
 		if Object.Name == "JeffTheKiller" then
 			for _, Part in Object:GetDescendants() do
@@ -2572,6 +4822,7 @@ end)
 
 
 Toggles.DisableAnticheat:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("DisableAnticheat", {"Hotel", "Mines", "Archives", "Stairwell"}, "Anticheat Bypass") then return end
 	if Global.AnticheatDisabled == true and not Value then
 		RemotesFolder.ClimbLadder:FireServer()
 		Global.AnticheatDisabled = false
@@ -2581,6 +4832,229 @@ Toggles.TeleportManipulationToggle:AddKeyPicker("TeleportManipulationKeybind", {
 	Text = "Teleport Manipulation", Default = "V",
 	Mode = Library.IsMobile and "Toggle" or "Hold", SyncToggleState = true
 })
+
+
+-- ============================================================================
+-- Chair Anticheat Bypass (Tplay's Method with Auto-Disable on ArchivesTerminal)
+-- ============================================================================
+local ChairBypassVars = {
+	ConnectingChair = false,
+	ChairConnection = nil,
+	GrabConnection = nil,
+}
+
+local function HasArchivesTerminal()
+	local CurrentRooms = Services.Workspace:FindFirstChild("CurrentRooms")
+	if CurrentRooms then
+		for _, room in ipairs(CurrentRooms:GetChildren()) do
+			local roomNum = tonumber(room.Name)
+			if roomNum and roomNum >= 50 and roomNum <= 1250 and roomNum % 50 == 0 then
+				local assets = room:FindFirstChild("Assets")
+				if assets and assets:FindFirstChild("ArchivesTerminal") then
+					return true
+				end
+				if room:FindFirstChild("ArchivesTerminal", true) then
+					return true
+				end
+			end
+		end
+	end
+	return false
+end
+
+local function FindChair()
+	local Misc = Services.Workspace:FindFirstChild("Misc")
+	if Misc then
+		for _, base in Misc:QueryDescendants(`> #{Floor}OfficeChair > #Base`) do
+			local align = base:FindFirstChild("CartAlignPosition")
+			local collider = base.Parent and base.Parent:FindFirstChild("Collider")
+			if collider and (align or (mstudio45.Environment.isnetworkowner and mstudio45.Environment.isnetworkowner(collider))) then
+				return base.Parent
+			end
+		end
+	end
+	-- Fallback search across Workspace
+	for _, desc in ipairs(Services.Workspace:GetDescendants()) do
+		if desc.Name == "ArchivesOfficeChair" and desc:IsA("Model") then
+			return desc
+		end
+	end
+	return nil
+end
+
+local function StopChairBypass()
+	if ChairBypassVars.ChairConnection then
+		ChairBypassVars.ChairConnection:Disconnect()
+		ChairBypassVars.ChairConnection = nil
+	end
+	ChairBypassVars.ConnectingChair = false
+end
+
+local function ConnectChair(chair, promptBlock, restoring)
+	if ChairBypassVars.ConnectingChair then return end
+	ChairBypassVars.ConnectingChair = true
+
+	local CartControl = RemotesFolder:FindFirstChild("CartControl")
+
+	if restoring then
+		while (function()
+			for _, descendant in Character:QueryDescendants("> #CollisionPart > #CartTargetAttachment") do
+				if descendant:IsA("Attachment") then
+					return false
+				end
+			end
+			return true
+		end)() do
+			if not Toggles.ChairTeleportToPlayer.Value then
+				StopChairBypass()
+				return
+			end
+			chair:PivotTo(Character:GetPivot() + Character:GetPivot().LookVector * 5)
+			if chair:FindFirstChild("Attachment") and chair.Attachment:FindFirstChild("CartPrompt") then
+				mstudio45.Environment.fireproximityprompt(chair.Attachment.CartPrompt)
+			end
+			task.wait()
+		end
+	end
+
+	local collider = chair:FindFirstChild("Collider")
+	if not collider then
+		ChairBypassVars.ConnectingChair = false
+		return
+	end
+
+	if CartControl then
+		CartControl:FireServer()
+	end
+	task.wait()
+
+	local doo = true
+	task.spawn(function()
+		while doo and Toggles.ChairTeleportToPlayer.Value do
+			local seatPrompt = collider:FindFirstChild("SeatPrompt")
+			if seatPrompt then
+				mstudio45.Environment.fireproximityprompt(seatPrompt)
+			end
+			task.wait()
+		end
+	end)
+
+	Character:GetAttributeChangedSignal("SeatedInSeat"):Wait()
+	doo = false
+	Character:SetAttribute("SeatedInSeat", false)
+	task.wait()
+
+	Functions.Notify({
+		Title = "Anticheat Bypass",
+		Body = "Anticheat was bypassed!",
+		Time = 3
+	})
+	ChairBypassVars.ConnectingChair = false
+
+	local val = 0
+	if ChairBypassVars.ChairConnection then
+		ChairBypassVars.ChairConnection:Disconnect()
+		ChairBypassVars.ChairConnection = nil
+	end
+
+	local terminalNotified = false
+
+	ChairBypassVars.ChairConnection = Services.RunService.Heartbeat:Connect(function(dt)
+		if not Toggles.ChairTeleportToPlayer.Value or not chair or not chair.Parent or not Character or not Character.Parent then
+			StopChairBypass()
+			return
+		end
+
+		-- Если в комнате есть ArchivesTerminal — временно усыпляем физику (без выключения самого тоггла)
+		if HasArchivesTerminal() then
+			if not terminalNotified then
+				terminalNotified = true
+				Functions.Notify({
+					Title = "Anticheat Bypass",
+					Body = "ArchivesTerminal detected. Bypass paused in this room.",
+					Time = 3
+				})
+			end
+			return
+		else
+			if terminalNotified then
+				terminalNotified = false
+				Functions.Notify({
+					Title = "Anticheat Bypass",
+					Body = "ArchivesTerminal cleared. Bypass resumed.",
+					Time = 3
+				})
+			end
+		end
+
+		val = (val + dt * 3600) % 360
+		collider.AssemblyLinearVelocity = Vector3.new(0, 10, 0)
+		chair:PivotTo(Character:GetPivot())
+		Services.RunService.RenderStepped:Wait()
+		chair:PivotTo(Character:GetPivot() - Vector3.new(0, -10, 0))
+	end)
+
+	local isNetworkOwnerFunc = mstudio45.Environment.isnetworkowner or isnetworkowner
+	while ChairBypassVars.ChairConnection and chair:IsDescendantOf(Services.Workspace) and (not promptBlock or not isNetworkOwnerFunc or isNetworkOwnerFunc(promptBlock)) and Character.Parent and Character:GetAttribute("SeatedInSeat") ~= nil and Toggles.ChairTeleportToPlayer.Value do
+		task.wait()
+	end
+
+	if Toggles.ChairTeleportToPlayer.Value and chair:IsDescendantOf(Services.Workspace) and (not promptBlock or not isNetworkOwnerFunc or isNetworkOwnerFunc(promptBlock)) and Character.Parent and Character:GetAttribute("DeathReason") ~= "Impact" then
+		Character:SetAttribute("DeathReason", "_Impact")
+		Functions.Notify({
+			Title = "Anticheat Bypass",
+			Body = "Anticheat bypass was broken, trying to restore it...",
+			Time = 3
+		})
+		ConnectChair(chair, promptBlock, true)
+	else
+		StopChairBypass()
+	end
+end
+
+Toggles.ChairTeleportToPlayer:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("ChairTeleportToPlayer", {"Hotel", "Mines", "Archives", "Stairwell"}, "Chair Anticheat Bypass") then return end
+	if Value then
+		Functions.Notify({
+			Title = "Anticheat Bypass",
+			Body = "Grab a chair to bypass anticheat.",
+			Time = 3
+		})
+
+		if ChairBypassVars.GrabConnection then
+			ChairBypassVars.GrabConnection:Disconnect()
+			ChairBypassVars.GrabConnection = nil
+		end
+
+		ChairBypassVars.GrabConnection = Character.DescendantAdded:Connect(function(descendant)
+			if Toggles.ChairTeleportToPlayer.Value and not ChairBypassVars.ChairConnection and descendant:IsA("Attachment") and descendant.Name == "CartTargetAttachment" and descendant.Parent and descendant.Parent.Name == "CollisionPart" then
+				local chair = FindChair(descendant)
+				local promptBlock = chair and chair:FindFirstChild("PromptBlocker")
+				if chair then
+					ConnectChair(chair, promptBlock)
+				end
+			end
+		end)
+
+		-- Проверяем, захвачен ли стул уже
+		for _, descendant in Character:GetDescendants() do
+			if descendant:IsA("Attachment") and descendant.Name == "CartTargetAttachment" and descendant.Parent and descendant.Parent.Name == "CollisionPart" then
+				local chair = FindChair(descendant)
+				local promptBlock = chair and chair:FindFirstChild("PromptBlocker")
+				if chair then
+					task.spawn(ConnectChair, chair, promptBlock)
+				end
+				break
+			end
+		end
+	else
+		if ChairBypassVars.GrabConnection then
+			ChairBypassVars.GrabConnection:Disconnect()
+			ChairBypassVars.GrabConnection = nil
+		end
+		StopChairBypass()
+	end
+end)
 
 
 
@@ -2603,12 +5077,14 @@ Toggles.PositionSpoof:AddKeyPicker("PositionSpoof", {
 	Text = "Position Spoof", Default = "G", Mode = "Toggle", SyncToggleState = true
 })
 Toggles.AnitFigureHearing:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("AnitFigureHearing", {"Hotel", "Mines", "Fools", "OldHotel"}, "Anti Figure Hearing") then return end
 	if RemotesFolder:FindFirstChild("Crouch") then
 		RemotesFolder.Crouch:FireServer(Value and true or Functions.IsCrouching(), true)
 	end
 end)
 
 Toggles.AnitFigureHearing:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("AnitFigureHearing", {"Hotel", "Mines", "Fools", "OldHotel"}, "Anti Figure Hearing") then return end
 	if Value then
 		FakeEvents.Figure.Parent = RemotesFolder
 		FakeEvents.Figure_Real.Parent = Workspace.mstudio45_Folder
@@ -2630,6 +5106,10 @@ Conns.AntiPuddle = Services.RunService.Heartbeat:Connect(function()
 	end
 end)
 
+Toggles.AntiPuddle:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("AntiPuddle", {"Mines", "Archives", "Party"}, "Anti Puddle") then return end
+end)
+
 
 
 
@@ -2641,6 +5121,7 @@ end)
 
 
 Toggles.NoScreechDamage:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("NoScreechDamage", {"Hotel", "Mines", "Fools", "OldHotel", "Retro", "Endless", "Ripple"}, "No Screech Damage") then return end
 	if Value then
 		FakeEvents.Screech.Parent = RemotesFolder
 		FakeEvents.Screech_Real.Parent = Workspace.mstudio45_Folder
@@ -2650,6 +5131,7 @@ Toggles.NoScreechDamage:OnChanged(function(Value)
 	end
 end)
 Toggles.NoHaltDamage:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("NoHaltDamage", {"Hotel", "Mines", "Fools", "OldHotel", "Retro", "Endless", "Ripple"}, "No Halt Damage") then return end
 	if Value then
 		FakeEvents.Shade.Parent = RemotesFolder
 		FakeEvents.Shade_Real.Parent = Workspace.mstudio45_Folder
@@ -2659,6 +5141,7 @@ Toggles.NoHaltDamage:OnChanged(function(Value)
 	end
 end)
 Toggles.NoA90Damage:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("NoA90Damage", {"Rooms", "Hotel", "Mines", "Backdoor", "Ripple"}, "No A-90 Damage") then return end
 	if RemotesFolder:FindFirstChild("A90") then
 		if Value then
 			FakeEvents.A90.Parent = RemotesFolder
@@ -2670,6 +5153,7 @@ Toggles.NoA90Damage:OnChanged(function(Value)
 	end
 end)
 Toggles.NoSurgeDamage:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("NoSurgeDamage", {"Backdoor", "Subfloor", "Ripple"}, "No Surge Damage") then return end
 	if RemotesFolder:FindFirstChild("SurgeRemote") then
 		if Value then
 			FakeEvents.Surge.Parent = RemotesFolder
@@ -2869,10 +5353,22 @@ local function RestoreAllModules()
 	if FloorReplicated then RestoreFolder(FloorReplicated) end
 end
 
-Toggles.RemoveScreech:OnChanged(function(Value) SetAntiScreech(Value) end)
-Toggles.RemoveHalt:OnChanged(function() SyncEntityRemoval() end)
-Toggles.RemoveA90:OnChanged(function() SyncEntityRemoval() end)
-Toggles.RemoveDread:OnChanged(function() SyncEntityRemoval() end)
+Toggles.RemoveScreech:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("RemoveScreech", {"Hotel", "Mines", "Fools", "OldHotel", "Retro", "Endless", "Ripple"}, "Anti Screech") then return end
+	SetAntiScreech(Value)
+end)
+Toggles.RemoveHalt:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("RemoveHalt", {"Hotel", "Mines", "Fools", "OldHotel", "Retro", "Endless", "Ripple"}, "Anti Halt") then return end
+	SyncEntityRemoval()
+end)
+Toggles.RemoveA90:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("RemoveA90", {"Rooms", "Hotel", "Mines", "Backdoor", "Ripple"}, "Anti A-90") then return end
+	SyncEntityRemoval()
+end)
+Toggles.RemoveDread:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("RemoveDread", {"Hotel", "Mines", "Fools", "OldHotel", "Retro", "Endless", "Ripple"}, "Anti Dread") then return end
+	SyncEntityRemoval()
+end)
 
 
 Global.JamMuffle = Services.SoundService:WaitForChild("Main"):FindFirstChild("Jamming") or Instance.new("EqualizerSoundEffect")
@@ -2969,6 +5465,7 @@ Toggles.DisableHideVignette:OnChanged(function(Value)
 	if Vignette then Vignette.Image = Value and "Disabled" or "rbxassetid://6100076320" end
 end)
 Toggles.DisableFiredampEffect:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("DisableFiredampEffect", "Mines", "No Firedamp Effect") then return end
 	for _, Object in CurrentRooms:GetChildren() do
 		if Value then
 			Object:SetAttribute("Firedamp", false)
@@ -3026,6 +5523,7 @@ end
 
 Global.LibraryCodeFound = false
 Toggles.NotifyLibraryCode:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("NotifyLibraryCode", {"Hotel", "Fools", "OldHotel", "Retro", "Endless"}, "Notify Library Code") then return end
 	if Value then
 		local Code = Functions.GetLibraryCode()
 		if Code and not Code:find("_") and not Global.LibraryCodeFound and CurrentRooms:FindFirstChild("50") then
@@ -3380,16 +5878,22 @@ Toggles.LadderESPToggle:OnChanged(function(Value)
 end)
 
 Toggles.NotifyLadder:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("NotifyLadder", {"Mines", "Archives"}, "Notify Ladder Spawns") then return end
 	for _, Object in Objects.Ladders do
 		if Value then
 			Functions.Notify({ Title = "Ladder Notify", Body = "Ladder has spawned in Room " .. (Object:GetAttribute("ParentRoom") or "?") .. "." })
 		end
 	end
 end)
+Toggles.NotifyOxygen:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("NotifyOxygen", {"Mines", "Ripple", "Party"}, "Notify Oxygen") then return end
+end)
+Toggles.NotifyHasteTime:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("NotifyHasteTime", {"Backdoor", "Hotel", "Mines"}, "Notify Haste Time") then return end
+end)
 Options.LadderESPColor:OnChanged(function(Value)
 	for _, Object in Objects.Ladders do mstudio45.ESPLibrary:UpdateObjectColor(Object, Value) end
 end)
-
 
 
 
@@ -3556,6 +6060,7 @@ local function UnhookNamecall()
 end
 
 InstantMinecartTeleport:OnChanged(function(Value)
+    if Value and not Functions.CheckFloorToggle("MinecartTeleport", "Mines", "Minecart Teleport") then return end
     if Value then
         State.MinecartPos = FindMinecartPos()
         if not State.MinecartPos then
@@ -3749,14 +6254,18 @@ Floors_Completion:AddButton({
 
 
 Toggles.ShowSeekPathToggle:AddColorPicker("ShowSeekPathColor", { Text = "Seek Path", Default = Color3.fromRGB(0, 255, 0), Transparency = 0 })
-
-
-
-
-
-
-
-
+Toggles.ShowSeekPathToggle:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("ShowSeekPathToggle", {"Hotel", "Mines", "Fools", "OldHotel"}, "Show Seek Path") then return end
+end)
+Toggles.RemoveSeekTrigger:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("RemoveSeekTrigger", {"Hotel", "Mines", "Fools", "OldHotel"}, "Delete Seek Trigger") then return end
+end)
+Toggles.AutoRevive:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("AutoRevive", {"Fools", "OldHotel"}, "Infinite Revives") then return end
+end)
+Toggles.RemoveFigure:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("RemoveFigure", {"Hotel", "Mines", "Fools", "OldHotel"}, "Delete Figure") then return end
+end)
 
 
 		
@@ -3815,6 +6324,7 @@ local TriggerFigureEvent = RemotesFolder:FindFirstChild("FootstepRemoteThatWeNee
 	or (HiddenRemotes and HiddenRemotes:FindFirstChild("FootstepRemoteThatWeNeed"))
 
 Toggles.LoopTriggerFigure:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("LoopTriggerFigure", {"Hotel", "Mines", "Fools", "OldHotel"}, "Trigger Figure") then return end
 	if Value then
 		if TriggerFigureLooping then return end
 		TriggerFigureLooping = true
@@ -3904,6 +6414,7 @@ end)
 local ObstructionNames = { ThingToOpen = "RemoveBasementGate", MovingDoor = "RemovePaintingsDoor", Wax_Door = "RemoveSkeletonDoor" }
 for ObjName, ToggleName in ObstructionNames do
 	Toggles[ToggleName]:OnChanged(function(Value)
+		if Value and not Functions.CheckFloorToggle(ToggleName, {"Hotel", "Fools", "OldHotel"}, ToggleName) then return end
 		for _, Object in Objects.Obstructions do
 			if Object.Name == ObjName then
 				Object:PivotTo(Value and CFrame.new(-10000, -10000, -10000) or Object:GetAttribute("OriginalPosition"))
@@ -4678,6 +7189,7 @@ Conns.ForgetMeNotWatcher = CurrentRooms.DescendantAdded:Connect(function(Object)
 end)
 
 Toggles.AutoForgetMeNot:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("AutoForgetMeNot", {"Hotel", "Mines", "Backdoor", "Rooms"}, "Auto ForgetMeNot") then return end
 	if not Value then
 		StopAutoForgetMeNot()
 	end
