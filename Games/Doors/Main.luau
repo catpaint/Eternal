@@ -404,7 +404,7 @@ if Library.ActiveLoading and Library.ActiveLoading.Destroyed ~= true then
 end
 local Loading = Library:CreateLoading({
 	Title = "lolcheat V4",
-	Icon = 95816097006870,
+	Icon = 77196040991392,
 	TotalSteps = 4,
 	ShowSidebar = true,
 	AlwaysOnTop = true,
@@ -2059,11 +2059,6 @@ do
 				end
 			end
 		end
-	}):AddKeyPicker("Tplay_AnticheatBypassKey", {
-		Default = "None",
-		SyncToggleState = true,
-		Mode = "Toggle",
-		Text = "Anticheat Bypass (Chair)"
 	})
 
 	Tplay_Main:AddToggle("Tplay_AnticheatManipulationAlt", {
@@ -2125,11 +2120,6 @@ do
 				end
 			end
 		end
-	}):AddKeyPicker("Tplay_FastChairAndCartKey", {
-		Default = "None",
-		SyncToggleState = true,
-		Mode = "Toggle",
-		Text = "Fast Chair & Cart"
 	})
 
 	Tplay_Main:AddToggle("Tplay_BringDrawerWithKey", {
@@ -2163,11 +2153,6 @@ do
 				ToggleNetworkOwner(false)
 			end
 		end
-	}):AddKeyPicker("Tplay_BringDrawerWithKeyKey", {
-		Default = "None",
-		SyncToggleState = true,
-		Mode = "Toggle",
-		Text = "Bring Drawer With Key"
 	})
 
 	Tplay_Main:AddToggle("Tplay_MinecartChaseSkip", {
@@ -2227,11 +2212,6 @@ do
 				end
 			end
 		end
-	}):AddKeyPicker("Tplay_AntiTeleportKey", {
-		Default = "None",
-		SyncToggleState = true,
-		Mode = "Toggle",
-		Text = "Anti Teleport"
 	})
 
 	Tplay_Main:AddToggle("Tplay_AntiTeleportRaknet", {
@@ -2309,11 +2289,6 @@ do
 				Humanoid.WalkSpeed = 15
 			end
 		end
-	}):AddKeyPicker("Tplay_SlideSpeedHackKey", {
-		Default = "None",
-		SyncToggleState = true,
-		Mode = "Toggle",
-		Text = "Slide SpeedHack"
 	})
 
 	Tplay_Main:AddToggle("Tplay_RakNetSpeedHack", {
@@ -2474,11 +2449,6 @@ do
 				end
 			end
 		end
-	}):AddKeyPicker("Tplay_CollisionOffsetGodmodeAltKey", {
-		Default = "U",
-		SyncToggleState = true,
-		Mode = "Toggle",
-		Text = "Position Offset Alt"
 	})
 
 	Tplay_Combat:AddToggle("Tplay_InfiniteCrucifixAlt", {
@@ -2526,11 +2496,6 @@ do
 				end
 			end
 		end
-	}):AddKeyPicker("Tplay_InfiniteCrucifixAltKey", {
-		Default = "None",
-		SyncToggleState = true,
-		Mode = "Toggle",
-		Text = "Infinite Crucifix Alt"
 	})
 
 	Tplay_Combat:AddToggle("Tplay_DisableMandrakeFEAlt", {
@@ -2739,11 +2704,6 @@ do
 				end
 			end
 		end
-	}):AddKeyPicker("Tplay_LoopStealKey", {
-		Default = "None",
-		SyncToggleState = true,
-		Mode = "Toggle",
-		Text = "Loop Steal Drops"
 	})
 
 	Tplay_Items:AddDivider()
@@ -2797,11 +2757,6 @@ do
 				end
 			end
 		end
-	}):AddKeyPicker("Tplay_OrbitDropsKey", {
-		Default = "None",
-		SyncToggleState = true,
-		Mode = "Toggle",
-		Text = "Orbit Drops"
 	})
 
 	Tplay_Items:AddToggle("Tplay_OrbitGlowsticks", {
@@ -2830,11 +2785,6 @@ do
 				end
 			end
 		end
-	}):AddKeyPicker("Tplay_OrbitGlowsticksKey", {
-		Default = "None",
-		SyncToggleState = true,
-		Mode = "Toggle",
-		Text = "Orbit Glowsticks"
 	})
 
 	Tplay_Items:AddToggle("Tplay_AntiSteal", {
@@ -2858,12 +2808,12 @@ do
 	Tplay_Floors:AddToggle("Tplay_AutoFloor", {
 		Text = "Auto Floor Completion",
 		Default = false,
-		Disabled = not Functions.IsFloorAllowed({"Stairwell", "Garden"}),
-		DisabledTooltip = not Functions.IsFloorAllowed({"Stairwell", "Garden"}) and ("Only available on: Stairwell, Garden (Current: " .. tostring(Floor) .. ")") or nil,
+		Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Endless", "Ripple", "Garden"}),
+		DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Endless", "Ripple", "Garden"}) and ("Only available on: Hotel, Mines, Endless, Ripple, Garden (Current: " .. tostring(Floor) .. ")") or nil,
 		Tooltip = "Automatically advances through and solves rooms on supported floors.",
 		Callback = function(Value)
 			if Value then
-				if not Functions.CheckFloorToggle("Tplay_AutoFloor", {"Stairwell", "Garden"}, "Auto Floor") then
+				if not Functions.CheckFloorToggle("Tplay_AutoFloor", {"Hotel", "Mines", "Endless", "Ripple", "Garden"}, "Auto Floor") then
 					return
 				end
 				Functions.Notify({ Title = "Auto Floor", Body = "Auto Floor started for " .. Floor, Time = 3 })
@@ -2958,11 +2908,6 @@ do
 				end
 			end)
 		end
-	}):AddKeyPicker("Tplay_FreecamKey", {
-		Default = "None",
-		SyncToggleState = true,
-		Mode = "Toggle",
-		Text = "Doors Freecam"
 	})
 
 	Tplay_QoL:AddToggle("Tplay_CurrentHideTime", {
@@ -3293,11 +3238,6 @@ do
 				end
 			end
 		end
-	}):AddKeyPicker("Tplay_CrazyPartsKey", {
-		Default = "None",
-		SyncToggleState = true,
-		Mode = "Toggle",
-		Text = "Crazy Unanchored Parts"
 	})
 
 	Tplay_Troll:AddToggle("Tplay_InvisibleGrumbles", {
@@ -3426,11 +3366,6 @@ do
 				end)
 			end
 		end
-	}):AddKeyPicker("Tplay_UpsideDownKey", {
-		Default = "None",
-		SyncToggleState = true,
-		Mode = "Toggle",
-		Text = "Upside Down Character"
 	})
 
 	Tplay_Troll:AddToggle("Tplay_Stun", {
@@ -3440,11 +3375,6 @@ do
 		Callback = function(Value)
 			Character:SetAttribute("Stunned", Value)
 		end
-	}):AddKeyPicker("Tplay_StunKey", {
-		Default = "None",
-		SyncToggleState = true,
-		Mode = "Toggle",
-		Text = "Stun Character"
 	})
 
 	Tplay_Troll:AddToggle("Tplay_ThinkingAnimation", {
@@ -3513,11 +3443,6 @@ do
 				end
 			end
 		end
-	}):AddKeyPicker("Tplay_WalkAnimSpoofKey", {
-		Default = "None",
-		SyncToggleState = true,
-		Mode = "Toggle",
-		Text = "Walking Anim Spoof"
 	})
 
 	Tplay_Troll:AddToggle("Tplay_DontShowSpoofedWalkAnim", {
@@ -3558,11 +3483,6 @@ do
 				end
 			end
 		end
-	}):AddKeyPicker("Tplay_MotorAbuseKey", {
-		Default = "None",
-		SyncToggleState = true,
-		Mode = "Toggle",
-		Text = "Motor Replication Abuse"
 	})
 
 	-- =========================================================================
@@ -4070,8 +3990,8 @@ Visuals_Entities:AddToggle("NotifyHasteTime",   { Text = "Notify Haste Time",   
 Visuals_Entities:AddToggle("NotifyItemsToggle", { Text = "Notify Items",    Default = false, Tooltip = "Sends a notification when an item spawns." })
 Visuals_Entities:AddToggle("NotifyRoomAnomalies", { Text = "Notify Room Anomalies", Default = true, Tooltip = "Notifies you of any room anomaly (Dupe, Monument, Currents, Server Carts, Scribble, Giggle, etc.) as soon as a new room loads." })
 Visuals_Entities:AddToggle("NotifyLadder",      { Text = "Notify Ladder Spawns", Default = false, Tooltip = "Notifies when a ladder spawns",
-	Disabled = not Functions.IsFloorAllowed({"Mines"}),
-	DisabledTooltip = not Functions.IsFloorAllowed({"Mines"}) and ("Only available on: Mines (Current: " .. tostring(Floor) .. ")") or nil
+	Disabled = not Functions.IsFloorAllowed({"Mines", "Archives"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Mines", "Archives"}) and ("Only available on: Mines, Archives (Current: " .. tostring(Floor) .. ")") or nil
 })
 
 -- Visuals_EntitySettings
