@@ -2032,12 +2032,12 @@ do
 	Tplay_Main:AddToggle("Tplay_AnticheatBypass", {
 		Text = "Anticheat Bypass (Chair)",
 		Default = false,
-		Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Archives", "Stairwell"}),
-		DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Archives", "Stairwell"}) and ("Only available on: Hotel, Mines, Archives, Stairwell (Current: " .. tostring(Floor) .. ")") or nil,
+		Disabled = not Functions.IsFloorAllowed({"Archives", "Stairwell"}),
+		DisabledTooltip = not Functions.IsFloorAllowed({"Archives", "Stairwell"}) and ("Only available on: Archives, Stairwell (Current: " .. tostring(Floor) .. ")") or nil,
 		Tooltip = "Grab a chair to bypass the anticheat completely.",
 		Callback = function(Value)
 			if Value then
-				if not Functions.CheckFloorToggle("Tplay_AnticheatBypass", {"Hotel", "Mines", "Archives", "Stairwell"}, "Anticheat Bypass (Chair)") then
+				if not Functions.CheckFloorToggle("Tplay_AnticheatBypass", {"Archives", "Stairwell"}, "Anticheat Bypass (Chair)") then
 					return
 				end
 				TplayVars.ACBypassNotify = Library:Notify({
