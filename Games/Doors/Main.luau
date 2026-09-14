@@ -354,7 +354,8 @@ local FloorReplicated = Services.ReplicatedStorage:FindFirstChild("FloorReplicat
 local CurrentRooms    = Services.Workspace:FindFirstChild("CurrentRooms")
 local Drops           = Services.Workspace:FindFirstChild("Drops")
 local GameData        = Services.ReplicatedStorage:WaitForChild("GameData")
-local Floor           = GameData:WaitForChild("Floor").Value
+local FloorObj        = GameData:FindFirstChild("FloorDestination") or GameData:FindFirstChild("Floor") or GameData:WaitForChild("Floor", 5)
+local Floor           = FloorObj and FloorObj.Value or ""
 local LatestRoom      = GameData:WaitForChild("LatestRoom")
 local FinishedLoadingRoom = GameData:FindFirstChild("FinishedLoadingRoom")
 if FinishedLoadingRoom then
@@ -970,12 +971,21 @@ end
 
 Functions.IsFloorAllowed = function(allowedFloors)
 	if not allowedFloors then return true end
-	local cur = tostring(Floor or "")
+	local cur = tostring(Floor or ""):lower()
+	if cur == "" and GameData then
+		local fObj = GameData:FindFirstChild("FloorDestination") or GameData:FindFirstChild("Floor")
+		if fObj then cur = tostring(fObj.Value):lower() end
+	end
+	local function matchFloor(a, b)
+		if a == b then return true end
+		if (a == "outdoors" or a == "garden") and (b == "outdoors" or b == "garden") then return true end
+		return false
+	end
 	if type(allowedFloors) == "string" then
-		return cur:lower() == allowedFloors:lower()
+		return matchFloor(cur, allowedFloors:lower())
 	elseif type(allowedFloors) == "table" then
 		for _, f in ipairs(allowedFloors) do
-			if cur:lower() == tostring(f):lower() then return true end
+			if matchFloor(cur, tostring(f):lower()) then return true end
 		end
 	end
 	return false
@@ -1458,7 +1468,7 @@ local Window = Library:CreateWindow({
     Title = "lolcheat V4",
     Icon = 77196040991392,
     Footer = "Game: DOORS | lolcheat V4 | Build 0.491",
-    Size = UDim2.fromOffset(900, 700),
+    Size = UDim2.fromOffset(720, 600),
     NotifySide = "Right",
     ShowCustomCursor = false,
     AutoShow = true,
@@ -2805,32 +2815,241 @@ do
 	-- 4. FLOOR COMPLETION & AUTOMATION
 	-- =========================================================================
 
+	local function GetNearestLever(Room)
+		local Nearest = { Dist = 1/0 }
+		if not Room then return nil end
+		for _, lever in Room:QueryDescendants("#AlaskanVineSet > #VineGuillotine > #Lever") do
+			local prompt = lever:FindFirstChild("ActivateEventPrompt")
+			if prompt and prompt.Enabled and RootPart then
+				local dist = (RootPart.Position - lever.Position).Magnitude
+				if dist < Nearest.Dist then
+					Nearest.Dist = dist
+					Nearest.Lever = lever
+				end
+			end
+		end
+		return Nearest.Lever
+	end
+
+	local function GetLotusPetal()
+		if not CurrentRooms then return nil, nil end
+		local LotusPetals = CurrentRooms:QueryDescendants("#LotusHolder, #LotusPetalPickup, #LotusPetal")
+		local LotusPetal, Drawer
+		for _, lotuspetal in LotusPetals do
+			local prompt = lotuspetal:FindFirstChild("ModulePrompt")
+			if prompt and prompt.Enabled then
+				LotusPetal = lotuspetal
+				Drawer = lotuspetal.Parent and lotuspetal.Parent.Name == "DrawerContainer" and lotuspetal.Parent
+				break
+			end
+		end
+		return LotusPetal, Drawer
+	end
+
+	local function StartAutoFloorOutdoors()
+		local lastCutscene = ""
+		local LOTUS, PICKING_LOTUS = false, false
+		local unavailableUntil = -1/0
+
+		local Cutscene = RemotesFolder:FindFirstChild("Cutscene")
+		if Cutscene then
+			TplayVars.AutoFloorCutscene = Cutscene.OnClientEvent:Connect(function(name)
+				lastCutscene = name
+				if name == "EyestalkOutro" then
+					Functions.Notify({ Title = "Auto Floor", Body = "Eyestalk chase completed!", Time = 3 })
+				elseif name == "BrambleIntro" then
+					Functions.Notify({ Title = "Auto Floor", Body = "Bramble phase started!", Time = 3 })
+				end
+			end)
+		end
+
+		TplayVars.AutoFloorConnection = Services.RunService.Heartbeat:Connect(function()
+			if not RootPart or not Character or not Character:GetAttribute("Alive") then return end
+			local curRoomNum = (LatestRoom and LatestRoom.Value) or 0
+			local Room = CurrentRooms and CurrentRooms:FindFirstChild(tostring(curRoomNum))
+			local Door = Room and Room:FindFirstChild("Door")
+			local rawName = Room and Room:GetAttribute("RawName") or ""
+
+			local eyestalkEnd = rawName == "Garden_EyestalkEnd" and (Toggles.Tplay_TriggerEyestalkChaseEnd and Toggles.Tplay_TriggerEyestalkChaseEnd.Value) and (lastCutscene ~= "EyestalkOutro" or (RootPart and RootPart.Anchored))
+			if os.clock() < unavailableUntil or (eyestalkEnd and RootPart and RootPart.Anchored) then return end
+
+			local Crouch = RemotesFolder:FindFirstChild("Crouch")
+			if Crouch and not TplayVars.SlideActive then
+				TplayVars.SlideActive = true
+				Crouch:FireServer(true, true)
+			end
+
+			local lotuspetal, drawer, grampy
+			local tool = GetEquippedTool(LocalPlayer)
+			if Toggles.Tplay_MakeLotus and Toggles.Tplay_MakeLotus.Value and not (LocalPlayer.Backpack:FindFirstChild("Lotus") or (tool and tool.Name == "Lotus")) then
+				lotuspetal, drawer = GetLotusPetal()
+				grampy = CurrentRooms and CurrentRooms:FindFirstChild("Grampy", true)
+				grampy = grampy and (tonumber(grampy.Parent.Parent.Name) or 0) <= curRoomNum and grampy
+			end
+			local lotuspetaltool = (tool and tool.Name == "LotusPetal" and tool) or LocalPlayer.Backpack:FindFirstChild("LotusPetal")
+			local success, forminglotus = pcall(function() return Room.Assets.FormingLotus end)
+			forminglotus = success and forminglotus
+
+			if grampy and not LOTUS and lotuspetaltool and (lotuspetaltool:GetAttribute("Durability") or 0) > 7 then
+				PICKING_LOTUS = true
+				Character:PivotTo(grampy:GetPivot())
+				if lotuspetaltool.Parent ~= Character then
+					lotuspetaltool.Parent = Character
+				end
+				local prompt = grampy:FindFirstChild("DialogPrompt")
+				if prompt and fireprompt then fireprompt(prompt) end
+			elseif grampy and not LOTUS and PICKING_LOTUS then
+				if tool and tool.Name == "Lotus" then
+					LOTUS = true
+				elseif forminglotus and forminglotus:FindFirstChild("Lotus") then
+					Character:PivotTo(forminglotus:GetPivot())
+					local prompt = forminglotus.Lotus:FindFirstChild("PromptAttach") and forminglotus.Lotus.PromptAttach:FindFirstChild("ModulePrompt")
+					if prompt and fireprompt then fireprompt(prompt) end
+				end
+			elseif lotuspetal and not (lotuspetaltool and (lotuspetaltool:GetAttribute("Durability") or 0) > 7) then
+				Character:PivotTo(lotuspetal:GetPivot())
+				if drawer and drawer:FindFirstChild("ActivateEventPrompt", true) and fireprompt then
+					fireprompt(drawer:FindFirstChild("ActivateEventPrompt", true))
+				end
+				local prompt = lotuspetal:FindFirstChild("ModulePrompt")
+				if prompt and fireprompt then fireprompt(prompt) end
+			elseif eyestalkEnd then
+				if lastCutscene ~= "EyestalkOutro" and Room:FindFirstChild("EyestalkEndCutscene") and Room.EyestalkEndCutscene:FindFirstChild("Collision") then
+					Character:PivotTo(Room.EyestalkEndCutscene.Collision.CFrame)
+					if firetouch then
+						firetouch(RootPart, Room.EyestalkEndCutscene.Collision, 0)
+						firetouch(RootPart, Room.EyestalkEndCutscene.Collision, 1)
+					end
+				end
+			elseif Room and Room.Name == "35" then
+				if lastCutscene == "BrambleIntro" then
+					local mg = LocalPlayer.PlayerGui:FindFirstChild("MainUI") and LocalPlayer.PlayerGui.MainUI:FindFirstChild("Initiator") and LocalPlayer.PlayerGui.MainUI.Initiator:FindFirstChild("Main_Game")
+					local req_mg = mg and require(mg)
+					if req_mg and req_mg.stopcam then return end
+					local Lever = GetNearestLever(Room)
+					if Lever then
+						Character:PivotTo(Lever.CFrame)
+						local prompt = Lever:FindFirstChild("ActivateEventPrompt")
+						if prompt and fireprompt then fireprompt(prompt) end
+					elseif Room:FindFirstChild("OutdoorsEnding") and Room.OutdoorsEnding:FindFirstChild("Collision") then
+						Character:PivotTo(Room.OutdoorsEnding.Collision.CFrame)
+						if firetouch then
+							firetouch(RootPart, Room.OutdoorsEnding.Collision, 0)
+							firetouch(RootPart, Room.OutdoorsEnding.Collision, 1)
+						end
+					end
+				elseif lastCutscene == "EyestalkOutro" or lastCutscene == "" then
+					if Room:FindFirstChild("BrambleCutscene") and Room.BrambleCutscene:FindFirstChild("Collision") then
+						Character:PivotTo(Room.BrambleCutscene.Collision.CFrame)
+						if firetouch then
+							firetouch(RootPart, Room.BrambleCutscene.Collision, 0)
+							firetouch(RootPart, Room.BrambleCutscene.Collision, 1)
+						end
+					end
+				else
+					Functions.Notify({ Title = "Auto Floor", Body = "Outdoors completed!", Time = 8 })
+					if Toggles.Tplay_AutoFloor then
+						Toggles.Tplay_AutoFloor:SetValue(false)
+					end
+				end
+			else
+				if Door then
+					Character:PivotTo(Door:GetPivot())
+				end
+			end
+		end)
+	end
+
+	local function StartAutoFloorStairwell()
+		TplayVars.AutoFloorConnection = Services.RunService.Heartbeat:Connect(function()
+			if not RootPart or not Character or not Character:GetAttribute("Alive") then return end
+			local curRoomNum = (LatestRoom and LatestRoom.Value) or 0
+			local Room = CurrentRooms and CurrentRooms:FindFirstChild(tostring(curRoomNum))
+			local Door = Room and Room:FindFirstChild("Door")
+
+			local Crouch = RemotesFolder:FindFirstChild("Crouch")
+			if Crouch and not TplayVars.SlideActive then
+				TplayVars.SlideActive = true
+				Crouch:FireServer(true, true)
+			end
+
+			if curRoomNum > 198 then
+				local stairwellexit = Room and Room:FindFirstChild("StairwellExitDoor")
+				if stairwellexit and stairwellexit:FindFirstChild("Collision") and stairwellexit.Collision:FindFirstChild("EnterPrompt") then
+					Character:PivotTo(stairwellexit:GetPivot())
+					if fireprompt then
+						fireprompt(stairwellexit.Collision.EnterPrompt)
+					end
+				else
+					Functions.Notify({ Title = "Auto Floor", Body = "Stairwell completed!", Time = 8 })
+					if Toggles.Tplay_AutoFloor then
+						Toggles.Tplay_AutoFloor:SetValue(false)
+					end
+				end
+			else
+				if Door then
+					Character:PivotTo(Door:GetPivot())
+				end
+			end
+		end)
+	end
+
+	local function StopAutoFloor()
+		if TplayVars.AutoFloorConnection then
+			TplayVars.AutoFloorConnection:Disconnect()
+			TplayVars.AutoFloorConnection = nil
+		end
+		if TplayVars.AutoFloorCutscene then
+			TplayVars.AutoFloorCutscene:Disconnect()
+			TplayVars.AutoFloorCutscene = nil
+		end
+		if TplayVars.SlideActive then
+			TplayVars.SlideActive = false
+			local Crouch = RemotesFolder:FindFirstChild("Crouch")
+			if Crouch then Crouch:FireServer(true, true) end
+		end
+	end
+
 	Tplay_Floors:AddToggle("Tplay_AutoFloor", {
 		Text = "Auto Floor Completion",
 		Default = false,
-		Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Endless", "Ripple", "Garden"}),
-		DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Endless", "Ripple", "Garden"}) and ("Only available on: Hotel, Mines, Endless, Ripple, Garden (Current: " .. tostring(Floor) .. ")") or nil,
-		Tooltip = "Automatically advances through and solves rooms on supported floors.",
+		Disabled = not Functions.IsFloorAllowed({"Outdoors", "Garden", "Stairwell"}),
+		DisabledTooltip = not Functions.IsFloorAllowed({"Outdoors", "Garden", "Stairwell"}) and ("Only available on: Outdoors, Stairwell (Current: " .. tostring(Floor) .. ")") or nil,
+		Tooltip = "Automatically advances through and solves rooms on supported floors (Outdoors & Stairwell).",
 		Callback = function(Value)
 			if Value then
-				if not Functions.CheckFloorToggle("Tplay_AutoFloor", {"Hotel", "Mines", "Endless", "Ripple", "Garden"}, "Auto Floor") then
+				if not Functions.CheckFloorToggle("Tplay_AutoFloor", {"Outdoors", "Garden", "Stairwell"}, "Auto Floor") then
 					return
 				end
-				Functions.Notify({ Title = "Auto Floor", Body = "Auto Floor started for " .. Floor, Time = 3 })
+				local cur = tostring(Floor or ""):lower()
+				if cur == "" and GameData then
+					local fObj = GameData:FindFirstChild("FloorDestination") or GameData:FindFirstChild("Floor")
+					if fObj then cur = tostring(fObj.Value):lower() end
+				end
+				Functions.Notify({ Title = "Auto Floor", Body = "Auto Floor started for " .. tostring(Floor), Time = 3 })
+				if cur == "outdoors" or cur == "garden" then
+					StartAutoFloorOutdoors()
+				elseif cur == "stairwell" then
+					StartAutoFloorStairwell()
+				else
+					Functions.Notify({ Title = "Auto Floor", Body = "Floor " .. tostring(Floor) .. " is not supported!", Time = 3 })
+				end
+			else
+				StopAutoFloor()
 			end
 		end
 	})
 
-	if Floor == "Garden" then
+	if Floor == "Garden" or Floor == "Outdoors" then
 		Tplay_Floors:AddToggle("Tplay_SkipEyestalkChase", {
 			Text = "Skip Eyestalk Chase [FE]",
 			Default = false,
-			Disabled = not Functions.IsFloorAllowed("Garden"),
-			DisabledTooltip = not Functions.IsFloorAllowed("Garden") and ("Only available on: Garden (Current: " .. tostring(Floor) .. ")") or nil,
+			Disabled = not Functions.IsFloorAllowed({"Garden", "Outdoors"}),
+			DisabledTooltip = not Functions.IsFloorAllowed({"Garden", "Outdoors"}) and ("Only available on: Garden, Outdoors (Current: " .. tostring(Floor) .. ")") or nil,
 			Tooltip = "Automatically skips Eyestalk chase cutscenes and triggers.",
 			Callback = function(Value)
 				if Value then
-					if not Functions.CheckFloorToggle("Tplay_SkipEyestalkChase", "Garden", "Skip Eyestalk Chase") then
+					if not Functions.CheckFloorToggle("Tplay_SkipEyestalkChase", {"Garden", "Outdoors"}, "Skip Eyestalk Chase") then
 						return
 					end
 					local Cutscene = RemotesFolder:FindFirstChild("Cutscene")
@@ -2853,16 +3072,16 @@ do
 		Tplay_Floors:AddToggle("Tplay_TriggerEyestalkChaseEnd", {
 			Text = "Trigger Eyestalk Chase End",
 			Default = false,
-			Disabled = not Functions.IsFloorAllowed("Garden"),
-			DisabledTooltip = not Functions.IsFloorAllowed("Garden") and ("Only available on: Garden (Current: " .. tostring(Floor) .. ")") or nil,
+			Disabled = not Functions.IsFloorAllowed({"Garden", "Outdoors"}),
+			DisabledTooltip = not Functions.IsFloorAllowed({"Garden", "Outdoors"}) and ("Only available on: Garden, Outdoors (Current: " .. tostring(Floor) .. ")") or nil,
 			Tooltip = "Triggers the end of Eyestalk chase automatically."
 		})
 
 		Tplay_Floors:AddToggle("Tplay_MakeLotus", {
 			Text = "Auto Collect Lotus Petals",
 			Default = false,
-			Disabled = not Functions.IsFloorAllowed("Garden"),
-			DisabledTooltip = not Functions.IsFloorAllowed("Garden") and ("Only available on: Garden (Current: " .. tostring(Floor) .. ")") or nil,
+			Disabled = not Functions.IsFloorAllowed({"Garden", "Outdoors"}),
+			DisabledTooltip = not Functions.IsFloorAllowed({"Garden", "Outdoors"}) and ("Only available on: Garden, Outdoors (Current: " .. tostring(Floor) .. ")") or nil,
 			Tooltip = "Collects Lotus Petals across the garden to craft Lotus."
 		})
 	end
