@@ -1467,7 +1467,7 @@ if Library.SetFont then Library:SetFont(Enum.Font.Code) end
 local Window = Library:CreateWindow({
     Title = "lolcheat V4",
     Icon = 77196040991392,
-    Footer = "Game: DOORS | lolcheat V4 | Build 0.491",
+    Footer = "Game: DOORS | lolcheat V4 | Build 1.488",
     Size = UDim2.fromOffset(720, 600),
     NotifySide = "Right",
     ShowCustomCursor = false,
@@ -2032,12 +2032,12 @@ do
 	Tplay_Main:AddToggle("Tplay_AnticheatBypass", {
 		Text = "Anticheat Bypass (Chair)",
 		Default = false,
-		Disabled = not Functions.IsFloorAllowed({"Archives", "Stairwell"}),
-		DisabledTooltip = not Functions.IsFloorAllowed({"Archives", "Stairwell"}) and ("Only available on: Archives, Stairwell (Current: " .. tostring(Floor) .. ")") or nil,
+		Disabled = not Functions.IsFloorAllowed({"Hotel", "Mines", "Archives", "Stairwell"}),
+		DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Mines", "Archives", "Stairwell"}) and ("Only available on: Hotel, Mines, Archives, Stairwell (Current: " .. tostring(Floor) .. ")") or nil,
 		Tooltip = "Grab a chair to bypass the anticheat completely.",
 		Callback = function(Value)
 			if Value then
-				if not Functions.CheckFloorToggle("Tplay_AnticheatBypass", {"Archives", "Stairwell"}, "Anticheat Bypass (Chair)") then
+				if not Functions.CheckFloorToggle("Tplay_AnticheatBypass", {"Hotel", "Mines", "Archives", "Stairwell"}, "Anticheat Bypass (Chair)") then
 					return
 				end
 				TplayVars.ACBypassNotify = Library:Notify({
@@ -2132,35 +2132,176 @@ do
 		end
 	})
 
-	Tplay_Main:AddToggle("Tplay_BringDrawerWithKey", {
-		Text = "Bring Drawer With Key",
+	local NilConstraint = Instance.new("PrismaticConstraint")
+	local function disconnectDrawer(drawer)
+		local constraint = drawer:FindFirstChild("Constraint") or NilConstraint
+		constraint.Enabled = true
+		local drawerConns = TplayVars.DrawersConnections and TplayVars.DrawersConnections[drawer]
+		if drawerConns then
+			for _, connection in pairs(drawerConns) do
+				if typeof(connection) == "RBXScriptConnection" then
+					connection:Disconnect()
+				end
+			end
+			TplayVars.DrawersConnections[drawer] = nil
+		end
+	end
+
+	local function handleDrawer(drawer)
+		local constraint, main
+		if drawer:IsA("Model") and drawer.Name == "DrawerContainer" then
+			main = drawer:WaitForChild("Main", 1)
+			if not main then
+				return
+			end
+			constraint = drawer:WaitForChild("Constraint", 1)
+			if not constraint then
+				return
+			end
+		else
+			return
+		end
+		TplayVars.DrawersConnections = TplayVars.DrawersConnections or {}
+		if TplayVars.DrawersConnections[drawer] then
+			return
+		end
+		TplayVars.DrawersConnections[drawer] = {
+			AncestryChanged1 = drawer.AncestryChanged:Connect(function()
+				if not drawer.Parent then
+					disconnectDrawer(drawer)
+				end
+			end),
+			AncestryChanged2 = main.AncestryChanged:Connect(function()
+				if not main.Parent then
+					disconnectDrawer(drawer)
+				end
+			end),
+			BringLoop = Services.RunService.RenderStepped:Connect(function()
+				if isnetowner(main) and not main.Anchored then
+					constraint.Enabled = false
+					if Toggles.Tplay_AutoFloor and Toggles.Tplay_AutoFloor.Value then
+						main.CFrame = Character:GetPivot()
+					else
+						main.CFrame = Character:GetPivot() * CFrame.Angles(0, math.rad(180), 0) + Character:GetPivot().LookVector * 3
+					end
+					main.AssemblyLinearVelocity = Vector3.zero
+					main.AssemblyAngularVelocity = Vector3.zero
+				else
+					constraint.Enabled = true
+				end
+			end)
+		}
+		if Toggles.Tplay_AutoLoot and Toggles.Tplay_AutoLoot.Value then
+			TplayVars.DrawersConnections[drawer].AutoLoot = Services.RunService.RenderStepped:Connect(function()
+				if isnetowner(main) and not main.Anchored then
+					local key = drawer:FindFirstChild("KeyObtain")
+					local prompt = key and key:FindFirstChild("ModulePrompt", true)
+					if prompt and fireprompt then
+						fireprompt(prompt)
+					end
+					local stardust = drawer:FindFirstChild("Stardust", true)
+					local prompt2 = stardust and stardust:FindFirstChild("ModulePrompt", true)
+					if prompt2 and fireprompt then
+						fireprompt(prompt2)
+					end
+					local prompt3 = drawer:FindFirstChild("ActivateEventPrompt", true)
+					if prompt3 and fireprompt then
+						fireprompt(prompt3)
+					end
+				end
+			end)
+		end
+	end
+
+	Tplay_Main:AddToggle("Tplay_BringDrawers", {
+		Text = "Bring Drawers",
 		Default = false,
 		Disabled = not Functions.IsFloorAllowed({"Hotel", "Backdoor", "Endless", "Ripple"}),
 		DisabledTooltip = not Functions.IsFloorAllowed({"Hotel", "Backdoor", "Endless", "Ripple"}) and ("Only available on: Hotel, Backdoor, Endless, Ripple (Current: " .. tostring(Floor) .. ")") or nil,
-		Tooltip = "Brings drawer container containing the key directly to you.",
+		Tooltip = "Brings drawer containers in the room directly to you.",
 		Callback = function(Value)
 			if Value then
-				if not Functions.CheckFloorToggle("Tplay_BringDrawerWithKey", {"Hotel", "Backdoor", "Endless", "Ripple"}, "Bring Drawer With Key") then
+				if not Functions.CheckFloorToggle("Tplay_BringDrawers", {"Hotel", "Backdoor", "Endless", "Ripple"}, "Bring Drawers") then
 					return
 				end
 				ToggleNetworkOwner(true)
+				if Toggles.Tplay_OnlyDrawerWithKey and Toggles.Tplay_OnlyDrawerWithKey.SetDisabled then
+					Toggles.Tplay_OnlyDrawerWithKey:SetDisabled(false)
+				end
+				if Toggles.Tplay_AutoLoot and Toggles.Tplay_AutoLoot.SetDisabled then
+					Toggles.Tplay_AutoLoot:SetDisabled(false)
+				end
 				if CurrentRooms then
 					for _, drawer in CurrentRooms:QueryDescendants("#DrawerContainer") do
-						task.spawn(function()
-							local key = drawer:WaitForChild("KeyObtain", 1)
-							local main = drawer:FindFirstChild("Main")
-							local constraint = drawer:FindFirstChild("Constraint")
-							if key and main and constraint then
-								constraint.Enabled = false
-								main.CFrame = Character:GetPivot() * CFrame.Angles(0, math.rad(180), 0) + Character:GetPivot().LookVector * 3
-								main.AssemblyLinearVelocity = Vector3.zero
-								main.AssemblyAngularVelocity = Vector3.zero
-							end
-						end)
+						if Toggles.Tplay_OnlyDrawerWithKey and Toggles.Tplay_OnlyDrawerWithKey.Value then
+							task.spawn(function()
+								local key = drawer:WaitForChild("KeyObtain", 1)
+								if key then
+									handleDrawer(drawer)
+								end
+							end)
+						else
+							handleDrawer(drawer)
+						end
 					end
+					TplayVars.DrawerAddedConn = CurrentRooms.DescendantAdded:Connect(function(drawer)
+						if drawer.Name == "DrawerContainer" then
+							if Toggles.Tplay_OnlyDrawerWithKey and Toggles.Tplay_OnlyDrawerWithKey.Value then
+								task.wait(0.33)
+								local key = drawer:WaitForChild("KeyObtain", 1)
+								if key then
+									handleDrawer(drawer)
+								end
+							else
+								handleDrawer(drawer)
+							end
+						end
+					end)
 				end
 			else
 				ToggleNetworkOwner(false)
+				if Toggles.Tplay_OnlyDrawerWithKey and Toggles.Tplay_OnlyDrawerWithKey.SetDisabled then
+					Toggles.Tplay_OnlyDrawerWithKey:SetDisabled(true)
+				end
+				if Toggles.Tplay_AutoLoot and Toggles.Tplay_AutoLoot.SetDisabled then
+					Toggles.Tplay_AutoLoot:SetDisabled(true)
+				end
+				if TplayVars.DrawerAddedConn then
+					TplayVars.DrawerAddedConn:Disconnect()
+					TplayVars.DrawerAddedConn = nil
+				end
+				for drawer, _ in pairs(TplayVars.DrawersConnections or {}) do
+					task.spawn(disconnectDrawer, drawer)
+				end
+				TplayVars.DrawersConnections = {}
+			end
+		end
+	})
+
+	Tplay_Main:AddToggle("Tplay_AutoLoot", {
+		Text = "Auto Loot",
+		Default = false,
+		Disabled = true,
+		Tooltip = "Automatically loots keys, stardust, and event prompts from brought drawers.",
+		Callback = function()
+			if Toggles.Tplay_BringDrawers and Toggles.Tplay_BringDrawers.Value then
+				Toggles.Tplay_BringDrawers:SetValue(false)
+				task.wait()
+				Toggles.Tplay_BringDrawers:SetValue(true)
+			end
+		end
+	})
+
+	Tplay_Main:AddToggle("Tplay_OnlyDrawerWithKey", {
+		Text = "Only Drawer With Key",
+		Default = false,
+		Disabled = true,
+		Tooltip = "Only brings drawers that contain a key.",
+		Callback = function()
+			if Toggles.Tplay_BringDrawers and Toggles.Tplay_BringDrawers.Value then
+				Toggles.Tplay_BringDrawers:SetValue(false)
+				task.wait()
+				Toggles.Tplay_BringDrawers:SetValue(true)
 			end
 		end
 	})
@@ -2596,6 +2737,108 @@ do
 		end
 	})
 
+	Tplay_Combat:AddToggle("Tplay_FlingCreak", {
+		Text = "Fling Creak",
+		Default = false,
+		Disabled = not Functions.IsFloorAllowed("Stairwell") or not sethidden,
+		DisabledTooltip = not Functions.IsFloorAllowed("Stairwell") and ("Only available on: Stairwell (Current: " .. tostring(Floor) .. ")") or (not sethidden and "Executor is not supported" or nil),
+		Tooltip = "Tries to fling Creak using chair on Stairwell floor.",
+		Callback = function(Value)
+			if Value then
+				if not Functions.CheckFloorToggle("Tplay_FlingCreak", "Stairwell", "Fling Creak") then
+					return
+				end
+				Functions.Notify({
+					Title = "Tplay's Addon",
+					Body = "Grab a chair to fling Creak",
+					Time = 10
+				})
+				local CartControl = RemotesFolder:FindFirstChild("CartControl")
+				local LiveEntities = Services.Workspace:FindFirstChild("LiveEntities") or Services.Workspace:FindFirstChild("Entities")
+				TplayVars.OnChairGrabCreak = Character.DescendantAdded:Connect(function(descendant)
+					if descendant:IsA("Attachment") and descendant.Name == "CartTargetAttachment" and descendant.Parent and descendant.Parent.Name == "CollisionPart" then
+						local chair = FindChair(descendant)
+						local promptBlock = chair and chair:FindFirstChild("PromptBlocker")
+						if promptBlock then
+							if chair == TplayVars.ChairThatFlingsCreak then
+								if CartControl then CartControl:FireServer() end
+								return
+							elseif TplayVars.ChairThatFlingsCreak then
+								return
+							elseif not TplayVars.ChairThatFlingsCreak then
+								if CartControl then CartControl:FireServer() end
+							end
+							Functions.Notify({
+								Title = "Tplay's Addon",
+								Body = "Chair is ready to fling Creak",
+								Time = 3
+							})
+							TplayVars.ChairThatFlingsCreak = chair
+							task.wait()
+							chair = TplayVars.ChairThatFlingsCreak
+							local oldcframe = chair and chair:GetPivot()
+							local killed = false
+							TplayVars.FlingingCreak = true
+							while TplayVars.FlingingCreak and chair and chair.Parent and promptBlock and isnetowner(promptBlock) do
+								local creak = LiveEntities and LiveEntities:FindFirstChild("Creak")
+								if creak then
+									local part = creak:FindFirstChild("HumanoidRootPart") or creak.PrimaryPart or creak:FindFirstChildWhichIsA("BasePart")
+									if not part then
+										killed = true
+										break
+									end
+									if sethidden then
+										pcall(sethidden, promptBlock, "PhysicsRepRootPart", part)
+									end
+									chair:PivotTo(creak:GetPivot() + Vector3.new(0, 3, 0))
+									local collider = chair:FindFirstChild("Collider")
+									if collider then
+										collider.AssemblyLinearVelocity = Vector3.new(0, -math.random(500000, 1000000), 0)
+									end
+								end
+								task.wait()
+								chair = TplayVars.ChairThatFlingsCreak
+								promptBlock = chair and chair:FindFirstChild("PromptBlocker")
+							end
+							if chair and oldcframe then
+								chair:PivotTo(oldcframe)
+							end
+							TplayVars.ChairThatFlingsCreak = nil
+							if killed then
+								Functions.Notify({
+									Title = "Tplay's Addon",
+									Body = "Creak was deleted while flinging, now you can play Stairwell and don't worry about Creak",
+									Time = 10
+								})
+							elseif TplayVars.FlingingCreak then
+								Functions.Notify({
+									Title = "Tplay's Addon [Warning]",
+									Body = "Something happened with chair that caused it to not fling Creak anymore, grab another chair to continue flinging",
+									Time = 10
+								})
+							else
+								Functions.Notify({
+									Title = "Tplay's Addon",
+									Body = "Removed control from the chair that was flinging Creak",
+									Time = 5
+								})
+							end
+							TplayVars.FlingingCreak = false
+						end
+					end
+				end)
+			else
+				if TplayVars.OnChairGrabCreak then
+					TplayVars.OnChairGrabCreak:Disconnect()
+					TplayVars.OnChairGrabCreak = nil
+				end
+				if TplayVars.FlingingCreak then
+					TplayVars.FlingingCreak = false
+				end
+			end
+		end
+	})
+
 	Tplay_Combat:AddDivider()
 
 	Tplay_Combat:AddDropdown("Tplay_GhostReviveMethod", {
@@ -2651,19 +2894,21 @@ do
 	})
 
 	Tplay_Items:AddButton({
-		Text = "Bring All Drops",
-		Tooltip = "Brings all dropped items to target player or yourself.",
+		Text = "Bring Drops",
+		Tooltip = "Bring all the dropped items to your current player or target player.",
 		Func = function()
 			local Drops = Services.Workspace:FindFirstChild("Drops")
 			local targetChar = (TplayVars.SelectedPlayerItem and TplayVars.SelectedPlayerItem.Character) or Character
-			local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
-			if Drops and targetRoot then
+			local human = targetChar and targetChar:FindFirstChild("Humanoid")
+			local hrp = human and human.RootPart or (targetChar and targetChar:FindFirstChild("HumanoidRootPart"))
+			if Drops and hrp then
 				ToggleNetworkOwner(true)
+				local itemsOffset = Vector3.new(0, 2, 0)
 				for _, drop in ipairs(Drops:GetChildren()) do
 					if drop:IsA("BasePart") then
-						drop.CFrame = targetRoot.CFrame
+						drop.CFrame = hrp.CFrame + itemsOffset
 					elseif drop:IsA("Model") then
-						drop:PivotTo(targetRoot.CFrame)
+						drop:PivotTo(hrp.CFrame + itemsOffset)
 					end
 				end
 				ToggleNetworkOwner(false)
