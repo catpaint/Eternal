@@ -83,7 +83,8 @@ local ToggleAliases = {
     SlideSpeedHack = "Tplay_SlideSpeedHack",
     AntiTeleport = "Tplay_AntiTeleport",
     AntiTeleportRaknet = "Tplay_AntiTeleportRaknet",
-    CollisionOffsetGodmodeAlt = "Tplay_CollisionOffsetGodmodeAlt",
+    CollisionOffsetGodmodeAlt = "PositionSpoof",
+    Tplay_CollisionOffsetGodmodeAlt = "PositionSpoof",
     BringDrawers = "Tplay_BringDrawers",
     AutoLoot = "Tplay_AutoLoot",
     SkipEyestalkChase = "Tplay_SkipEyestalkChase",
@@ -2847,6 +2848,7 @@ do
 			LastCrouch = 0,
 			Shifted = false,
 		}
+		Variables.POA = POA
 
 		local POAToggles = {}
 		local function POAFindToggle(key, ...)
@@ -2859,12 +2861,12 @@ do
 			end
 		end
 		local function POANoclip()
-			local T = POAFindToggle("noclip", "Noclip", "NoclipToggle", "NoclipAlt")
-			return T and T.Value == true or false
+			local T = POAFindToggle("noclip", "Noclip", "NoclipToggle", "NoclipAlt", "TeleportManipulationToggle")
+			return (T and T.Value == true) or (Toggles.TeleportManipulationToggle and Toggles.TeleportManipulationToggle.Value == true) or false
 		end
 		local function POAVelocityManipulation()
-			local T = POAFindToggle("velocity", "VelocityManipulationToggle", "VelocityManipulation", "AnticheatManipulationV2")
-			return T and T.Value == true or false
+			local T = POAFindToggle("velocity", "VelocityManipulationToggle", "VelocityManipulation", "AnticheatManipulationV2", "TeleportManipulationToggle")
+			return (T and T.Value == true) or (Toggles.TeleportManipulationToggle and Toggles.TeleportManipulationToggle.Value == true) or false
 		end
 		local function POAIsCrouching()
 			if not POA.Character then return false end
@@ -2893,6 +2895,7 @@ do
 			end
 			if not j then return end
 			POA.OriginalC1 = POA.OriginalC1 or j.C1
+			Global.OriginalC1 = POA.OriginalC1
 			j.C1 = POA.OriginalC1 * (v and POA_VISUAL or CFrame.new())
 			POA.VisualOffset = v
 		end
@@ -2922,6 +2925,7 @@ do
 		end
 
 		local function POASetupCharacter(NewCharacter)
+			if not NewCharacter then return false end
 			POARestorePhysicalPosition()
 			POADestroyClones()
 			POA.Character = NewCharacter
@@ -2934,10 +2938,16 @@ do
 			if not (POA.Humanoid and POA.Root and POA.Collision and POA.CollisionPart) then
 				return false
 			end
+			for _, child in ipairs(NewCharacter:GetChildren()) do
+				if child.Name == "CollisionClone" or child.Name == "CollisionPartClone" then
+					pcall(function() child:Destroy() end)
+				end
+			end
 			POA.CollisionClone = POA.Collision:Clone()
 			POA.CollisionClone.Name = "CollisionClone"
 			POA.CollisionClone.Massless = true
 			POA.CollisionClone.Parent = NewCharacter
+			CollisionClone = POA.CollisionClone
 			POA.CollisionPartClone = POA.CollisionPart:Clone()
 			POA.CollisionPartClone.Name = "CollisionPartClone"
 			POA.CollisionPartClone.CanCollide = false
@@ -2945,11 +2955,15 @@ do
 			local ExtraCrouch = POA.CollisionPartClone:FindFirstChild("CollisionCrouch")
 			if ExtraCrouch then ExtraCrouch:Destroy() end
 			POA.CollisionPartClone.Parent = NewCharacter
+			CollisionPartClone = POA.CollisionPartClone
 			POA.CrouchPart = POA.Collision:FindFirstChild("CollisionCrouch")
 			POA.CloneCrouch = POA.CollisionClone:FindFirstChild("CollisionCrouch")
 			local Lower = NewCharacter:FindFirstChild("LowerTorso")
 			POA.RootJoint = Lower and Lower:FindFirstChild("Root")
-			if POA.RootJoint then POA.OriginalC1 = POA.RootJoint.C1 end
+			if POA.RootJoint then
+				POA.OriginalC1 = POA.RootJoint.C1
+				Global.OriginalC1 = POA.RootJoint.C1
+			end
 			POA.VisualOffset = nil
 			table.clear(POA.BaseParts)
 			for _, part in ipairs(NewCharacter:GetChildren()) do
@@ -2957,7 +2971,8 @@ do
 					POA.BaseParts[#POA.BaseParts + 1] = part
 				end
 			end
-			if Toggles.CollisionOffsetGodmodeAlt.Value and Floor ~= "Fools" and Floor ~= "OldHotel" then
+			local isEnabled = (Toggles.CollisionOffsetGodmodeAlt and Toggles.CollisionOffsetGodmodeAlt.Value) or (Toggles.PositionSpoof and Toggles.PositionSpoof.Value)
+			if isEnabled and Floor ~= "Fools" and Floor ~= "OldHotel" then
 				POAApplyPhysicalPosition()
 				POASetVisualOffset(true)
 				POASync(true)
@@ -2966,6 +2981,12 @@ do
 			end
 			return true
 		end
+
+		Variables.POASetupCharacter = POASetupCharacter
+		Variables.POAApplyPhysicalPosition = POAApplyPhysicalPosition
+		Variables.POARestorePhysicalPosition = POARestorePhysicalPosition
+		Variables.POASetVisualOffset = POASetVisualOffset
+		Variables.POASync = POASync
 
 		local POAWallParams = RaycastParams.new()
 		POAWallParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -2993,36 +3014,13 @@ do
 			return Result and Result.Instance and Result.Instance.CanCollide and Result or nil
 		end
 
-		Toggles.CollisionOffsetGodmodeAlt = Tplay_Combat:AddToggle("Tplay_CollisionOffsetGodmodeAlt", {
-			Text = "Position Offset V2",
-			Tooltip = "Abyssal-style position spoof with isolated collision and native camera framing.",
-			Default = false,
-			Callback = function(Value)
-				if Value then
-					if Toggles.AntiGroundskeeper.Value then Toggles.AntiGroundskeeper:SetValue(false) end
-					if Toggles.AntiFigure.Value then Toggles.AntiFigure:SetValue(false) end
-					if not POA.Character or POA.Character ~= Character then
-						POASetupCharacter(Character or LocalPlayer.Character)
-					end
-					if Floor ~= "Fools" and Floor ~= "OldHotel" then
-						POAApplyPhysicalPosition()
-						POASetVisualOffset(true)
-						POASync(true)
-					end
-					Variables.cogAlt = true
-				else
-					Variables.cogAlt = false
-					POARestorePhysicalPosition()
-					POASetVisualOffset(false)
-				end
-			end
-		})
+
 
 		Connections.POA = POA_RUN.RenderStepped:Connect(function()
 			if not (POA.Character and POA.Character.Parent and POA.Root and POA.Root.Parent and POA.Collision and POA.Collision.Parent and POA.CollisionClone and POA.CollisionClone.Parent) then
 				return
 			end
-			local Enabled = Toggles.CollisionOffsetGodmodeAlt.Value
+			local Enabled = (Toggles.CollisionOffsetGodmodeAlt and Toggles.CollisionOffsetGodmodeAlt.Value) or (Toggles.PositionSpoof and Toggles.PositionSpoof.Value)
 			local Noclip = POANoclip()
 			local ActiveVelocity = POAVelocityManipulation()
 			if Floor ~= "Fools" and Floor ~= "OldHotel" and not (Camera and Camera:FindFirstChild("MinecartRig")) then
@@ -8629,15 +8627,22 @@ end)
 
 
 Toggles.PositionSpoof:OnChanged(function(Value)
-	if Floor ~= "Fools" and Floor ~= "OldHotel" then
-		if Value then
-			RootPart.CFrame = RootPart.CFrame * CFrame.new(0, -2.346, 0)
-			Humanoid.HipHeight = 0.05
-			RemotesFolder.Crouch:FireServer(true, true)
-		else
-			RootPart.CFrame = RootPart.CFrame * CFrame.new(0, 2.346, 0)
-			Humanoid.HipHeight = 2.396
+	if Value then
+		if Toggles.AntiGroundskeeper and Toggles.AntiGroundskeeper.Value then Toggles.AntiGroundskeeper:SetValue(false) end
+		if Toggles.AntiFigure and Toggles.AntiFigure.Value then Toggles.AntiFigure:SetValue(false) end
+		if Variables.POASetupCharacter then
+			Variables.POASetupCharacter(Character or LocalPlayer.Character)
 		end
+		if Floor ~= "Fools" and Floor ~= "OldHotel" then
+			if Variables.POAApplyPhysicalPosition then Variables.POAApplyPhysicalPosition() end
+			if Variables.POASetVisualOffset then Variables.POASetVisualOffset(true) end
+			if Variables.POASync then Variables.POASync(true) end
+		end
+		Variables.cogAlt = true
+	else
+		Variables.cogAlt = false
+		if Variables.POARestorePhysicalPosition then Variables.POARestorePhysicalPosition() end
+		if Variables.POASetVisualOffset then Variables.POASetVisualOffset(false) end
 	end
 end)
 Toggles.PositionSpoof:AddKeyPicker("PositionSpoof", {
@@ -10076,19 +10081,26 @@ Functions.HandleCharacter = function(NewCharacter)
 
 	Collision = NewCharacter:WaitForChild("Collision")
 	CollisionPart  = NewCharacter:FindFirstChild("CollisionPart") or NewCharacter:FindFirstChild("Collision")
-	CollisionClone = Collision:Clone()
-	CollisionClone.Parent = NewCharacter
-	CollisionClone.Name = "CollisionClone"
-	CollisionClone.Massless = true
-
-	CollisionPartClone = CollisionPart:Clone()
-	CollisionPartClone.Parent = NewCharacter
-	CollisionPartClone.Name = "CollisionPartClone"
-	CollisionPartClone.CanCollide = false
-	CollisionPartClone.Massless = true
-
-	if CollisionPartClone:FindFirstChild("CollisionCrouch") then
-		CollisionPartClone.CollisionCrouch:Destroy()
+	if Variables.POASetupCharacter then
+		Variables.POASetupCharacter(NewCharacter)
+	end
+	CollisionClone = (Variables.POA and Variables.POA.CollisionClone) or NewCharacter:FindFirstChild("CollisionClone")
+	CollisionPartClone = (Variables.POA and Variables.POA.CollisionPartClone) or NewCharacter:FindFirstChild("CollisionPartClone")
+	if not CollisionClone then
+		CollisionClone = Collision:Clone()
+		CollisionClone.Parent = NewCharacter
+		CollisionClone.Name = "CollisionClone"
+		CollisionClone.Massless = true
+	end
+	if not CollisionPartClone then
+		CollisionPartClone = CollisionPart:Clone()
+		CollisionPartClone.Parent = NewCharacter
+		CollisionPartClone.Name = "CollisionPartClone"
+		CollisionPartClone.CanCollide = false
+		CollisionPartClone.Massless = true
+		if CollisionPartClone:FindFirstChild("CollisionCrouch") then
+			CollisionPartClone.CollisionCrouch:Destroy()
+		end
 	end
 
 	Character:SetAttribute("SpeedBoost", 0)
@@ -10277,7 +10289,9 @@ Functions.HandleCharacter = function(NewCharacter)
 
 	Global.LastAnimationCheck = tick()
 	Global.LastCrouchFire = tick()
-	Global.OriginalC1 = Character.LowerTorso.Root.C1
+	if Character:FindFirstChild("LowerTorso") and Character.LowerTorso:FindFirstChild("Root") then
+		Global.OriginalC1 = Character.LowerTorso.Root.C1
+	end
 
 	local RayParams = RaycastParams.new()
 	RayParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -10292,7 +10306,7 @@ Functions.HandleCharacter = function(NewCharacter)
 		end
 
 		if Global.Lagging or (Options.WalkSpeedSlider.Value <= 6 and Options.FlySpeed.Value <= 21) then
-			CollisionPartClone.Massless = true
+			if CollisionPartClone then CollisionPartClone.Massless = true end
 		end
 
 		Global.IsEyes    = Services.Workspace:FindFirstChild("Eyes") ~= nil or Services.Workspace:FindFirstChild("Lookman") ~= nil
@@ -10335,69 +10349,38 @@ Functions.HandleCharacter = function(NewCharacter)
 		end
 
 		if Floor == "OldHotel" or Floor == "Fools" then
-			local SpoofOffset = Toggles.PositionSpoof.Value and Functions.GetNearestEntity() and 200 or 0
+			local isSpoof = (Toggles.PositionSpoof and Toggles.PositionSpoof.Value) or (Toggles.CollisionOffsetGodmodeAlt and Toggles.CollisionOffsetGodmodeAlt.Value)
+			local SpoofOffset = isSpoof and Functions.GetNearestEntity() and 200 or 0
 			Global.SpoofOffset = SpoofOffset
 			Collision.Position = RootPart.Position + Vector3.new(0, SpoofOffset, 0)
 			Collision.CanCollide = false
 			if Floor == "Fools" then
-				Collision.CollisionCrouch.CanCollide = false
-				CollisionClone.CollisionCrouch.CanCollide = false
+				if Collision:FindFirstChild("CollisionCrouch") then Collision.CollisionCrouch.CanCollide = false end
+				if CollisionClone and CollisionClone:FindFirstChild("CollisionCrouch") then CollisionClone.CollisionCrouch.CanCollide = false end
 			end
 			RootPart.CanCollide = not (Toggles.NoclipToggle.Value or Toggles.TeleportManipulationToggle.Value)
-		else
-			Collision.CanCollide = false
-			if Collision:FindFirstChild("CollisionCrouch") then Collision.CollisionCrouch.CanCollide = false end
+		end
 
-			if CollisionClone:FindFirstChild("CollisionCrouch") then
-				local IsCrouch = Functions.IsCrouching()
-				CollisionClone.CanCollide = not (Toggles.NoclipToggle.Value or Toggles.TeleportManipulationToggle.Value or IsCrouch)
-				CollisionClone.CollisionCrouch.CanCollide = not (Toggles.NoclipToggle.Value or Toggles.TeleportManipulationToggle.Value or not IsCrouch)
-			else
-				RootPart.CanCollide = not (Toggles.NoclipToggle.Value or Toggles.TeleportManipulationToggle.Value)
-			end
-
-			if Character:FindFirstChild("LowerTorso") and Character.LowerTorso:FindFirstChild("Root") then
-				Character.LowerTorso.Root.C1 = Global.OriginalC1 * CFrame.new(0, Toggles.PositionSpoof.Value and -2.346 or 0, 0)
-			end
-
-			local isThreat = Functions.GetNearestEntity() ~= nil or (Toggles.CollisionOffsetGodmodeAlt and Toggles.CollisionOffsetGodmodeAlt.Value)
-			local isSpoofActive = Toggles.PositionSpoof.Value or (Toggles.Tplay_AntiEntities and Toggles.Tplay_AntiEntities.Value) or (Toggles.CollisionOffsetGodmodeAlt and Toggles.CollisionOffsetGodmodeAlt.Value)
-
-			local SpoofY = (isSpoofActive and isThreat) and -500 or (isSpoofActive and 2.328 or 0.18)
-			Collision.Position     = RootPart.Position + Vector3.new(0, SpoofY, 0)
-			CollisionPart.Position = RootPart.Position + Vector3.new(0, SpoofY, 0)
-
-			if isSpoofActive and isThreat then
-				Collision.CanTouch = false
-				CollisionPart.CanTouch = false
-				RootPart.CanTouch = false
-				for _, p in Character:GetChildren() do
-					if p:IsA("BasePart") then p.CanTouch = false end
+		if Toggles.TeleportManipulationToggle.Value then
+			for _, part in ipairs(Character:GetDescendants()) do
+				if part:IsA("BasePart") and part.CanCollide then
+					part.CanCollide = false
 				end
 			end
-
-			if Collision:FindFirstChild("CollisionCrouch") and CollisionClone:FindFirstChild("CollisionCrouch") then
-				local CrouchY = Toggles.PositionSpoof.Value and 1.328 or -0.982
-				Collision.CollisionCrouch.Position = RootPart.Position + Vector3.new(0, CrouchY, 0)
-				CollisionClone.CollisionCrouch.CollisionGroup = Collision.CollisionCrouch.CollisionGroup
+			local moveDir = (Humanoid.MoveDirection.Magnitude > 0 and Humanoid.MoveDirection.Unit)
+				or (Camera and Camera.CFrame.LookVector)
+				or RootPart.CFrame.LookVector
+			if Options.TeleportManipulationMode.Value == "Velocity" then
+				Global.ManipulateBody.Parent = RootPart
+				Global.ManipulateBody.Velocity = moveDir * 2.25
+			elseif Options.TeleportManipulationMode.Value == "Pivot" and Floor ~= "Fools" and Floor ~= "OldHotel" then
+				Global.ManipulateBody.Parent = nil
+				Character:PivotTo(Character:GetPivot() + moveDir * 0.08)
+			else
+				Global.ManipulateBody.Parent = nil
 			end
-			if CollisionClone:FindFirstChild("CollisionCrouch") then
-				CollisionClone.CollisionCrouch.Position = RootPart.Position + Vector3.new(0, Toggles.PositionSpoof.Value and 0.75 or -0.982, 0)
-			end
-		end
-
-		CollisionClone.CollisionGroup = Collision.CollisionGroup
-		CollisionClone.Position = RootPart.Position + Vector3.new(0, Toggles.PositionSpoof.Value and 1.75 or 0.18, 0)
-
-		if Toggles.TeleportManipulationToggle.Value and Options.TeleportManipulationMode.Value == "Velocity" then
-			Global.ManipulateBody.Parent = RootPart
-			Global.ManipulateBody.Velocity = RootPart.CFrame.LookVector * 2.25
 		else
 			Global.ManipulateBody.Parent = nil
-		end
-
-		if Toggles.TeleportManipulationToggle.Value and Options.TeleportManipulationMode.Value == "Pivot" and Floor ~= "Fools" and Floor ~= "OldHotel" then
-			Character:PivotTo(Camera:GetPivot() * CFrame.new(0, 0, 2560))
 		end
 
 		if Toggles.FlyToggle.Value then
@@ -10491,10 +10474,10 @@ Functions.HandleCharacter = function(NewCharacter)
 	end)
 
 	task.wait(1)
-	if Toggles.PositionSpoof.Value and Floor ~= "Fools" and Floor ~= "OldHotel" then
-		RootPart.CFrame = RootPart.CFrame * CFrame.new(0, -2.346, 0)
-		Humanoid.HipHeight = 0.05
-		RemotesFolder.Crouch:FireServer(true, true)
+	if (Toggles.PositionSpoof.Value or Toggles.CollisionOffsetGodmodeAlt.Value) and Floor ~= "Fools" and Floor ~= "OldHotel" then
+		if Variables.POASetupCharacter then
+			Variables.POASetupCharacter(Character)
+		end
 	end
 
 	local Jam = Global.MainUI.Initiator.Main_Game.Health:FindFirstChild("Jam")
