@@ -2932,7 +2932,10 @@ do
 			POA.Humanoid = NewCharacter:WaitForChild("Humanoid", 10)
 			POA.Root = NewCharacter:WaitForChild("HumanoidRootPart", 10)
 			POA.Collision = NewCharacter:WaitForChild("Collision", 10)
-			POA.CollisionPart = NewCharacter:FindFirstChild("CollisionPart") or POA.Collision
+			-- FIX(noclip): search inside Collision for the real CollisionPart before falling back.
+			POA.CollisionPart = NewCharacter:FindFirstChild("CollisionPart")
+				or (POA.Collision and POA.Collision:FindFirstChild("CollisionPart"))
+				or POA.Collision
 			POA.OriginalC1 = nil
 			POA.Shifted = false
 			if not (POA.Humanoid and POA.Root and POA.Collision and POA.CollisionPart) then
@@ -10080,7 +10083,11 @@ Functions.HandleCharacter = function(NewCharacter)
 	Global.MainUI = LocalPlayer.PlayerGui.MainUI
 
 	Collision = NewCharacter:WaitForChild("Collision")
-	CollisionPart  = NewCharacter:FindFirstChild("CollisionPart") or NewCharacter:FindFirstChild("Collision")
+	-- FIX(noclip): real "CollisionPart" is nested inside Collision, not a direct child of Character.
+	-- The original lookup fell back to Collision itself, leaving the real wall-blocker untouched.
+	CollisionPart  = NewCharacter:FindFirstChild("CollisionPart")
+		or (Collision and Collision:FindFirstChild("CollisionPart"))
+		or NewCharacter:FindFirstChild("Collision")
 	if Variables.POASetupCharacter then
 		Variables.POASetupCharacter(NewCharacter)
 	end
@@ -10340,8 +10347,37 @@ Functions.HandleCharacter = function(NewCharacter)
 			RootPart.CanCollide = false
 		end
 
-		for _, Part in Character:GetChildren() do
-			if Part:IsA("BasePart") then Part.CanCollide = false end
+		-- FIX(noclip) v2: blanket-disable collision on all character parts EXCEPT the
+		-- collision proxies managed by the POA / noclip system. Excluding them here
+		-- prevents this loop from racing against the POA RenderStepped (which sets
+		-- CollisionClone.CanCollide = true when Noclip is OFF so the character has
+		-- normal floor/wall collision).
+		local _isNoclip = (Toggles.NoclipToggle and Toggles.NoclipToggle.Value)
+			or (Toggles.TeleportManipulationToggle and Toggles.TeleportManipulationToggle.Value)
+			or false
+		for _, Part in Character:GetDescendants() do
+			if Part:IsA("BasePart")
+				and Part ~= CollisionClone
+				and Part ~= CollisionPartClone
+				and Part.Name ~= "CollisionClone"
+				and Part.Name ~= "CollisionPartClone" then
+				Part.CanCollide = false
+			end
+		end
+		-- Explicitly drive CollisionClone collision here so noclip works even when
+		-- the POA system hasn't initialised (e.g. Collision part not found on spawn).
+		-- POA RenderStepped does the same thing, so there is no conflict.
+		if Floor ~= "OldHotel" and Floor ~= "Fools" then
+			if CollisionClone and CollisionClone.Parent then
+				CollisionClone.CanCollide = not _isNoclip
+				local _cloneCrouch = CollisionClone:FindFirstChild("CollisionCrouch")
+				if _cloneCrouch then
+					_cloneCrouch.CanCollide = not _isNoclip
+				end
+			end
+			if CollisionPartClone and CollisionPartClone.Parent then
+				CollisionPartClone.CanCollide = false
+			end
 		end
 
 		if LocalPlayer:GetAttribute("Alive") == true then
