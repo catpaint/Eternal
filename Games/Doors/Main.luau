@@ -10046,7 +10046,7 @@ Modules = {
 }
 
 local CharacterOldConnectionKeys = {
-	"MainHandler", "JumpHandler", "SlideHandler", "LibraryCodeHandler1", "LibraryCodeHandler2",
+	"MainHandler", "NoclipStepped", "JumpHandler", "SlideHandler", "LibraryCodeHandler1", "LibraryCodeHandler2",
 	"OxygenConnection", "AnimationHandler", "AutoHideConnection", "AutoReviveHandler",
 	"SHMFixer", "AnticheatDisabler", "AnticheatEnableDetector1", "AnticheatEnableDetector2",
 	"AutoMinecartDuckHandler", "AutoSolveAnchorsConnection",
@@ -10302,6 +10302,43 @@ Functions.HandleCharacter = function(NewCharacter)
 
 	local RayParams = RaycastParams.new()
 	RayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+	-- FIX(noclip): RenderStepped fires AFTER physics, so CanCollide=false set there
+	-- has no effect on the current frame's collision. Stepped fires BEFORE physics,
+	-- so disabling CanCollide here ensures the physics engine sees no collision.
+	Conns.NoclipStepped = Services.RunService.Stepped:Connect(function()
+		if not (Character and Character.Parent and RootPart and RootPart.Parent) then return end
+		local isNoclip = (Toggles.NoclipToggle and Toggles.NoclipToggle.Value)
+			or (Toggles.TeleportManipulationToggle and Toggles.TeleportManipulationToggle.Value)
+			or false
+		if isNoclip then
+			-- When noclip is ON: kill ALL collision so physics can't block movement.
+			for _, Part in Character:GetDescendants() do
+				if Part:IsA("BasePart") and Part.CanCollide then
+					Part.CanCollide = false
+				end
+			end
+			RootPart.CanCollide = false
+		else
+			-- When noclip is OFF: disable everything except CollisionClone
+			-- (which provides normal floor/wall collision).
+			for _, Part in Character:GetDescendants() do
+				if Part:IsA("BasePart")
+					and Part ~= CollisionClone
+					and Part ~= CollisionPartClone
+					and Part.Name ~= "CollisionClone"
+					and Part.Name ~= "CollisionPartClone"
+					and Part.CanCollide then
+					Part.CanCollide = false
+				end
+			end
+			if CollisionClone and CollisionClone.Parent then
+				CollisionClone.CanCollide = true
+				local cc = CollisionClone:FindFirstChild("CollisionCrouch")
+				if cc then cc.CanCollide = true end
+			end
+		end
+	end)
 
 	Conns.MainHandler = Services.RunService.RenderStepped:Connect(function()
 		if Services.Workspace:FindFirstChild("Camera") then
