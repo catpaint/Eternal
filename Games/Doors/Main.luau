@@ -1706,7 +1706,7 @@ do
 end
 
 -- ============================================================================
--- Tplay's Addon Complete Features Integration (v2.9.4)
+-- Tplay's Addon Complete Features Integration (v2.9.6)
 -- ============================================================================
 do
 	-- Tabbox 1: Movement & Combat
@@ -2932,10 +2932,7 @@ do
 			POA.Humanoid = NewCharacter:WaitForChild("Humanoid", 10)
 			POA.Root = NewCharacter:WaitForChild("HumanoidRootPart", 10)
 			POA.Collision = NewCharacter:WaitForChild("Collision", 10)
-			-- FIX(noclip): search inside Collision for the real CollisionPart before falling back.
-			POA.CollisionPart = NewCharacter:FindFirstChild("CollisionPart")
-				or (POA.Collision and POA.Collision:FindFirstChild("CollisionPart"))
-				or POA.Collision
+			POA.CollisionPart = NewCharacter:FindFirstChild("CollisionPart") or POA.Collision
 			POA.OriginalC1 = nil
 			POA.Shifted = false
 			if not (POA.Humanoid and POA.Root and POA.Collision and POA.CollisionPart) then
@@ -2990,6 +2987,102 @@ do
 		Variables.POARestorePhysicalPosition = POARestorePhysicalPosition
 		Variables.POASetVisualOffset = POASetVisualOffset
 		Variables.POASync = POASync
+
+		-- Tplay 2.9.6: preserve No Acceleration across character respawns.
+		local function FindNoAccelerationToggle()
+			local LT = Library and Library.Toggles
+			if not LT then return nil end
+			for Name, Toggle in pairs(LT) do
+				local Key = tostring(Name):lower():gsub("[^%w]", "")
+				if Key == "noacceleration"
+					or Key == "noaccel"
+					or Key:find("noacceleration", 1, true)
+					or Key:find("noaccel", 1, true)
+				then
+					return Toggle
+				end
+			end
+		end
+
+		local function ReapplyNoAcceleration()
+			if not Variables.POANoAccelWasEnabled then return end
+			task.delay(0.35, function()
+				local Toggle = FindNoAccelerationToggle()
+				if not Toggle then return end
+				if Toggle.Value == false and Toggle.SetValue then
+					pcall(Toggle.SetValue, Toggle, true)
+				elseif Toggle.Callback then
+					pcall(Toggle.Callback, true)
+				elseif Toggle.SetValue then
+					pcall(Toggle.SetValue, Toggle, false)
+					task.defer(function()
+						pcall(Toggle.SetValue, Toggle, true)
+					end)
+				end
+			end)
+		end
+
+		-- Tplay 2.9.6: Position Offset V2 ground adhesion.
+		-- Keeps X/Z velocity intact, suppresses accidental upward launches and
+		-- follows descending ground while yielding to jumps, freefall and noclip.
+		local POAGroundParams = RaycastParams.new()
+		POAGroundParams.FilterType = Enum.RaycastFilterType.Exclude
+		POAGroundParams.RespectCanCollide = true
+		POAGroundParams.IgnoreWater = true
+		local POAGroundFilter = {}
+		local POAGroundState = { WasEnabled = false, EnabledAt = 0 }
+
+		local function POAGroundAdhesion(Enabled)
+			if not Enabled then
+				POAGroundState.WasEnabled = false
+				return
+			end
+			if not POAGroundState.WasEnabled then
+				POAGroundState.WasEnabled = true
+				POAGroundState.EnabledAt = os.clock()
+			end
+			local Root, Humanoid = POA.Root, POA.Humanoid
+			if not (Root and Root.Parent and Humanoid and Humanoid.Parent) then return end
+			if Humanoid.Health <= 0 or POANoclip() or POAVelocityManipulation() then return end
+			local State = Humanoid:GetState()
+			if State == Enum.HumanoidStateType.Jumping
+				or State == Enum.HumanoidStateType.Freefall
+				or State == Enum.HumanoidStateType.Climbing
+				or State == Enum.HumanoidStateType.Swimming
+				or State == Enum.HumanoidStateType.Seated
+			then return end
+
+			table.clear(POAGroundFilter)
+			if POA.Character then POAGroundFilter[#POAGroundFilter + 1] = POA.Character end
+			if Camera and Camera:FindFirstChild("MinecartRig") then
+				POAGroundFilter[#POAGroundFilter + 1] = Camera.MinecartRig
+			end
+			POAGroundParams.FilterDescendantsInstances = POAGroundFilter
+
+			local V = Root.AssemblyLinearVelocity
+			local Horizontal = Vector3.new(V.X, 0, V.Z)
+			local Speed = Horizontal.Magnitude
+			local Ahead = Speed > 0.5 and Horizontal.Unit * math.clamp(Speed * 0.075, 0.75, 3.25) or Vector3.zero
+			local CastUp, CastDown = 2.25, 8.5
+			local Here = workspace:Raycast(Root.Position + Vector3.new(0, CastUp, 0), Vector3.new(0, -(CastUp + CastDown), 0), POAGroundParams)
+			local Forward = workspace:Raycast(Root.Position + Ahead + Vector3.new(0, CastUp, 0), Vector3.new(0, -(CastUp + CastDown), 0), POAGroundParams)
+			if not (Forward or Here) then return end
+
+			local Grace = os.clock() - POAGroundState.EnabledAt < 0.18
+			if V.Y > (Grace and 3 or 7) then
+				Root.AssemblyLinearVelocity = Vector3.new(V.X, 0, V.Z)
+				V = Root.AssemblyLinearVelocity
+			end
+			if Forward and Here then
+				local Drop = Here.Position.Y - Forward.Position.Y
+				if Drop > 0.08 and Drop < 5.5 and V.Y > -42 then
+					local FollowY = -math.clamp(10 + Speed * 0.42 + Drop * 12, 12, 42)
+					Root.AssemblyLinearVelocity = Vector3.new(V.X, math.min(V.Y, FollowY), V.Z)
+				end
+			elseif Forward and V.Y > -28 then
+				Root.AssemblyLinearVelocity = Vector3.new(V.X, math.min(V.Y, -18), V.Z)
+			end
+		end
 
 		local POAWallParams = RaycastParams.new()
 		POAWallParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -3080,13 +3173,21 @@ do
 				POA.CollisionPartClone.Position = POA.CollisionPart.Position
 				POA.CollisionPartClone.CanCollide = false
 			end
-			if Enabled then POASync(false) end
+			if Enabled then
+				POASync(false)
+				POAGroundAdhesion(true)
+			else
+				POAGroundAdhesion(false)
+			end
 		end)
 
 		Connections.POACharacterRemoving = LocalPlayer.CharacterRemoving:Connect(function()
 			if Toggles.CollisionOffsetGodmodeAlt.Value then
 				Variables.POARespawning = true
 			end
+			local NoAccel = FindNoAccelerationToggle()
+			Variables.POANoAccelWasEnabled = NoAccel and NoAccel.Value == true or false
+			POAGroundAdhesion(false)
 			POARestorePhysicalPosition()
 			POADestroyClones()
 		end)
@@ -3095,6 +3196,8 @@ do
 			task.defer(function()
 				Character = NewCharacter
 				POASetupCharacter(NewCharacter)
+				Variables.POARespawning = false
+				ReapplyNoAcceleration()
 			end)
 		end)
 
@@ -10083,11 +10186,10 @@ Functions.HandleCharacter = function(NewCharacter)
 	Global.MainUI = LocalPlayer.PlayerGui.MainUI
 
 	Collision = NewCharacter:WaitForChild("Collision")
-	-- FIX(noclip): real "CollisionPart" is nested inside Collision, not a direct child of Character.
-	-- The original lookup fell back to Collision itself, leaving the real wall-blocker untouched.
-	CollisionPart  = NewCharacter:FindFirstChild("CollisionPart")
+	-- Noclip: CollisionPart can be nested inside Collision on current character rigs.
+	CollisionPart = NewCharacter:FindFirstChild("CollisionPart")
 		or (Collision and Collision:FindFirstChild("CollisionPart"))
-		or NewCharacter:FindFirstChild("Collision")
+		or Collision
 	if Variables.POASetupCharacter then
 		Variables.POASetupCharacter(NewCharacter)
 	end
@@ -10303,42 +10405,63 @@ Functions.HandleCharacter = function(NewCharacter)
 	local RayParams = RaycastParams.new()
 	RayParams.FilterType = Enum.RaycastFilterType.Exclude
 
-	-- FIX(noclip): RenderStepped fires AFTER physics, so CanCollide=false set there
-	-- has no effect on the current frame's collision. Stepped fires BEFORE physics,
-	-- so disabling CanCollide here ensures the physics engine sees no collision.
-	Conns.NoclipStepped = Services.RunService.Stepped:Connect(function()
+	-- Noclip must win immediately before physics. RenderStepped code and the
+	-- Position Offset controller may otherwise restore a collision proxy.
+	local function ShouldDisableCharacterCollision()
+		return (Toggles.NoclipToggle and Toggles.NoclipToggle.Value == true)
+			or (Toggles.TeleportManipulationToggle and Toggles.TeleportManipulationToggle.Value == true)
+	end
+
+	local function ApplyNoclipCollision()
 		if not (Character and Character.Parent and RootPart and RootPart.Parent) then return end
-		local isNoclip = (Toggles.NoclipToggle and Toggles.NoclipToggle.Value)
-			or (Toggles.TeleportManipulationToggle and Toggles.TeleportManipulationToggle.Value)
-			or false
-		if isNoclip then
-			-- When noclip is ON: kill ALL collision so physics can't block movement.
+		local DisableCollision = ShouldDisableCharacterCollision()
+
+		if DisableCollision then
 			for _, Part in Character:GetDescendants() do
-				if Part:IsA("BasePart") and Part.CanCollide then
+				if Part:IsA("BasePart") then
 					Part.CanCollide = false
 				end
 			end
 			RootPart.CanCollide = false
-		else
-			-- When noclip is OFF: disable everything except CollisionClone
-			-- (which provides normal floor/wall collision).
-			for _, Part in Character:GetDescendants() do
-				if Part:IsA("BasePart")
-					and Part ~= CollisionClone
-					and Part ~= CollisionPartClone
-					and Part.Name ~= "CollisionClone"
-					and Part.Name ~= "CollisionPartClone"
-					and Part.CanCollide then
-					Part.CanCollide = false
-				end
-			end
-			if CollisionClone and CollisionClone.Parent then
-				CollisionClone.CanCollide = true
-				local cc = CollisionClone:FindFirstChild("CollisionCrouch")
-				if cc then cc.CanCollide = true end
+			return
+		end
+
+		-- Restore only the collision proxy expected by the existing character
+		-- controller; all visual body parts stay non-collidable.
+		for _, Part in Character:GetDescendants() do
+			if Part:IsA("BasePart")
+				and Part ~= CollisionClone
+				and Part ~= CollisionPartClone
+				and Part.Name ~= "CollisionClone"
+				and Part.Name ~= "CollisionPartClone"
+			then
+				Part.CanCollide = false
 			end
 		end
-	end)
+
+		if Floor == "OldHotel" or Floor == "Fools" then
+			RootPart.CanCollide = true
+			if CollisionClone and CollisionClone.Parent then
+				CollisionClone.CanCollide = false
+				local CloneCrouch = CollisionClone:FindFirstChild("CollisionCrouch")
+				if CloneCrouch then CloneCrouch.CanCollide = false end
+			end
+		else
+			RootPart.CanCollide = false
+			if CollisionClone and CollisionClone.Parent then
+				local IsCrouching = Functions.IsCrouching and Functions.IsCrouching() or false
+				local CloneCrouch = CollisionClone:FindFirstChild("CollisionCrouch")
+				CollisionClone.CanCollide = not IsCrouching
+				if CloneCrouch then CloneCrouch.CanCollide = IsCrouching end
+			end
+		end
+		if CollisionPartClone and CollisionPartClone.Parent then
+			CollisionPartClone.CanCollide = false
+		end
+	end
+
+	local NoclipSimulationEvent = Services.RunService.PreSimulation or Services.RunService.Stepped
+	Conns.NoclipStepped = NoclipSimulationEvent:Connect(ApplyNoclipCollision)
 
 	Conns.MainHandler = Services.RunService.RenderStepped:Connect(function()
 		if Services.Workspace:FindFirstChild("Camera") then
@@ -10384,37 +10507,8 @@ Functions.HandleCharacter = function(NewCharacter)
 			RootPart.CanCollide = false
 		end
 
-		-- FIX(noclip) v2: blanket-disable collision on all character parts EXCEPT the
-		-- collision proxies managed by the POA / noclip system. Excluding them here
-		-- prevents this loop from racing against the POA RenderStepped (which sets
-		-- CollisionClone.CanCollide = true when Noclip is OFF so the character has
-		-- normal floor/wall collision).
-		local _isNoclip = (Toggles.NoclipToggle and Toggles.NoclipToggle.Value)
-			or (Toggles.TeleportManipulationToggle and Toggles.TeleportManipulationToggle.Value)
-			or false
-		for _, Part in Character:GetDescendants() do
-			if Part:IsA("BasePart")
-				and Part ~= CollisionClone
-				and Part ~= CollisionPartClone
-				and Part.Name ~= "CollisionClone"
-				and Part.Name ~= "CollisionPartClone" then
-				Part.CanCollide = false
-			end
-		end
-		-- Explicitly drive CollisionClone collision here so noclip works even when
-		-- the POA system hasn't initialised (e.g. Collision part not found on spawn).
-		-- POA RenderStepped does the same thing, so there is no conflict.
-		if Floor ~= "OldHotel" and Floor ~= "Fools" then
-			if CollisionClone and CollisionClone.Parent then
-				CollisionClone.CanCollide = not _isNoclip
-				local _cloneCrouch = CollisionClone:FindFirstChild("CollisionCrouch")
-				if _cloneCrouch then
-					_cloneCrouch.CanCollide = not _isNoclip
-				end
-			end
-			if CollisionPartClone and CollisionPartClone.Parent then
-				CollisionPartClone.CanCollide = false
-			end
+		for _, Part in Character:GetChildren() do
+			if Part:IsA("BasePart") then Part.CanCollide = false end
 		end
 
 		if LocalPlayer:GetAttribute("Alive") == true then
