@@ -467,7 +467,7 @@ if Library.ActiveLoading and Library.ActiveLoading.Destroyed ~= true then
 end
 local Loading = Library:CreateLoading({
 	Title = "lolcheat V4",
-	Icon = 136097487509067,
+	Icon = 98291729947083,
 	TotalSteps = 4,
 	ShowSidebar = true,
 	AlwaysOnTop = true,
@@ -1549,8 +1549,8 @@ if Library.SetFont then Library:SetFont(Enum.Font.Code) end
 
 local Window = Library:CreateWindow({
     Title = "lolcheat V4",
-    Icon = 136097487509067,
-    Footer = "Game: DOORS | lolcheat V4 | Build 1.488",
+    Icon = 98291729947083,
+    Footer = "Game: DOORS | lolcheat V4 | Build VIP",
     Size = UDim2.fromOffset(720, 600),
     NotifySide = "Right",
     ShowCustomCursor = false,
