@@ -466,15 +466,15 @@ if Library.ActiveLoading and Library.ActiveLoading.Destroyed ~= true then
 	pcall(function() Library.ActiveLoading:Destroy() end)
 end
 local Loading = Library:CreateLoading({
-	Title = "lolcheat V4",
-	Icon = 98291729947083,
+	Title = "catpaint",
+	Icon = 136097487509067,
 	TotalSteps = 4,
 	ShowSidebar = true,
 	AlwaysOnTop = true,
 })
 Loading:SetCurrentStep(1)
-Loading:SetMessage("Loading lolcheat V4...")
-Loading:SetDescription("fun fact: bomb.exe is loading...")
+Loading:SetMessage("Loading catpaint...")
+Loading:SetDescription("fun fact: gomoseki...")
 pcall(function()
 	Loading.Sidebar:AddLabel("Game: DOORS")
 	Loading.Sidebar:AddLabel("Player: " .. LocalPlayer.Name)
@@ -791,7 +791,7 @@ local function LolhaxNotify(TitleText, DescriptionText, Image, Color, Time)
     title.BackgroundTransparency = 1
     title.BorderSizePixel = 0
     title.Font = Enum.Font.SourceSans
-    title.Text = "[lolcheat] " .. tostring(TitleText or "Notification")
+    title.Text = "[catpaint] " .. tostring(TitleText or "Notification")
     title.TextScaled = true
     title.TextSize = 1
     title.TextStrokeTransparency = 0.5
@@ -993,10 +993,10 @@ end
 Library.OldNotify = Library.Notify
 Library.Notify = function(Self, Data, Time)
     if type(Data) == "table" then
-        return Functions.Notify({ Title = Data.Title or "lolcheat V4", Body = Data.Description or Data.Body or "",
+        return Functions.Notify({ Title = Data.Title or "catpaint", Body = Data.Description or Data.Body or "",
             Image = Data.BigIcon or Data.Image, Time = Data.Time or 5 })
     end
-    return Functions.Notify({ Title = "lolcheat V4", Body = tostring(Data or ""), Time = Time or 5 })
+    return Functions.Notify({ Title = "catpaint", Body = tostring(Data or ""), Time = Time or 5 })
 end
 
 if not LocalPlayer.Character or not CurrentRooms:FindFirstChildOfClass("Model") then
@@ -1548,9 +1548,9 @@ end
 if Library.SetFont then Library:SetFont(Enum.Font.Code) end
 
 local Window = Library:CreateWindow({
-    Title = "lolcheat V4",
-    Icon = 98291729947083,
-    Footer = "Game: DOORS | lolcheat V4 | Build VIP",
+    Title = "catpaint",
+    Icon = 136097487509067,
+    Footer = "Game: DOORS | catpaint | Build tung",
     Size = UDim2.fromOffset(720, 600),
     NotifySide = "Right",
     ShowCustomCursor = false,
@@ -1580,7 +1580,7 @@ if Window.SetSidebarWidth then Window:SetSidebarWidth(194) end
 if Library.UpdateColorsUsingRegistry then Library:UpdateColorsUsingRegistry() end
 
 local Tabs = {}
-Tabs.Home = Window:AddTab("Home", "door-open", "Homepage for lolcheat")
+Tabs.Home = Window:AddTab("Home", "door-open", "Homepage for catpaint")
 Tabs.Info = Window:AddTab("Info", "info", "Information about this UI remake")
 Tabs.General = Window:AddTab("Main", "house", "Main Features")
 Tabs.Exploits = Window:AddTab("Exploits", "bug", "Game Exploits")
@@ -1669,20 +1669,19 @@ do
     Games:AddLabel('<font color="#55dc90">●</font> DOORS')
     Games:AddLabel("Current floor: " .. tostring(Floor), true)
     Games:AddDivider()
-    Games:AddLabel("This file contains the supplied DOORS module only, not the full lolcheat game hub.", true)
+    Games:AddLabel("This file contains the supplied DOORS module only, not the full catpaint game hub.", true)
     Games:AddButton({ Text = "Copy Link", Func = function()
         Global.CopyUILink("https://www.example.com")
     end })
     Keys:AddLabel("RightShift — toggle menu\nF — fly\nN — noclip\nR — auto interact", true)
     Keys:AddLabel("Bindings can be changed beside each toggle.", true)
-    About:AddLabel("Obsidian UI\nLayout based on the supplied lolcheat v4 screenshots. Existing game logic is retained.", true)
 end
 
 do
-    local Links = Tabs.Info:AddLeftGroupbox("lolcheat links", "link")
+    local Links = Tabs.Info:AddLeftGroupbox("catpaint links", "link")
     Links:AddLabel("Reference project and UI library links.", true)
     for _, Link in ipairs({
-        { "lolcheat site", "example.com" },
+        { "catpaint site", "example.com" },
         { "Dashboard", "example.com" },
         { "Discord server", "https://discord.gg/PB9AHh6sub" },
         { "Support server", "https://www.discord.gg/PB9AHh6sub" },
@@ -1692,17 +1691,16 @@ do
         Links:AddButton({ Text = Caption, Func = function() Global.CopyUILink(Url) end })
     end
     local Credits = Tabs.Info:AddLeftGroupbox("Reference Credits", "code")
-    Credits:AddLabel('<font color="#70de9b">[Unico]</font> lolcheat owner', true)
+    Credits:AddLabel('<font color="#70de9b">[Unico]</font> catpaint owner', true)
     Credits:AddLabel('<font color="#70de9b">[Unico]</font> Developer', true)
-    Credits:AddLabel('<font color="#70de9b">[Phillip015]</font> Developer', true)
     Credits:AddLabel('<font color="#70de9b">[deividcomsono]</font> Obsidian UI library', true)
     local Details = Tabs.Info:AddRightGroupbox("About this file", "info")
-    Details:AddLabel("This is a visual adaptation of your Main.luau, not an official lolcheat v4 distribution.", true)
-    Details:AddLabel("The original toggle/option IDs and game callbacks are retained for config compatibility.", true)
+    Details:AddLabel("123.", true)
+    Details:AddLabel("456.", true)
     Details:AddDivider()
-    Details:AddLabel("Screenshot-only features absent from the supplied source have not been added as dummy controls.", true)
+    Details:AddLabel("789", true)
     local Components = Tabs.Addons:AddLeftGroupbox("Included", "blocks")
-    Components:AddLabel("Obsidian — menu\nThemeManager — themes\nSaveManager — configurations\nlolcheat ESP — existing renderer", true)
+    Components:AddLabel("Obsidian — menu\nThemeManager — themes\nSaveManager — configurations\ncatpaint ESP — existing renderer", true)
 end
 
 -- ============================================================================
@@ -9068,7 +9066,7 @@ Toggles.DisableEntityJumpscares:OnChanged(function(Value)
 end)
 
 Visuals_Mspaint:AddButton({
-	Text = "Verry Good lolcheat Button", Tooltip = "Press this if you dare",
+	Text = "Verry Good Button", Tooltip = "Press this if you dare",
 	Func = function()
 		gui.Enabled = not gui.Enabled
 		if gui.Enabled then Functions.Notify({ Title = "Upio", Body = "You just got Upioned"}) end
@@ -10365,7 +10363,7 @@ Functions.HandleCharacter = function(NewCharacter)
 		end
 
 		if Global.SelfKilled and Global.MainUI:FindFirstChild("Statistics") then
-			Global.MainUI.Statistics.Death.Text = "Died to lolcheat"
+			Global.MainUI.Statistics.Death.Text = "Died to homeless dog"
 		end
 
 		local MainFrame = Global.MainUI:FindFirstChild("MainFrame")
