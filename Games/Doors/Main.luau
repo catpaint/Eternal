@@ -2101,6 +2101,36 @@ do
 		end
 	})
 
+	Tplay_Main:AddToggle("Tplay_AutoLookAtFlowers", {
+		Text = "Auto Look At Flowers",
+		Default = false,
+		Tooltip = "Scans every room in CurrentRooms and fires the LookAt remote for flowers 1-6.",
+		Callback = function(Value)
+			TplayVars.autoLookAtFlowers = Value
+			if Value then
+				task.spawn(function()
+					local fired = {}
+					while TplayVars.autoLookAtFlowers do
+						if CurrentRooms then
+							for _, room in ipairs(CurrentRooms:GetChildren()) do
+								for i = 1, 6 do
+									local flower = room:FindFirstChild(tostring(i))
+									local lookAt = flower and flower:FindFirstChild("LookAt")
+									if lookAt and lookAt:IsA("RemoteEvent") and not fired[lookAt] then
+										fired[lookAt] = true
+										pcall(function() lookAt:FireServer() end)
+										task.wait(0.1)
+									end
+								end
+							end
+						end
+						task.wait(1)
+					end
+				end)
+			end
+		end
+	})
+
 	Tplay_Main:AddToggle("Tplay_DoorReachAlt", {
 		Text = "Door Reach (Alternative)",
 		Default = false,
@@ -7470,7 +7500,7 @@ Exploits_Anti:AddToggle("BypassDrones", { Text = "Anti Drone (FE)", Default = fa
 	Disabled = not Functions.IsFloorAllowed({"Archives", "Outdoors", "Garden"}),
 	DisabledTooltip = not Functions.IsFloorAllowed({"Archives", "Outdoors", "Garden"}) and ("Only available on: Archives, Outdoors, Garden (Current: " .. tostring(Floor) .. ")") or nil
 })
-Exploits_Anti:AddToggle("BypassScribbles", { Text = "Anti Scribbles", Default = false, Tooltip = "Blocks 'Scribbles' damage by disabling touch on its parts.",
+Exploits_Anti:AddToggle("BypassScribbles", { Text = "Anti Scribbles", Default = false, Tooltip = "Stops 'Scribbles' from throwing paper by setting its Paperable attribute to false.",
 	Disabled = not Functions.IsFloorAllowed({"Retro", "Fools", "Subfloor", "Archives", "Garden"}),
 	DisabledTooltip = not Functions.IsFloorAllowed({"Retro", "Fools", "Subfloor", "Archives", "Garden"}) and ("Only available on: Retro, Fools, Subfloor, Archives, Garden (Current: " .. tostring(Floor) .. ")") or nil
 })
@@ -8144,15 +8174,21 @@ Toggles.BypassDrones:OnChanged(function(Value)
 	end
 end)
 
-Toggles.BypassScribbles:OnChanged(function(Value)
-	if Value and not Functions.CheckFloorToggle("BypassScribbles", {"Retro", "Fools", "Subfloor", "Archives", "Garden"}, "Anti Scribbles") then return end
+local function ApplyScribblesPaperable(Value)
+	local Scribbles = Services.Workspace:FindFirstChild("Scribbles")
+	if Scribbles then
+		Scribbles:SetAttribute("Paperable", not Value)
+	end
 	for _, Object in Objects.Entities do
 		if Object.Name == "Scribbles" or Object.Name == "ScribbleMoving" or Object.Name == "Scribble" then
-			for _, Part in Object:GetDescendants() do
-				if Part:IsA("BasePart") then Part.CanTouch = not Value end
-			end
+			Object:SetAttribute("Paperable", not Value)
 		end
 	end
+end
+
+Toggles.BypassScribbles:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassScribbles", {"Retro", "Fools", "Subfloor", "Archives", "Garden"}, "Anti Scribbles") then return end
+	ApplyScribblesPaperable(Value)
 end)
 
 
@@ -12495,15 +12531,13 @@ Conns.EntityHandler = Services.Workspace.ChildAdded:Connect(function(Entity)
 		table.insert(Objects.Entities, Entity)
 	end
 
-	-- scribbles spawned while the bypass is on get their touch disabled right away
+	-- scribbles spawned while the bypass is on get Paperable disabled right away
 	if Entity.Name == "Scribbles" or Entity.Name == "ScribbleMoving" or Entity.Name == "Scribble" then
 		if Toggles.BypassScribbles and Toggles.BypassScribbles.Value then
-			for _, Part in Entity:GetDescendants() do
-				if Part:IsA("BasePart") then Part.CanTouch = false end
-			end
-			local ScribbleConn = Entity.DescendantAdded:Connect(function(Part)
-				if Part:IsA("BasePart") and Toggles.BypassScribbles.Value then
-					Part.CanTouch = false
+			Entity:SetAttribute("Paperable", false)
+			local ScribbleConn = Entity:GetAttributeChangedSignal("Paperable"):Connect(function()
+				if Toggles.BypassScribbles.Value and Entity:GetAttribute("Paperable") ~= false then
+					Entity:SetAttribute("Paperable", false)
 				end
 			end)
 			table.insert(Conns, ScribbleConn)
@@ -12627,9 +12661,7 @@ Library:OnUnload(function()
 			if WalkedInto then WalkedInto.Name = "WalkedInto" end
 		end
 		if Object.Name == "Scribbles" or Object.Name == "ScribbleMoving" or Object.Name == "Scribble" then
-			for _, Part in Object:GetDescendants() do
-				if Part:IsA("BasePart") then Part.CanTouch = true end
-			end
+			Object:SetAttribute("Paperable", true)
 		end
 	end
 
