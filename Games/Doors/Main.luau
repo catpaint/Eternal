@@ -1031,26 +1031,9 @@ if not FloorReplicated then
 	FloorReplicated = Instance.new("Folder")
 end
 
+-- Floor restrictions removed: every function can be enabled on any floor.
 Functions.IsFloorAllowed = function(allowedFloors)
-	if not allowedFloors then return true end
-	local cur = tostring(Floor or ""):lower()
-	if cur == "" and GameData then
-		local fObj = GameData:FindFirstChild("FloorDestination") or GameData:FindFirstChild("Floor")
-		if fObj then cur = tostring(fObj.Value):lower() end
-	end
-	local function matchFloor(a, b)
-		if a == b then return true end
-		if (a == "outdoors" or a == "garden") and (b == "outdoors" or b == "garden") then return true end
-		return false
-	end
-	if type(allowedFloors) == "string" then
-		return matchFloor(cur, allowedFloors:lower())
-	elseif type(allowedFloors) == "table" then
-		for _, f in ipairs(allowedFloors) do
-			if matchFloor(cur, tostring(f):lower()) then return true end
-		end
-	end
-	return false
+	return true
 end
 
 Functions.CheckFloorToggle = function(toggleKey, allowedFloors, featureName)
@@ -7508,6 +7491,10 @@ Exploits_Anti:AddToggle("BypassAntiAlma", { Text = "Anti Alma", Default = false,
 	Disabled = not Functions.IsFloorAllowed({"Subfloor", "Archives", "Garden", "Outdoors"}),
 	DisabledTooltip = not Functions.IsFloorAllowed({"Subfloor", "Archives", "Garden", "Outdoors"}) and ("Only available on: Subfloor, Archives, Garden, Outdoors (Current: " .. tostring(Floor) .. ")") or nil
 })
+Exploits_Anti:AddToggle("BypassAntiRansom", { Text = "Anti Ransom", Default = false, Tooltip = "Deletes 'workspace.Ransom' to stop Ransom from attacking you.",
+	Disabled = not Functions.IsFloorAllowed({"Subfloor", "Archives", "Garden", "Outdoors"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Subfloor", "Archives", "Garden", "Outdoors"}) and ("Only available on: Subfloor, Archives, Garden, Outdoors (Current: " .. tostring(Floor) .. ")") or nil
+})
 Exploits_Anti:AddToggle("BypassStampede", { Text = "Anti Stampede of Drones", Default = false, Tooltip = "Spams the ArchivesClock LookedAtRemote to stop the stampede.",
 	Disabled = not Functions.IsFloorAllowed({"Archives", "Outdoors"}),
 	DisabledTooltip = not Functions.IsFloorAllowed({"Archives", "Outdoors"}) and ("Only available on: Archives, Outdoors (Current: " .. tostring(Floor) .. ")") or nil
@@ -8114,6 +8101,33 @@ Toggles.BypassAntiAlma:OnChanged(function(Value)
 		end
 	end)
 	table.insert(Conns, AntiAlmaConnection)
+end)
+
+-- Anti Ransom: watch for the Ransom model in Workspace and remove it once, when it appears
+local AntiRansomConnection
+local function RemoveExistingRansom()
+	for _, Object in Services.Workspace:GetChildren() do
+		if Object.Name == "Ransom" then
+			pcall(function() Object:Destroy() end)
+		end
+	end
+end
+
+Toggles.BypassAntiRansom:OnChanged(function(Value)
+	if Value and not Functions.CheckFloorToggle("BypassAntiRansom", {"Subfloor", "Archives", "Garden", "Outdoors"}, "Anti Ransom") then return end
+	if AntiRansomConnection then
+		AntiRansomConnection:Disconnect()
+		AntiRansomConnection = nil
+	end
+	if not Value then return end
+
+	RemoveExistingRansom()
+	AntiRansomConnection = Services.Workspace.ChildAdded:Connect(function(Object)
+		if Object.Name == "Ransom" then
+			pcall(function() Object:Destroy() end)
+		end
+	end)
+	table.insert(Conns, AntiRansomConnection)
 end)
 
 Global.ClockRemotes = {}
