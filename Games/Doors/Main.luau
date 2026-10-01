@@ -7584,9 +7584,8 @@ Exploits_Remove:AddToggle("NoA90Damage",     { Text = "No A-90 Damage",    Defau
 	Disabled = not Functions.IsFloorAllowed({"Rooms", "Hotel", "Mines", "Backdoor", "Ripple"}),
 	DisabledTooltip = not Functions.IsFloorAllowed({"Rooms", "Hotel", "Mines", "Backdoor", "Ripple"}) and ("Only available on: Rooms, Hotel, Mines, Backdoor, Ripple (Current: " .. tostring(Floor) .. ")") or nil
 })
-Exploits_Remove:AddToggle("NoSurgeDamage",   { Text = "No Surge Damage",   Default = false, Tooltip = "Prevents 'Surge' from hurting you.",
-	Disabled = not Functions.IsFloorAllowed({"Backdoor", "Subfloor", "Ripple"}),
-	DisabledTooltip = not Functions.IsFloorAllowed({"Backdoor", "Subfloor", "Ripple"}) and ("Only available on: Backdoor, Subfloor, Ripple (Current: " .. tostring(Floor) .. ")") or nil
+Exploits_Remove:AddToggle("NoSurgeDamage",   { Text = "No Surge Damage",   Default = false, Tooltip = "Prevents 'Surge' from hurting you and removes its visual effects.",
+	Disabled = not Functions.CheckEnv("firesignal"), DisabledTooltip = Global.ExecutorIssueMessage
 })
 
 -- Exploits_Audio
@@ -8775,17 +8774,45 @@ Toggles.NoA90Damage:OnChanged(function(Value)
 		end
 	end
 end)
-Toggles.NoSurgeDamage:OnChanged(function(Value)
-	if Value and not Functions.CheckFloorToggle("NoSurgeDamage", {"Backdoor", "Subfloor", "Ripple"}, "No Surge Damage") then return end
-	if RemotesFolder:FindFirstChild("SurgeRemote") then
-		if Value then
-			FakeEvents.Surge.Parent = RemotesFolder
-			FakeEvents.Surge_Real.Parent = Workspace.mstudio45_Folder
-		else
-			FakeEvents.Surge_Real.Parent = RemotesFolder
-			FakeEvents.Surge.Parent = Workspace.mstudio45_Folder
-		end
+local NoSurgeConnection
+local SurgeSwapActive = false
+local function SurgeSwapRemotes(Swap)
+	if not FakeEvents.Surge_Real then return end
+	if Swap then
+		if SurgeSwapActive or not RemotesFolder:FindFirstChild("SurgeRemote") then return end
+		FakeEvents.Surge.Parent = RemotesFolder
+		FakeEvents.Surge_Real.Parent = Workspace.mstudio45_Folder
+		SurgeSwapActive = true
+	else
+		if not SurgeSwapActive then return end
+		FakeEvents.Surge_Real.Parent = RemotesFolder
+		FakeEvents.Surge.Parent = Workspace.mstudio45_Folder
+		SurgeSwapActive = false
 	end
+end
+
+Toggles.NoSurgeDamage:OnChanged(function(Value)
+	if NoSurgeConnection then
+		NoSurgeConnection:Disconnect()
+		NoSurgeConnection = nil
+	end
+	SurgeSwapRemotes(false)
+	if not Value then return end
+
+	SurgeSwapRemotes(true)
+	local firesignal = mstudio45.Environment.firesignal or firesignal
+	NoSurgeConnection = Services.RunService.Heartbeat:Connect(function()
+		local ClientRemote = FloorReplicated and FloorReplicated:FindFirstChild("ClientRemote")
+		local SurgeClient = ClientRemote and ClientRemote:FindFirstChild("SurgeClient")
+		if SurgeClient then
+			for _, Obj in SurgeClient:GetDescendants() do
+				if Obj:IsA("RemoteEvent") then
+					pcall(firesignal, Obj.OnClientEvent, false)
+				end
+			end
+		end
+	end)
+	table.insert(Conns, NoSurgeConnection)
 end)
 
 local Modules = {}
