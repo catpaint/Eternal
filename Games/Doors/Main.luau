@@ -395,9 +395,7 @@ local ItemNames = {
 	["Fih_Flakes"]        = "Fih Flakes",
 	["FishFlakes"]        = "Fih Flakes",
 	["Fish_Flakes"]       = "Fih Flakes",
-	["Flakes"]            = "Fih Flakes",
-    ["PeachCobbler"]      = "Peach Cobbler",
-    ["ObjectScanner"]     = "Object Scanner"
+	["Flakes"]            = "Fih Flakes"
 }
 
 local Character
@@ -7501,6 +7499,10 @@ Exploits_Anti:AddToggle("BypassStampede", { Text = "Anti Stampede of Drones", De
 	Disabled = not Functions.IsFloorAllowed({"Archives", "Outdoors"}),
 	DisabledTooltip = not Functions.IsFloorAllowed({"Archives", "Outdoors"}) and ("Only available on: Archives, Outdoors (Current: " .. tostring(Floor) .. ")") or nil
 })
+Exploits_Anti:AddToggle("AntiStairwellCrusher", { Text = "Anti StairwellCrusher", Default = false, Tooltip = "Deletes the StairwellCrusher trap from every room's Assets, including newly generated rooms.",
+	Disabled = not Functions.IsFloorAllowed({"Stairwell"}),
+	DisabledTooltip = not Functions.IsFloorAllowed({"Stairwell"}) and ("Only available on: Stairwell (Current: " .. tostring(Floor) .. ")") or nil
+})
 
 -- Exploits_Troll
 Exploits_Troll:AddToggle("TwerkDance", { 
@@ -8069,6 +8071,43 @@ Toggles.AntiDrone:OnChanged(function(Value)
                 CheckAndDestroyDrone(obj)
             end
         end)
+    end
+end)
+
+-- Anti StairwellCrusher: delete the StairwellCrusher trap from every room's Assets
+-- and keep deleting it from rooms that generate later
+local AntiStairwellCrusherConnection = nil
+local function DestroyStairwellCrushers(root)
+    if not root then return end
+    for _, crusher in ipairs(root:QueryDescendants("#StairwellCrusher")) do
+        task.spawn(function()
+            pcall(function()
+                crusher:Destroy()
+            end)
+        end)
+    end
+end
+
+Toggles.AntiStairwellCrusher:OnChanged(function(Value)
+    if Value and not Functions.CheckFloorToggle("AntiStairwellCrusher", {"Stairwell"}, "Anti StairwellCrusher") then return end
+    local Rooms = Services.Workspace:FindFirstChild("CurrentRooms")
+    if AntiStairwellCrusherConnection then
+        AntiStairwellCrusherConnection:Disconnect()
+        AntiStairwellCrusherConnection = nil
+    end
+    if Value then
+        DestroyStairwellCrushers(Rooms)
+        if Rooms then
+            AntiStairwellCrusherConnection = Rooms.DescendantAdded:Connect(function(obj)
+                if Toggles.AntiStairwellCrusher and Toggles.AntiStairwellCrusher.Value and obj.Name == "StairwellCrusher" then
+                    task.spawn(function()
+                        pcall(function()
+                            obj:Destroy()
+                        end)
+                    end)
+                end
+            end)
+        end
     end
 end)
 
