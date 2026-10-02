@@ -395,7 +395,10 @@ local ItemNames = {
 	["Fih_Flakes"]        = "Fih Flakes",
 	["FishFlakes"]        = "Fih Flakes",
 	["Fish_Flakes"]       = "Fih Flakes",
-	["Flakes"]            = "Fih Flakes"
+	["Flakes"]            = "Fih Flakes",
+	["ObjectScanner"]     = "Object Scanner",
+	["PeachCobbler"]      = "Peach Cobbler",
+	["CoinRoll"]          = "Coin Roll"
 }
 
 local Character
