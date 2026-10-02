@@ -396,7 +396,7 @@ local ItemNames = {
 	["FishFlakes"]        = "Fih Flakes",
 	["Fish_Flakes"]       = "Fih Flakes",
 	["Flakes"]            = "Fih Flakes",
-    ["PeachCobbler"]      = "Eda",
+    ["PeachCobbler"]      = "Peach Cobbler",
     ["ObjectScanner"]     = "Object Scanner"
 }
 
