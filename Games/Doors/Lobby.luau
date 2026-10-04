@@ -156,7 +156,7 @@ if Library.ActiveLoading and Library.ActiveLoading.Destroyed ~= true then
 end
 local Loading = Library:CreateLoading({
     Title = "catpaint",
-    Icon = 98291729947083,
+    Icon = 120614218069669,
     TotalSteps = 4,
     ShowSidebar = true,
     AlwaysOnTop = true,
@@ -177,7 +177,7 @@ task.wait(1)
 local Window = Library:CreateWindow({
     Title = "catpaint",
     Footer = "Game: DOORS LOBBY | dsc.gg/PB9AHh6sub",
-    Icon = 98291729947083,
+    Icon = 120614218069669,
     NotifySide = "Right",
     ShowCustomCursor = false,
     AutoShow = true,
