@@ -472,7 +472,7 @@ if Library.ActiveLoading and Library.ActiveLoading.Destroyed ~= true then
 end
 local Loading = Library:CreateLoading({
 	Title = "catpaint",
-	Icon = 98291729947083,
+	Icon = 120614218069669,
 	TotalSteps = 4,
 	ShowSidebar = true,
 	AlwaysOnTop = true,
@@ -1537,7 +1537,7 @@ if Library.SetFont then Library:SetFont(Enum.Font.Code) end
 
 local Window = Library:CreateWindow({
     Title = "catpaint",
-    Icon = 98291729947083,
+    Icon = 120614218069669,
     Footer = "Game: DOORS | catpaint | Build tung",
     Size = UDim2.fromOffset(720, 600),
     NotifySide = "Right",
