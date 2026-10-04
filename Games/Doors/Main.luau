@@ -1538,7 +1538,7 @@ if Library.SetFont then Library:SetFont(Enum.Font.Code) end
 local Window = Library:CreateWindow({
     Title = "catpaint",
     Icon = 120614218069669,
-    Footer = "Game: DOORS | catpaint | Build tung",
+    Footer = "Game: DOORS | catpaint | Build 0.8.2",
     Size = UDim2.fromOffset(720, 600),
     NotifySide = "Right",
     ShowCustomCursor = false,
