@@ -5155,7 +5155,7 @@ do
 						Toggles.SlideSpeedHack:SetValue(true)
 					end
 					EnsureStuffToKeepEnabled()
-					if LatestRoom.Value > 98 then
+					if LatestRoom.Value > 198 then
 						local stairwellexit = Room:FindFirstChild("StairwellExitDoor")
 						if stairwellexit then
 							Character:PivotTo(stairwellexit:GetPivot())
@@ -9504,7 +9504,7 @@ local EntityESPLabels = {
 	JeffTheKiller = "Jeff the Killer", GiggleCeiling = "Giggle",
 	Snare = "Snare", GrumbleRig = "Grumble", TellerRig = "Teller", HonchoRig = "Honcho",
 	Drones = "Drones", Creak = "Creak", StemsEntity = "Stems",
-	Noise = "Noise", Hijack = "Hijack",
+	Noise = "Noise", NoiseModel = "Noise", Hijack = "Hijack",
 	Drakobloxxer = "Drakobloxxer", Hole = "Mandrake Hole", Groundskeeper = "Groundskeeper",
 	LiveEntityBramble = "Bramble", Figure = "Figure", FigureRig = "Figure", FigureRagdoll = "Figure",
 	FakeDoor = "Dupe", DoorFake = "Dupe",
@@ -11165,13 +11165,15 @@ Functions.HandleObject = function(Object)
 			end
 		end
 		table.insert(Objects.Entities, Object)
-	elseif Name == "Noise" then
-		-- noise entity: esp on its root/head + notify
+	elseif Name == "Noise" or Name == "NoiseModel" then
+		-- noise entity: esp on its root/head/model + notify
 		local Root = Object.PrimaryPart or Object:FindFirstChild("HumanoidRootPart") or Object:FindFirstChild("Head") or Object:FindFirstChildWhichIsA("BasePart")
-		if Root then
-			if not Object.PrimaryPart then Object.PrimaryPart = Root end
+		if Root and not Object.PrimaryPart then Object.PrimaryPart = Root end
+		local TargetObj = Object:IsA("Model") and Object or (Root or Object)
+		EntityESPLabels[Name] = "Noise"
+		if TargetObj then
 			if Toggles.EntityESPToggle.Value and Options.EntityESPOptions.Value["Noise"] then
-				Functions.AddESP({ Object = Root, Text = "Noise", Color = Options.EntityESPColor.Value }, false)
+				Functions.AddESP({ Object = TargetObj, Text = "Noise", Color = Options.EntityESPColor.Value }, false)
 			end
 			if Toggles.NotifyEntities.Value and Options.EntityList.Value["Noise"] then
 				Functions.Notify({ Title = "Entity 'Noise' has spawned.", Body = "Watch out for Noise." })
@@ -12260,7 +12262,7 @@ local TrackedObjects = {
 	Creak=true, StemsEntity=true, LargeScrew=true, DinkyLamp=true, BottleCrate=true,
 	StairwellTerminal=true, StairwellFireAlarm=true, TV_Stand=true, Cubby_Large_Tarped=true,
 	BrokenMonitor=true, JerryCan=true,
-	Noise=true, Hijack=true,
+	Noise=true, NoiseModel=true, Hijack=true,
 	WaterPump=true, CringlePresent=true, Wheel=true, PickupItem=true, LiveHintBook=true,
 	LiveBreakerPolePickup=true, LeverForGate=true, GloomPile=true, SeekFloodline=true, Door=true,
 	Green_Herb=true, Bridge=true, MouseHole=true, BananaPeel=true, NannerPeel=true, PowerupPad=true,
