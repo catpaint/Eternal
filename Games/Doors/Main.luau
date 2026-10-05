@@ -5155,7 +5155,7 @@ do
 						Toggles.SlideSpeedHack:SetValue(true)
 					end
 					EnsureStuffToKeepEnabled()
-					if LatestRoom.Value > 198 then
+					if LatestRoom.Value > 98 then
 						local stairwellexit = Room:FindFirstChild("StairwellExitDoor")
 						if stairwellexit then
 							Character:PivotTo(stairwellexit:GetPivot())
