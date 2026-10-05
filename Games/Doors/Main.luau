@@ -1756,6 +1756,9 @@ do
 		GhostReviveMethod = "Method #1 (Door 0)",
 		ConnectingChair = false,
 		ACBypassNotify = nil,
+		OnChairGrabCreak = nil,
+		ChairThatFlingsCreak = nil,
+		FlingingCreak = false,
 		Groundskeepers = {},
 		FigureRigs = {},
 		stopTauntTimes = 0,
@@ -3148,7 +3151,100 @@ do
 			Tplay_Combat:AddToggle("Tplay_FlingCreak", {
 				Text = "Fling Creak [FE]",
 				Default = false,
-				Tooltip = "Flings Creak away when nearby."
+				Risky = true,
+				Disabled = not sethidden,
+				DisabledTooltip = "Executor is not supported",
+				Tooltip = "Tries to fling Creak using the Stairwell chair. Grab a chair to fling Creak.",
+				Callback = function(Value)
+					if Value then
+						Functions.Notify({
+							Title = "Tplay's Addon",
+							Body = "Grab a chair to fling Creak",
+							Time = 10
+						})
+						TplayVars.OnChairGrabCreak = Character.DescendantAdded:Connect(function(descendant)
+							if descendant:IsA("Attachment") and descendant.Name == "CartTargetAttachment" and descendant.Parent and descendant.Parent.Name == "CollisionPart" then
+								local chair = FindChair(descendant)
+								local promptBlock = chair and chair:FindFirstChild("PromptBlocker")
+								if not promptBlock then return end
+								local CartControl = RemotesFolder:FindFirstChild("CartControl")
+								if chair == TplayVars.ChairThatFlingsCreak then
+									if CartControl then CartControl:FireServer() end
+									return
+								elseif TplayVars.ChairThatFlingsCreak then
+									return
+								end
+								if CartControl then CartControl:FireServer() end
+								Functions.Notify({
+									Title = "Tplay's Addon",
+									Body = "Chair is ready to fling Creak",
+									Time = 3
+								})
+								TplayVars.ChairThatFlingsCreak = chair
+								task.spawn(function()
+									task.wait()
+									chair = TplayVars.ChairThatFlingsCreak
+									if not chair then return end
+									local oldcframe = chair:GetPivot()
+									local killed = false
+									TplayVars.FlingingCreak = true
+									while TplayVars.FlingingCreak and chair and chair.Parent and promptBlock and isnetowner(promptBlock) do
+										local LiveEntities = Services.Workspace:FindFirstChild("LiveEntities")
+										local creak = LiveEntities and LiveEntities:FindFirstChild("Creak")
+										if creak then
+											local part = creak:FindFirstChild("HumanoidRootPart") or creak.PrimaryPart or creak:FindFirstChildWhichIsA("BasePart")
+											if not part then
+												killed = true
+												break
+											end
+											if sethidden then
+												pcall(sethidden, promptBlock, "PhysicsRepRootPart", part)
+											end
+											chair:PivotTo(creak:GetPivot() + Vector3.new(0, 3, 0))
+											local collider = chair:FindFirstChild("Collider")
+											if collider then
+												collider.AssemblyLinearVelocity = Vector3.new(0, -math.random(500000, 1000000), 0)
+											end
+										end
+										task.wait()
+										chair = TplayVars.ChairThatFlingsCreak
+										promptBlock = chair and chair:FindFirstChild("PromptBlocker")
+									end
+									if chair and chair.Parent then
+										chair:PivotTo(oldcframe)
+									end
+									TplayVars.ChairThatFlingsCreak = nil
+									if killed then
+										Functions.Notify({
+											Title = "Tplay's Addon",
+											Body = "Creak was deleted while flinging, now you can play Stairwell and don't worry about Creak",
+											Time = 10
+										})
+									elseif TplayVars.FlingingCreak then
+										Functions.Notify({
+											Title = "Tplay's Addon [Warning]",
+											Body = "Something happened with chair that caused it to not fling Creak anymore, grab another chair to continue flinging",
+											Time = 10
+										})
+									else
+										Functions.Notify({
+											Title = "Tplay's Addon",
+											Body = "Removed control from the chair that was flinging Creak",
+											Time = 5
+										})
+									end
+									TplayVars.FlingingCreak = false
+								end)
+							end
+						end)
+					else
+						if TplayVars.OnChairGrabCreak then
+							TplayVars.OnChairGrabCreak:Disconnect()
+							TplayVars.OnChairGrabCreak = nil
+						end
+						TplayVars.FlingingCreak = false
+					end
+				end
 			})
 		end
 	end
@@ -7402,7 +7498,7 @@ Floors_Automation:AddToggle("MinecartTeleport", {
 -- Self_Automation
 Self_Automation:AddToggle("AutoDropTV", {
 	Text = "Auto Drop TV", Default = false,
-	Tooltip = "Automatically takes control of the TV cart with boosted handling."
+	Tooltip = "Automatically drops the TV cart under the map when held."
 })
 
 -- Exploits_Anti
@@ -7935,20 +8031,50 @@ Toggles.AutoDropTV:OnChanged(function(Value)
 	end
 	if not Value then return end
 
-	-- the game welds the Camera's NoiseModel to the TV (WeldToTV) while you hold it;
-	-- the TV rig itself stays in workspace.Misc, so detect the weld and drop the rig
+	-- Find TV_Stand anywhere in Workspace (in Misc, CurrentRooms assets, etc.)
 	local function FindTV()
 		local Misc = Services.Workspace:FindFirstChild("Misc")
-		return Misc and Misc:FindFirstChild("TV_Stand")
+		if Misc then
+			local tv = Misc:FindFirstChild("TV_Stand")
+			if tv then return tv end
+		end
+		local CurrentRooms = Services.Workspace:FindFirstChild("CurrentRooms")
+		if CurrentRooms then
+			for _, room in ipairs(CurrentRooms:GetChildren()) do
+				local assets = room:FindFirstChild("Assets")
+				if assets then
+					local tv = assets:FindFirstChild("TV_Stand")
+					if tv then return tv end
+				end
+			end
+		end
+		return Services.Workspace:FindFirstChild("TV_Stand", true)
 	end
 
+	-- Check if player is holding / pushing the TV cart
 	local function IsHoldingTV()
 		local Cam = Services.Workspace:FindFirstChild("Camera")
 		local NM = Cam and Cam:FindFirstChild("NoiseModel")
 		local HRP = NM and NM:FindFirstChild("HumanoidRootPart")
-		if not HRP then return false end
-		for _, c in ipairs(HRP:GetChildren()) do
-			if c:IsA("ManualWeld") and c.Name == "WeldToTV" then return true end
+		if HRP then
+			for _, c in ipairs(HRP:GetChildren()) do
+				if c:IsA("ManualWeld") and c.Name == "WeldToTV" and c.Part1 ~= nil then
+					return true
+				end
+			end
+		end
+		local TV = FindTV()
+		if TV then
+			if TV:GetAttribute("LastPusherId") == Services.Players.LocalPlayer.UserId then
+				local char = Services.Players.LocalPlayer.Character
+				local hrp = char and char:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					local dist = (TV:GetPivot().Position - hrp.Position).Magnitude
+					if dist < 12 then
+						return true
+					end
+				end
+			end
 		end
 		return false
 	end
@@ -7962,7 +8088,11 @@ Toggles.AutoDropTV:OnChanged(function(Value)
 		LastDrop = tick()
 		local Pos = TV:GetPivot().Position
 		pcall(function()
-			TV:PivotTo(CFrame.new(Pos - Vector3.new(0, 25, 0)))
+			local rel = TV:FindFirstChild("CartReleased")
+			if rel and rel:IsA("BindableEvent") then
+				rel:Fire()
+			end
+			TV:PivotTo(CFrame.new(Pos - Vector3.new(0, 100, 0)))
 		end)
 		Functions.Notify({ Title = "Auto Drop TV", Body = "Cart dropped under the map." })
 	end)
