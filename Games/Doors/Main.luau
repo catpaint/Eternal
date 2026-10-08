@@ -8031,74 +8031,151 @@ Toggles.AutoDropTV:OnChanged(function(Value)
 	end
 	if not Value then return end
 
-	-- Find TV_Stand anywhere in Workspace (in Misc, CurrentRooms assets, etc.)
-	local function FindTV()
-		local Misc = Services.Workspace:FindFirstChild("Misc")
-		if Misc then
-			local tv = Misc:FindFirstChild("TV_Stand")
-			if tv then return tv end
-		end
-		local CurrentRooms = Services.Workspace:FindFirstChild("CurrentRooms")
-		if CurrentRooms then
-			for _, room in ipairs(CurrentRooms:GetChildren()) do
-				local assets = room:FindFirstChild("Assets")
-				if assets then
-					local tv = assets:FindFirstChild("TV_Stand")
-					if tv then return tv end
-				end
-			end
-		end
-		return Services.Workspace:FindFirstChild("TV_Stand", true)
+	local Owns = mstudio45.Environment.isnetworkowner or isnetworkowner
+	if type(Owns) ~= "function" then
+		Functions.Notify({ Title = "Auto Drop TV", Body = "Executor cannot check physics ownership; automatic drop is disabled." })
+		Toggles.AutoDropTV:SetValue(false)
+		return
 	end
 
-	-- Check if player is holding / pushing the TV cart
-	local function IsHoldingTV()
-		local Cam = Services.Workspace:FindFirstChild("Camera")
-		local NM = Cam and Cam:FindFirstChild("NoiseModel")
-		local HRP = NM and NM:FindFirstChild("HumanoidRootPart")
-		if HRP then
-			for _, c in ipairs(HRP:GetChildren()) do
-				if c:IsA("ManualWeld") and c.Name == "WeldToTV" and c.Part1 ~= nil then
-					return true
-				end
+	local Candidates = {}
+	local NextRefresh, NextCheck, LastWarning = 0, 0, 0
+	local Dropped = setmetatable({}, { __mode = "k" })
+	local Busy = false
+
+	local function RefreshTVs()
+		table.clear(Candidates)
+		for _, Object in ipairs(Services.Workspace:GetDescendants()) do
+			if Object.Name == "TV_Stand" and (Object:IsA("Model") or Object:IsA("BasePart")) then
+				table.insert(Candidates, Object)
 			end
 		end
-		local TV = FindTV()
-		if TV then
-			if TV:GetAttribute("LastPusherId") == Services.Players.LocalPlayer.UserId then
-				local char = Services.Players.LocalPlayer.Character
-				local hrp = char and char:FindFirstChild("HumanoidRootPart")
-				if hrp then
-					local dist = (TV:GetPivot().Position - hrp.Position).Magnitude
-					if dist < 12 then
-						return true
+	end
+	local function Inside(Object, Root)
+		return Object ~= nil and (Object == Root or Object:IsDescendantOf(Root))
+	end
+
+	-- Require a live physical link to THIS player's character.
+	-- LastPusherId and proximity alone are stale/ambiguous, not evidence of a grab.
+	local function HeldLinks(TV, Char)
+		local Links = {}
+		local function Check(Link)
+			local First, Second
+			if Link:IsA("AlignPosition") or Link:IsA("AlignOrientation") then
+				if not Link.Enabled then return end
+				First, Second = Link.Attachment0, Link.Attachment1
+			elseif Link:IsA("WeldConstraint") or Link:IsA("JointInstance") then
+				if not Link.Enabled then return end
+				First, Second = Link.Part0, Link.Part1
+			else
+				return
+			end
+			if (Inside(First, TV) and Inside(Second, Char)) or (Inside(Second, TV) and Inside(First, Char)) then
+				table.insert(Links, Link)
+			end
+		end
+		for _, Link in ipairs(TV:GetDescendants()) do Check(Link) end
+		for _, Link in ipairs(Char:GetDescendants()) do Check(Link) end
+		return Links
+	end
+	local function OwnedRoot(TV)
+		local Part = TV:IsA("BasePart") and TV or TV.PrimaryPart
+		if not Part and TV:IsA("Model") then
+			local Main = TV:FindFirstChild("Main")
+			Part = Main and Main:IsA("BasePart") and Main or TV:FindFirstChildWhichIsA("BasePart", true)
+		end
+		if not Part then return nil end
+		local Root = Part.AssemblyRootPart or Part
+		if Root.Anchored then return nil end
+		local OK, Owned = pcall(Owns, Root)
+		return OK and Owned and Root or nil
+	end
+	local function WarnLimited(Message)
+		if os.clock() - LastWarning >= 5 then
+			LastWarning = os.clock()
+			Functions.Notify({ Title = "Auto Drop TV", Body = Message })
+		end
+	end
+
+	AutoDropTVConn = Services.RunService.Heartbeat:Connect(function()
+		local Now = os.clock()
+		if Busy or not Toggles.AutoDropTV.Value or Now < NextCheck then return end
+		NextCheck = Now + 0.2
+		local Char = LocalPlayer.Character
+		if not Char or not Char.Parent then return end
+		if Now >= NextRefresh then
+			NextRefresh = Now + 2
+			RefreshTVs()
+		end
+		for _, TV in ipairs(Candidates) do
+			if not TV.Parent or Dropped[TV] then continue end
+			local Links = HeldLinks(TV, Char)
+			if #Links == 0 then continue end
+			local Root = OwnedRoot(TV)
+			if not Root then
+				WarnLimited("Held TV found, but physics ownership is not confirmed. No teleport attempted.")
+				return
+			end
+			Busy = true
+			local OldPivot = TV:GetPivot()
+			local Target = OldPivot + Vector3.new(0, -150, 0)
+			local ReleaseSent = false
+			local OK, Error = pcall(function()
+				-- Detach before moving so the TV's weld does not pull the player.
+				for _, Link in ipairs(Links) do
+					if Link.Parent then Link.Enabled = false end
+				end
+				Root = OwnedRoot(TV)
+				if not Root or not Inside(Root, TV) then
+					error("TV ownership after detaching is not confirmed")
+				end
+				TV:PivotTo(Target)
+				Root.AssemblyLinearVelocity = Vector3.new(0, -60, 0)
+				Root.AssemblyAngularVelocity = Vector3.zero
+
+				local CartControl = RemotesFolder:FindFirstChild("CartControl")
+				if CartControl and CartControl:IsA("RemoteEvent") then
+					CartControl:FireServer()
+					ReleaseSent = true
+				else
+					local Released = TV:FindFirstChild("CartReleased", true)
+					if Released and Released:IsA("BindableEvent") then
+						Released:Fire()
+						ReleaseSent = true
 					end
 				end
+			end)
+			if not OK then
+				pcall(function() if TV.Parent then TV:PivotTo(OldPivot) end end)
+				if not ReleaseSent then
+					for _, Link in ipairs(Links) do
+						pcall(function() if Link.Parent then Link.Enabled = true end end)
+					end
+				end
+				Busy = false
+				WarnLimited("Drop failed: " .. tostring(Error))
+				return
 			end
+			-- Wait for physics before reporting; PivotTo success is not server confirmation.
+			task.delay(0.35, function()
+				Busy = false
+				local CheckOK, Below = pcall(function()
+					return TV.Parent == nil or TV:GetPivot().Position.Y <= OldPivot.Position.Y - 75
+				end)
+				if CheckOK and Below then
+					Dropped[TV] = true
+					if Toggles.AutoDropTV.Value then
+						Functions.Notify({ Title = "Auto Drop TV", Body = "TV moved below the map on this client; server replication is not verified." })
+					end
+				else
+					WarnLimited("TV drop did not persist; server correction or lost ownership is possible.")
+				end
+			end)
+			break
 		end
-		return false
-	end
-
-	local LastDrop = 0
-	AutoDropTVConn = Services.RunService.Heartbeat:Connect(function()
-		if not Toggles.AutoDropTV.Value then return end
-		local TV = FindTV()
-		if not (TV and IsHoldingTV()) then return end
-		if tick() - LastDrop < 1 then return end
-		LastDrop = tick()
-		local Pos = TV:GetPivot().Position
-		pcall(function()
-			local rel = TV:FindFirstChild("CartReleased")
-			if rel and rel:IsA("BindableEvent") then
-				rel:Fire()
-			end
-			TV:PivotTo(CFrame.new(Pos - Vector3.new(0, 100, 0)))
-		end)
-		Functions.Notify({ Title = "Auto Drop TV", Body = "Cart dropped under the map." })
 	end)
 	table.insert(Conns, AutoDropTVConn)
 end)
-
 
 
 
