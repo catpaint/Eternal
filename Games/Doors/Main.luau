@@ -471,14 +471,14 @@ if Library.ActiveLoading and Library.ActiveLoading.Destroyed ~= true then
 	pcall(function() Library.ActiveLoading:Destroy() end)
 end
 local Loading = Library:CreateLoading({
-	Title = "catpaint",
+	Title = "Eternal",
 	Icon = 120614218069669,
 	TotalSteps = 4,
 	ShowSidebar = true,
 	AlwaysOnTop = true,
 })
 Loading:SetCurrentStep(1)
-Loading:SetMessage("Loading catpaint...")
+Loading:SetMessage("Loading eternal...")
 Loading:SetDescription("fun fact: gomoseki...")
 pcall(function()
 	Loading.Sidebar:AddLabel("Game: DOORS")
@@ -796,7 +796,7 @@ local function LolhaxNotify(TitleText, DescriptionText, Image, Color, Time)
     title.BackgroundTransparency = 1
     title.BorderSizePixel = 0
     title.Font = Enum.Font.SourceSans
-    title.Text = "[catpaint] " .. tostring(TitleText or "Notification")
+    title.Text = "[eternal] " .. tostring(TitleText or "Notification")
     title.TextScaled = true
     title.TextSize = 1
     title.TextStrokeTransparency = 0.5
@@ -998,10 +998,10 @@ end
 Library.OldNotify = Library.Notify
 Library.Notify = function(Self, Data, Time)
     if type(Data) == "table" then
-        return Functions.Notify({ Title = Data.Title or "catpaint", Body = Data.Description or Data.Body or "",
+        return Functions.Notify({ Title = Data.Title or "eternal", Body = Data.Description or Data.Body or "",
             Image = Data.BigIcon or Data.Image, Time = Data.Time or 5 })
     end
-    return Functions.Notify({ Title = "catpaint", Body = tostring(Data or ""), Time = Time or 5 })
+    return Functions.Notify({ Title = "eternal", Body = tostring(Data or ""), Time = Time or 5 })
 end
 
 if not LocalPlayer.Character or not CurrentRooms:FindFirstChildOfClass("Model") then
@@ -1536,9 +1536,9 @@ end
 if Library.SetFont then Library:SetFont(Enum.Font.Code) end
 
 local Window = Library:CreateWindow({
-    Title = "catpaint",
+    Title = "eternal",
     Icon = 120614218069669,
-    Footer = "Game: DOORS | catpaint | Build 0.8.2",
+    Footer = "Game: DOORS | eternal | Build 0.8.3",
     Size = UDim2.fromOffset(720, 600),
     NotifySide = "Right",
     ShowCustomCursor = false,
@@ -1568,7 +1568,7 @@ if Window.SetSidebarWidth then Window:SetSidebarWidth(194) end
 if Library.UpdateColorsUsingRegistry then Library:UpdateColorsUsingRegistry() end
 
 local Tabs = {}
-Tabs.Home = Window:AddTab("Home", "door-open", "Homepage for catpaint")
+Tabs.Home = Window:AddTab("Home", "door-open", "Homepage for eternal")
 Tabs.Info = Window:AddTab("Info", "info", "Information about this UI remake")
 Tabs.General = Window:AddTab("Main", "house", "Main Features")
 Tabs.Exploits = Window:AddTab("Exploits", "bug", "Game Exploits")
@@ -1657,7 +1657,7 @@ do
     Games:AddLabel('<font color="#55dc90">●</font> DOORS')
     Games:AddLabel("Current floor: " .. tostring(Floor), true)
     Games:AddDivider()
-    Games:AddLabel("This file contains the supplied DOORS module only, not the full catpaint game hub.", true)
+    Games:AddLabel("This file contains the supplied DOORS module only, not the full eternal game hub.", true)
     Games:AddButton({ Text = "Copy Link", Func = function()
         Global.CopyUILink("https://www.example.com")
     end })
@@ -1666,10 +1666,10 @@ do
 end
 
 do
-    local Links = Tabs.Info:AddLeftGroupbox("catpaint links", "link")
+    local Links = Tabs.Info:AddLeftGroupbox("eternal links", "link")
     Links:AddLabel("Reference project and UI library links.", true)
     for _, Link in ipairs({
-        { "catpaint site", "example.com" },
+        { "eternal site", "example.com" },
         { "Dashboard", "example.com" },
         { "Discord server", "https://discord.gg/PB9AHh6sub" },
         { "Support server", "https://www.discord.gg/PB9AHh6sub" },
@@ -1679,7 +1679,7 @@ do
         Links:AddButton({ Text = Caption, Func = function() Global.CopyUILink(Url) end })
     end
     local Credits = Tabs.Info:AddLeftGroupbox("Reference Credits", "code")
-    Credits:AddLabel('<font color="#70de9b">[Unico]</font> catpaint owner', true)
+    Credits:AddLabel('<font color="#70de9b">[Unico]</font> eternal owner', true)
     Credits:AddLabel('<font color="#70de9b">[Unico]</font> Developer', true)
     Credits:AddLabel('<font color="#70de9b">[deividcomsono]</font> Obsidian UI library', true)
     local Details = Tabs.Info:AddRightGroupbox("About this file", "info")
@@ -1688,7 +1688,7 @@ do
     Details:AddDivider()
     Details:AddLabel("789", true)
     local Components = Tabs.Addons:AddLeftGroupbox("Included", "blocks")
-    Components:AddLabel("Obsidian — menu\nThemeManager — themes\nSaveManager — configurations\ncatpaint ESP — existing renderer", true)
+    Components:AddLabel("Obsidian — menu\nThemeManager — themes\nSaveManager — configurations\neternal ESP — existing renderer", true)
 end
 
 -- ============================================================================
