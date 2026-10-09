@@ -389,6 +389,11 @@ local ItemNames = {
 	["Notebook"]          = "Journal",
 	["Diary"]             = "Journal",
 	["GweenSodaPack"]     = "Gween Soda Pack",
+	["LargeScrew"]        = "Large Screw",
+	["BrokenMonitor"]     = "Broken Monitor",
+	["JerryCan"]          = "Jerry Can",
+	["DinkyLamp"]         = "Dinky Lamp",
+	["BottleCrate"]       = "Bottle Crate",
 	["Jerrycan"]          = "Jerrycan",
 	["FihFlakes"]         = "Fih Flakes",
 	["FihFlakesItem"]     = "Fih Flakes",
@@ -401,6 +406,12 @@ local ItemNames = {
 	["CoinRoll"]          = "Coin Roll",
 	["Flares"]            = "Flares",
 	["AbrahamHat"]        = "Abraham Hat"
+}
+
+-- Item ESP for these interactables uses Main when available.
+local ItemMainAnchors = {
+	GweenSodaPack = true, LargeScrew = true, BrokenMonitor = true,
+	JerryCan = true, DinkyLamp = true, BottleCrate = true,
 }
 
 local Character
@@ -478,7 +489,7 @@ local Loading = Library:CreateLoading({
 	AlwaysOnTop = true,
 })
 Loading:SetCurrentStep(1)
-Loading:SetMessage("Loading eternal...")
+Loading:SetMessage("Loading Eternal...")
 Loading:SetDescription("fun fact: gomoseki...")
 pcall(function()
 	Loading.Sidebar:AddLabel("Game: DOORS")
@@ -796,7 +807,7 @@ local function LolhaxNotify(TitleText, DescriptionText, Image, Color, Time)
     title.BackgroundTransparency = 1
     title.BorderSizePixel = 0
     title.Font = Enum.Font.SourceSans
-    title.Text = "[eternal] " .. tostring(TitleText or "Notification")
+    title.Text = "[Eternal] " .. tostring(TitleText or "Notification")
     title.TextScaled = true
     title.TextSize = 1
     title.TextStrokeTransparency = 0.5
@@ -998,10 +1009,10 @@ end
 Library.OldNotify = Library.Notify
 Library.Notify = function(Self, Data, Time)
     if type(Data) == "table" then
-        return Functions.Notify({ Title = Data.Title or "eternal", Body = Data.Description or Data.Body or "",
+        return Functions.Notify({ Title = Data.Title or "Eternal", Body = Data.Description or Data.Body or "",
             Image = Data.BigIcon or Data.Image, Time = Data.Time or 5 })
     end
-    return Functions.Notify({ Title = "eternal", Body = tostring(Data or ""), Time = Time or 5 })
+    return Functions.Notify({ Title = "Eternal", Body = tostring(Data or ""), Time = Time or 5 })
 end
 
 if not LocalPlayer.Character or not CurrentRooms:FindFirstChildOfClass("Model") then
@@ -1536,9 +1547,9 @@ end
 if Library.SetFont then Library:SetFont(Enum.Font.Code) end
 
 local Window = Library:CreateWindow({
-    Title = "eternal",
+    Title = "Eternal",
     Icon = 120614218069669,
-    Footer = "Game: DOORS | eternal | Build 0.8.3",
+    Footer = "Game: DOORS | Eternal | Build 0.8.2",
     Size = UDim2.fromOffset(720, 600),
     NotifySide = "Right",
     ShowCustomCursor = false,
@@ -1568,7 +1579,7 @@ if Window.SetSidebarWidth then Window:SetSidebarWidth(194) end
 if Library.UpdateColorsUsingRegistry then Library:UpdateColorsUsingRegistry() end
 
 local Tabs = {}
-Tabs.Home = Window:AddTab("Home", "door-open", "Homepage for eternal")
+Tabs.Home = Window:AddTab("Home", "door-open", "Homepage for Eternal")
 Tabs.Info = Window:AddTab("Info", "info", "Information about this UI remake")
 Tabs.General = Window:AddTab("Main", "house", "Main Features")
 Tabs.Exploits = Window:AddTab("Exploits", "bug", "Game Exploits")
@@ -1657,7 +1668,7 @@ do
     Games:AddLabel('<font color="#55dc90">●</font> DOORS')
     Games:AddLabel("Current floor: " .. tostring(Floor), true)
     Games:AddDivider()
-    Games:AddLabel("This file contains the supplied DOORS module only, not the full eternal game hub.", true)
+    Games:AddLabel("This file contains the supplied DOORS module only, not the full Eternal game hub.", true)
     Games:AddButton({ Text = "Copy Link", Func = function()
         Global.CopyUILink("https://www.example.com")
     end })
@@ -1666,10 +1677,10 @@ do
 end
 
 do
-    local Links = Tabs.Info:AddLeftGroupbox("eternal links", "link")
+    local Links = Tabs.Info:AddLeftGroupbox("Eternal links", "link")
     Links:AddLabel("Reference project and UI library links.", true)
     for _, Link in ipairs({
-        { "eternal site", "example.com" },
+        { "Eternal site", "example.com" },
         { "Dashboard", "example.com" },
         { "Discord server", "https://discord.gg/PB9AHh6sub" },
         { "Support server", "https://www.discord.gg/PB9AHh6sub" },
@@ -1679,7 +1690,7 @@ do
         Links:AddButton({ Text = Caption, Func = function() Global.CopyUILink(Url) end })
     end
     local Credits = Tabs.Info:AddLeftGroupbox("Reference Credits", "code")
-    Credits:AddLabel('<font color="#70de9b">[Unico]</font> eternal owner', true)
+    Credits:AddLabel('<font color="#70de9b">[Unico]</font> Eternal owner', true)
     Credits:AddLabel('<font color="#70de9b">[Unico]</font> Developer', true)
     Credits:AddLabel('<font color="#70de9b">[deividcomsono]</font> Obsidian UI library', true)
     local Details = Tabs.Info:AddRightGroupbox("About this file", "info")
@@ -1688,7 +1699,7 @@ do
     Details:AddDivider()
     Details:AddLabel("789", true)
     local Components = Tabs.Addons:AddLeftGroupbox("Included", "blocks")
-    Components:AddLabel("Obsidian — menu\nThemeManager — themes\nSaveManager — configurations\neternal ESP — existing renderer", true)
+    Components:AddLabel("Obsidian — menu\nThemeManager — themes\nSaveManager — configurations\nEternal ESP — existing renderer", true)
 end
 
 -- ============================================================================
@@ -3148,6 +3159,194 @@ do
 		end
 
 		if Floor == "Stairwell" then
+			-- Experimental cart-physics attempt. The closed script's exact implementation is unknown.
+			-- MCP confirmed that a grabbed ShoppingCart has owned Base/Collider parts and
+			-- CartAlignPosition/CartAlignOrientation linked to CartTargetAttachment.
+			local function KillCreakFE(Config)
+			    Config = Config or {}
+			    local W = game:GetService("Workspace")
+			    local P = game:GetService("Players").LocalPlayer
+			    local RS = game:GetService("ReplicatedStorage")
+			    local Run = game:GetService("RunService")
+			    local Env = getgenv and getgenv() or shared
+			    local Setter = Config.setter or sethiddenproperty
+			    local Getter = Config.getter or gethiddenproperty
+			    local Owns = Config.ownerCheck or isnetworkowner
+			    local function Answer(ok, message) return {ok = ok, message = message} end
+			    if Env.MainKillCreakJob and Env.MainKillCreakJob.running then
+			        return Answer(false, "Kill Creak is already running. Use Stop Kill Creak first.")
+			    end
+			    if type(Setter) ~= "function" or type(Getter) ~= "function" or type(Owns) ~= "function" then
+			        return Answer(false, "Executor needs hidden-property access and a real network-ownership check.")
+			    end
+			    local Data = RS:FindFirstChild("GameData")
+			    local Floor = Data and Data:FindFirstChild("Floor")
+			    if not Floor or Floor.Value ~= "Stairwell" then return Answer(false, "Stairwell only.") end
+			    local Entities = W:FindFirstChild("LiveEntities")
+			    local Creak = Entities and Entities:FindFirstChild("Creak")
+			    local CreakRoot = Creak and Creak:FindFirstChild("HumanoidRootPart")
+			    if not Creak or not Creak:IsA("Model") or not CreakRoot or not CreakRoot:IsA("BasePart") then
+			        return Answer(false, "Creak is not available.")
+			    end
+			    local Char = P and P.Character
+			    local Hum = Char and Char:FindFirstChildOfClass("Humanoid")
+			    if not Hum or Hum.Health <= 0 then return Answer(false, "A living character is required.") end
+			    local Held = {}
+			    for _, Item in ipairs(Char:GetDescendants()) do
+			        if Item:IsA("Attachment") and Item.Name == "CartTargetAttachment" then Held[Item] = true end
+			    end
+			    if next(Held) == nil then return Answer(false, "Grab a ShoppingCart first. A chair is not required.") end
+			    local Cart, Anchor, Motion, Links
+			    for _, Model in ipairs(W:GetDescendants()) do
+			        if Model:IsA("Model") and Model.Name == "ShoppingCart" then
+			            local Matched = {}
+			            for _, Constraint in ipairs(Model:GetDescendants()) do
+			                if (Constraint:IsA("AlignPosition") or Constraint:IsA("AlignOrientation")) and Constraint.Enabled
+			                    and (Held[Constraint.Attachment0] or Held[Constraint.Attachment1]) then
+			                    table.insert(Matched, Constraint)
+			                end
+			            end
+			            if #Matched > 0 then
+			                local Base = Model:FindFirstChild("Base")
+			                local Collider = Model:FindFirstChild("Collider")
+			                if Base and Base:IsA("BasePart") and Collider and Collider:IsA("BasePart") then
+			                    local OK, Owned = pcall(Owns, Base)
+			                    if OK and Owned and not Base.Anchored and not Collider.Anchored then
+			                        Cart, Anchor, Motion, Links = Model, Base, Collider, Matched
+			                        break
+			                    end
+			                end
+			            end
+			        end
+			    end
+			    if not Cart then return Answer(false, "No owned ShoppingCart linked to your character was found.") end
+			    local Folder = Config.remotes or RS:FindFirstChild("RemotesFolder")
+			    local Release = Folder and Folder:FindFirstChild("CartControl")
+			    if not Release or not Release:IsA("RemoteEvent") then return Answer(false, "CartControl is unavailable.") end
+			    local ReadOK, OldRepRoot = pcall(Getter, Anchor, "PhysicsRepRootPart")
+			    if not ReadOK then return Answer(false, "Cannot read Base.PhysicsRepRootPart. Nothing changed.") end
+			    if Config.dryRun then
+			        return {ok = true, message = "Cart prerequisites passed; physics was not changed.",
+			            cart = Cart:GetFullName(), anchor = Anchor.Name, linkedConstraints = #Links}
+			    end
+			    local Pivot = Cart:GetPivot()
+			    local OldBaseLinear, OldBaseAngular = Anchor.AssemblyLinearVelocity, Anchor.AssemblyAngularVelocity
+			    local OldMotionLinear, OldMotionAngular = Motion.AssemblyLinearVelocity, Motion.AssemblyAngularVelocity
+			    local StartHealth = Hum.Health
+			    local Started = os.clock()
+			    local Job = {running = true, cancel = false, status = "starting", method = "cart", steps = 0}
+			    Env.MainKillCreakJob = Job
+			    local Connection
+			    local function Finish(Message)
+			        if not Job.running then return end
+			        Job.running = false
+			        if Connection then Connection:Disconnect() end
+			        local RestoreOK, RestoreError = pcall(function()
+			            if Anchor.Parent then Setter(Anchor, "PhysicsRepRootPart", OldRepRoot) end
+			        end)
+			        local PivotOK = pcall(function() if Cart.Parent then Cart:PivotTo(Pivot) end end)
+			        pcall(function()
+			            if Anchor.Parent then
+			                Anchor.AssemblyLinearVelocity = OldBaseLinear
+			                Anchor.AssemblyAngularVelocity = OldBaseAngular
+			            end
+			            if Motion.Parent then
+			                Motion.AssemblyLinearVelocity = OldMotionLinear
+			                Motion.AssemblyAngularVelocity = OldMotionAngular
+			            end
+			        end)
+			        -- Restore only constraints that survived the game's release logic.
+			        for _, Constraint in ipairs(Links) do
+			            pcall(function() if Constraint.Parent then Constraint.Enabled = true end end)
+			        end
+			        Job.status = "finished"
+			        Job.message = Message
+			        Job.restoredRepRoot = RestoreOK
+			        Job.restoredCartPivot = PivotOK
+			        if not RestoreOK then Job.restoreError = tostring(RestoreError) end
+			        if not RestoreOK or not PivotOK then
+			            Job.message = Job.message .. " Some cart properties could not be restored."
+			        end
+			        if type(Config.notify) == "function" then pcall(Config.notify, Job.message) end
+			    end
+			    local SetupOK, SetupError = pcall(function()
+			        -- Release the player before moving the cart, to avoid dragging their character.
+			        for _, Constraint in ipairs(Links) do Constraint.Enabled = false end
+			        Release:FireServer()
+			    end)
+			    if not SetupOK then Finish("Cart release failed: " .. tostring(SetupError)); return Answer(false, Job.message) end
+			    Connection = Run.Heartbeat:Connect(function()
+			        local OK, Error = pcall(function()
+			            if not Job.running then return end
+			            if Job.cancel then Finish("Cart attempt cancelled."); return end
+			            if type(Config.shouldStop) == "function" and Config.shouldStop() then
+			                Finish("Another cart/chair function was enabled; attempt stopped."); return
+			            end
+			            if P.Character ~= Char or not Hum.Parent or Hum.Health < StartHealth then
+			                Finish("Character changed or health decreased; attempt stopped."); return
+			            end
+			            if not Creak:IsDescendantOf(Entities) then
+			                Finish("Creak left LiveEntities on this client; server-wide removal is not independently verified."); return
+			            end
+			            if not CreakRoot.Parent or not Cart.Parent or not Anchor.Parent or not Motion.Parent then
+			                Finish("A required object disappeared; attempt stopped."); return
+			            end
+			            local Elapsed = os.clock() - Started
+			            if Elapsed >= 8 then Finish("Eight-second timeout. Creak removal was not confirmed."); return end
+			            -- Briefly allow the game's release handler to settle before altering physics.
+			            if Elapsed < 0.15 then return end
+			            local OwnerOK, Owned = pcall(Owns, Anchor)
+			            if not OwnerOK or not Owned then Finish("Cart physics ownership was lost; attempt stopped."); return end
+			            Job.status = "attempting"
+			            Setter(Anchor, "PhysicsRepRootPart", CreakRoot)
+			            Cart:PivotTo(Creak:GetPivot() + Vector3.new(0, 3, 0))
+			            Motion.AssemblyLinearVelocity = Vector3.new(0, -600000, 0)
+			            Job.steps = Job.steps + 1
+			        end)
+			        if not OK then Finish("Cart attempt failed: " .. tostring(Error)) end
+			    end)
+			    task.delay(10, function() Finish("Watchdog stopped the cart attempt; removal not confirmed.") end)
+			    return Answer(true, "Experimental cart attempt started (8 seconds maximum). This is not a verified server kill.")
+			end
+
+			local function OtherCartFunctionActive()
+				return TplayVars.FlingingCreak or TplayVars.ChairConnection or TplayVars.ConnectingChair
+					or (Toggles.Tplay_FlingCreak and Toggles.Tplay_FlingCreak.Value)
+					or (Toggles.Tplay_AnticheatBypassAndFling and Toggles.Tplay_AnticheatBypassAndFling.Value)
+					or (Toggles.ChairTeleportToPlayer and Toggles.ChairTeleportToPlayer.Value)
+			end
+			Tplay_Combat:AddButton({
+				Text = "Kill Creak [Cart FE]",
+				Risky = true,
+				Tooltip = "Experimental cart-physics attempt. Grab a ShoppingCart first. No chair required; server removal is not verified.",
+				Func = function()
+					if OtherCartFunctionActive() then
+						Functions.Notify({ Title = "Kill Creak", Body = "Disable other cart/chair/fling functions first." })
+						return
+					end
+					local Result = KillCreakFE({
+						setter = sethidden, getter = gethidden,
+						ownerCheck = mstudio45.Environment.isnetworkowner or isnetworkowner,
+						remotes = RemotesFolder, shouldStop = OtherCartFunctionActive,
+						notify = function(Message)
+							if not Library.Unloaded then Functions.Notify({ Title = "Kill Creak", Body = Message }) end
+						end,
+					})
+					Functions.Notify({ Title = "Kill Creak", Body = Result.message })
+				end,
+			})
+			Tplay_Combat:AddButton({
+				Text = "Stop Kill Creak",
+				Func = function()
+					local Job = getgenv().MainKillCreakJob
+					if Job and Job.running then Job.cancel = true end
+				end,
+			})
+			Library:OnUnload(function()
+				local Job = getgenv().MainKillCreakJob
+				if Job and Job.running then Job.cancel = true end
+			end)
+
 			Tplay_Combat:AddToggle("Tplay_FlingCreak", {
 				Text = "Fling Creak [FE]",
 				Default = false,
@@ -3246,6 +3445,63 @@ do
 					end
 				end
 			})
+
+			-- Anti Creak [Look]: Creak backs off while the server thinks you are looking at it.
+			-- Faces the character toward Creak and spoofs MotorReplication head pitch (see MainHook).
+			Global.CreakLookPitch = nil
+			local function StopAntiCreakLook()
+				if TplayVars.AntiCreakLookConn then
+					TplayVars.AntiCreakLookConn:Disconnect()
+					TplayVars.AntiCreakLookConn = nil
+				end
+				Global.CreakLookPitch = nil
+			end
+			Tplay_Combat:AddToggle("Tplay_AntiCreakLook", {
+				Text = "Anti Creak [Look]",
+				Default = false,
+				Risky = true,
+				Tooltip = "Makes the server think you are always looking at Creak while it is nearby. Rotates your character toward Creak (visible to others).",
+				Callback = function(Value)
+					StopAntiCreakLook()
+					if not Value then return end
+					local MotorRep = RemotesFolder and RemotesFolder:FindFirstChild("MotorReplication")
+					if not MotorRep then
+						Functions.Notify({ Title = "Anti Creak", Body = "MotorReplication not found." })
+						return
+					end
+					TplayVars.AntiCreakLookConn = Services.RunService.Heartbeat:Connect(function()
+						local Char = LocalPlayer.Character
+						local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
+						local LE = Services.Workspace:FindFirstChild("LiveEntities")
+						local Creak = LE and LE:FindFirstChild("Creak")
+						local CR = Creak and Creak:FindFirstChild("HumanoidRootPart")
+						local Radius = (Options.Tplay_AntiCreakRadius and Options.Tplay_AntiCreakRadius.Value) or 70
+						if not (HRP and CR) or (CR.Position - HRP.Position).Magnitude > Radius then
+							if Global.CreakLookPitch then
+								Global.CreakLookPitch = nil
+								pcall(MotorRep.FireServer, MotorRep, 0, 0)
+							end
+							return
+						end
+						local Head = Char:FindFirstChild("Head") or HRP
+						local D = (CR.Position + Vector3.new(0, 1.5, 0)) - Head.Position
+						local Flat = Vector3.new(D.X, 0, D.Z)
+						if Flat.Magnitude > 0.1 then
+							HRP.CFrame = CFrame.lookAt(HRP.Position, HRP.Position + Flat)
+						end
+						Global.CreakLookPitch = math.deg(math.atan2(D.Y, Flat.Magnitude))
+						pcall(MotorRep.FireServer, MotorRep, Global.CreakLookPitch, 0)
+					end)
+				end
+			})
+			Tplay_Combat:AddSlider("Tplay_AntiCreakRadius", {
+				Text = "Anti Creak Radius",
+				Default = 70,
+				Min = 20,
+				Max = 200,
+				Rounding = 0,
+			})
+			Library:OnUnload(StopAntiCreakLook)
 		end
 	end
 
@@ -9507,22 +9763,17 @@ local ObjectiveLabels = {
 	["LeverForGate"]           = "Gate Lever",
 	["MinesGateButton"]        = "Gate Button",
 	["GardenGateButton"]       = "Gate Button",
-	["LargeScrew"]             = "Large Screw",
-	["DinkyLamp"]              = "Dinky Lamp",
-	["BottleCrate"]            = "Bottle Crate",
 	["StairwellTerminal"]      = "Stairwell Terminal",
 	["StairwellFireAlarm"]     = "Fire Alarm",
 	["TV_Stand"]               = "TV Stand",
 	["Cubby_Large_Tarped"]     = "Cubby",
-	["BrokenMonitor"]          = "Broken Monitor",
-	["JerryCan"]               = "Jerry Can",
+
 }
 
 -- these objectives anchor their esp on the "Main" child part, both on spawn and re-apply
 local ObjectiveMainAnchors = {
-	LargeScrew = true, DinkyLamp = true, BottleCrate = true, StairwellTerminal = true,
-	StairwellFireAlarm = true, TV_Stand = true, Cubby_Large_Tarped = true,
-	BrokenMonitor = true, JerryCan = true,
+	StairwellTerminal = true, StairwellFireAlarm = true,
+	TV_Stand = true, Cubby_Large_Tarped = true,
 }
 
 Toggles.ObjectiveESPToggle:OnChanged(function(Value)
@@ -9702,7 +9953,11 @@ Toggles.ItemESPToggle:OnChanged(function(Value)
 				end
 			end
 			if Label then
-				Functions.AddESP({ Object = Object, Text = Label, Color = Options.ItemESPColor.Value }, Object:GetAttribute("ParentRoom") ~= nil)
+				local Anchor = ItemMainAnchors[Object.Name] and (Object:FindFirstChild("Main") or Object) or Object
+				if Anchor ~= Object and not Anchor:GetAttribute("ParentRoom") then
+					Anchor:SetAttribute("ParentRoom", Object:GetAttribute("ParentRoom"))
+				end
+				Functions.AddESP({ Object = Anchor, Text = Label, Color = Options.ItemESPColor.Value }, Object:GetAttribute("ParentRoom") ~= nil)
 			end
 		else
 			Functions.RemoveESP(Object)
@@ -9711,7 +9966,10 @@ Toggles.ItemESPToggle:OnChanged(function(Value)
 	end
 end)
 Options.ItemESPColor:OnChanged(function(Value)
-	for _, Object in Objects.Items do mstudio45.ESPLibrary:UpdateObjectColor(Object, Value) end
+	for _, Object in Objects.Items do
+		local Anchor = ItemMainAnchors[Object.Name] and (Object:FindFirstChild("Main") or Object) or Object
+		mstudio45.ESPLibrary:UpdateObjectColor(Anchor, Value)
+	end
 end)
 
 Toggles.CurrencyESPToggle:OnChanged(function(Value)
@@ -10339,6 +10597,11 @@ if Functions.CheckEnv("hookmetamethod", "newcclosure", "getnamecallmethod") then
 					Args[1] = true
 				end
 				Args[2] = true
+			end
+
+			if Self.Name == "MotorReplication" and Method == "FireServer" and Global.CreakLookPitch
+				and Toggles.Tplay_AntiCreakLook and Toggles.Tplay_AntiCreakLook.Value then
+				return MainHook(Self, Global.CreakLookPitch, 0)
 			end
 
 			if Self.Name == "MotorReplication" and Method == "FireServer" then
@@ -11382,7 +11645,7 @@ Functions.HandleObject = function(Object)
 		end)
 		table.insert(Objects.Objectives, Object)
 	elseif ObjectiveMainAnchors[Name] then
-		-- stairwell / misc interactables (LargeScrew, DinkyLamp, BottleCrate, ...):
+		-- remaining stairwell / misc objectives:
 		-- esp anchored on the Main child part when the game builds it that way
 		local Anchor = Object:FindFirstChild("Main") or Object
 		if Anchor ~= Object and not Anchor:GetAttribute("ParentRoom") then
@@ -11757,9 +12020,9 @@ Functions.HandleObject = function(Object)
 	elseif Name == "MouseHole" then
 		if Toggles.ChestESPToggle.Value then Functions.AddESP({ Object = Object, Text = "Mouse", Color = Options.ChestESPColor.Value }, true) end
 		table.insert(Objects.Chests, Object)
-	elseif ItemNames[Name] and Object:FindFirstChild("ModulePrompt") then
-		-- BlackKing-style: only real items carry ModulePrompt; decorative meshes sharing
-		-- an item's name (e.g. Bookcase "Lighter") get no item ESP
+	elseif ItemNames[Name] and (ItemMainAnchors[Name] or Object:FindFirstChild("ModulePrompt")) then
+		-- Listed Main-anchored interactables are items even without ModulePrompt.
+		-- Other items require ModulePrompt to exclude decorative meshes.
 		local function IsPlayerItem(item)
 			if not item or not item.Parent then return true end
 			if item:IsDescendantOf(Services.Players) then return true end
@@ -11788,7 +12051,10 @@ Functions.HandleObject = function(Object)
 		end
 		if hasItemAncestor then return end
 
-		local targetObj = Object
+		local targetObj = ItemMainAnchors[Name] and (Object:FindFirstChild("Main") or Object) or Object
+		if targetObj ~= Object and not targetObj:GetAttribute("ParentRoom") then
+			targetObj:SetAttribute("ParentRoom", Object:GetAttribute("ParentRoom"))
+		end
 		if Object:IsA("BasePart") and Object.Parent and Object.Parent:IsA("Model") and not ItemNames[Object.Parent.Name] then
 			local room = Object:FindFirstAncestorOfClass("Model")
 			while room and room.Parent and room.Parent ~= CurrentRooms and room.Parent ~= Services.Workspace do
@@ -11808,7 +12074,7 @@ Functions.HandleObject = function(Object)
 
 			if Toggles.NotifyItemsToggle.Value and Object.Parent and Object.Parent.Name ~= "Drops" then
 				local Body = "... there it is."
-				local Prim = Object.PrimaryPart or (Object:IsA("BasePart") and Object)
+				local Prim = (Object:IsA("Model") and Object.PrimaryPart) or (Object:IsA("BasePart") and Object)
 				if Prim then
 					Body = "It is " .. math.floor(LocalPlayer:DistanceFromCharacter(Prim.Position)) .. " studs away from you."
 				end
