@@ -155,14 +155,14 @@ if Library.ActiveLoading and Library.ActiveLoading.Destroyed ~= true then
     pcall(function() Library.ActiveLoading:Destroy() end)
 end
 local Loading = Library:CreateLoading({
-    Title = "catpaint",
+    Title = "Eternal",
     Icon = 120614218069669,
     TotalSteps = 4,
     ShowSidebar = true,
     AlwaysOnTop = true,
 })
 Loading:SetCurrentStep(1)
-Loading:SetMessage("Loading catpaint...")
+Loading:SetMessage("Loading eternal...")
 Loading:SetDescription("fun fact: bomb.exe is loading...")
 pcall(function()
     Loading.Sidebar:AddLabel("Game: DOORS LOBBY")
@@ -175,7 +175,7 @@ end)
 task.wait(1)
 
 local Window = Library:CreateWindow({
-    Title = "catpaint",
+    Title = "Eternal",
     Footer = "Game: DOORS LOBBY | dsc.gg/PB9AHh6sub",
     Icon = 120614218069669,
     NotifySide = "Right",
