@@ -137,6 +137,9 @@ local Functions = {}
 local PartProperties = {}
 local Variables = { AutoFloors = {}, AutoFloors240 = {}, StuffToKeepEnabled = {}, POARespawning = false, POANoAccelWasEnabled = false, Groundskeepers = {}, FigureRigs = {} }
 local Connections = { AutoFloor = {}, AntiEntities = {} }
+Functions.IsConfigLoading = function()
+	return (Variables.ConfigLoadDepth or 0) > 0 or (Variables.ConfigLoadPending or 0) > 0
+end
 local Info = {}
 
 local function CloneReference(Object)
@@ -180,6 +183,24 @@ local Objects = {
 
 Global.ExecutorIssueMessage = "Your executor doesn't support this feature."
 Global.PayedFeatueMessage = "Payed only feature."
+
+-- Resolve actual UI controls, not the shared DummyToggle fallback.
+Functions.GetAllEntityToggles = function()
+	local Result, Seen = {}, {}
+	local Names = {
+		"RemoveScreech", "BypassDupe", "RemoveDread", "RemoveHalt",
+		"BypassSnare", "BypassEyes", "RemoveA90", "BypassGiggle",
+		"Tplay_AntiFigure", "Tplay_AntiGroundskeeper", "NoSurgeDamage"
+	}
+	for _, Name in ipairs(Names) do
+		local Toggle = rawget(Toggles, Name)
+		if Toggle and type(Toggle.SetValue) == "function" and not Seen[Toggle] then
+			Seen[Toggle] = true
+			table.insert(Result, Toggle)
+		end
+	end
+	return Result
+end
 
 Functions.CheckEnv = function(...)
 	local Names = { ... }
@@ -1015,17 +1036,43 @@ Library.Notify = function(Self, Data, Time)
     return Functions.Notify({ Title = "Eternal", Body = tostring(Data or ""), Time = Time or 5 })
 end
 
-if not LocalPlayer.Character or not CurrentRooms:FindFirstChildOfClass("Model") then
-	if Loading then
-		Loading:SetCurrentStep(2)
-		Loading:SetMessage("Waiting for the game to load...")
+-- FindFirstChild can run before room replication. Re-resolve while waiting.
+do
+	local function RoomsReady()
+		CurrentRooms = Services.Workspace:FindFirstChild("CurrentRooms")
+		return LocalPlayer.Character ~= nil
+			and CurrentRooms ~= nil
+			and CurrentRooms:FindFirstChildOfClass("Model") ~= nil
 	end
-	Functions.Notify({ Title = "Waiting for the game to load..." })
-	while not LocalPlayer.Character or not CurrentRooms:FindFirstChildOfClass("Model") do
-		task.wait()
+
+	if not RoomsReady() then
+		if Loading then
+			Loading:SetCurrentStep(2)
+			Loading:SetMessage("Waiting for character and CurrentRooms...")
+		end
+		Functions.Notify({ Title = "Waiting for the game to load..." })
+		local Deadline = os.clock() + 60
+		repeat
+			task.wait(0.1)
+		until RoomsReady() or os.clock() >= Deadline
+
+		if not RoomsReady() then
+			local Reason = not LocalPlayer.Character and "Character did not load."
+				or not CurrentRooms and "Workspace.CurrentRooms is missing. This floor may use a different structure."
+				or "CurrentRooms contains no room Models yet."
+			warn("[Eternal startup] " .. Reason)
+			Functions.Notify({ Title = "Startup stopped", Body = Reason, Time = 10 })
+			if Loading then Loading:SetMessage(Reason) end
+			return
+		end
+		task.wait(4)
 	end
-	task.wait(4)
 end
+
+RemotesFolder = Services.ReplicatedStorage:FindFirstChild("RemotesFolder") or RemotesFolder
+Drops = Services.Workspace:FindFirstChild("Drops") or Drops
+LiveModifiers = Services.ReplicatedStorage:FindFirstChild("LiveModifiers") or LiveModifiers
+FloorReplicated = Services.ReplicatedStorage:FindFirstChild("FloorReplicated") or FloorReplicated
 
 if not RemotesFolder then
 	if Services.ReplicatedStorage:FindFirstChild("EntityInfo") then
@@ -1033,6 +1080,12 @@ if not RemotesFolder then
 	elseif Services.ReplicatedStorage:FindFirstChild("Bricks") then
 		RemotesFolder = Services.ReplicatedStorage:FindFirstChild("Bricks")
 	end
+end
+
+if not RemotesFolder then
+	warn("[Eternal startup] No supported remotes folder found; initialization stopped.")
+	Functions.Notify({ Title = "Startup stopped", Body = "No supported remotes folder found for this floor.", Time = 10 })
+	return
 end
 
 if Floor == "Hotel" and RemotesFolder.Name == "Bricks" then
@@ -3812,14 +3865,23 @@ do
 	end
 
 	local raw_AutoFloorRoom = Tplay_Floors:AddLabel("Status: Idle")
+	-- A reusable status label, not a notification handle or Roblox Instance.
 	Variables.AutoFloorRoom = {
 		ChangeDescription = function(self, text)
 			pcall(function() raw_AutoFloorRoom:SetText(tostring(text)) end)
 		end,
 		SetText = function(self, text)
-			pcall(function() raw_AutoFloorRoom:SetText(tostring(text)) end)
+			self:ChangeDescription(text)
+		end,
+		Destroy = function(self)
+			-- Legacy stop callbacks call Destroy; keep the label for the next run.
+			self:ChangeDescription("Status: Idle")
 		end
 	}
+	Functions.SetAutoFloorStatus = function(Settings)
+		Variables.AutoFloorRoom:ChangeDescription(Settings.Description or Settings.Body or "Status: Running")
+		return Variables.AutoFloorRoom
+	end
 
 	local activeRusherEntities = {}
 	local rusherNames = {RushMoving=true, AmbushMoving=true, A60=true, A120=true, BackdoorRush=true, CustomEntity=true, BashMoving=true, GlitchRush=true, GlitchAmbush=true}
@@ -4088,7 +4150,7 @@ do
 				if value then
 					SetupTeleportBypass()
 					local tempRoom = CurrentRooms:FindFirstChild(LatestRoom.Value)
-					Variables.AutoFloorRoom = Library:Notify({
+					Variables.AutoFloorRoom = Functions.SetAutoFloorStatus({
 						Title = Info.AddonTitle,
 						Description = `Doors opened: {LatestRoom.Value}\nCurrent room: {tempRoom and tempRoom:GetAttribute("RawName") or "?"}`,
 						Persist = true
@@ -4367,7 +4429,7 @@ do
 				if value then
 					SetupTeleportBypass()
 					local tempRoom = CurrentRooms:FindFirstChild(LatestRoom.Value)
-					Variables.AutoFloorRoom = Library:Notify({
+					Variables.AutoFloorRoom = Functions.SetAutoFloorStatus({
 						Title = Info.AddonTitle,
 						Description = `Doors opened: {LatestRoom.Value}\nCurrent room: {tempRoom and tempRoom:GetAttribute("RawName") or "?"}\nAnticheat bypass status: {Character:GetAttribute("_BypassedAC") and "ON" or "OFF"}`,
 						Persist = true
@@ -4638,7 +4700,7 @@ do
 				if value then
 					SetupTeleportBypass()
 					local tempRoom = CurrentRooms:FindFirstChild(LatestRoom.Value)
-					Variables.AutoFloorRoom = Library:Notify({
+					Variables.AutoFloorRoom = Functions.SetAutoFloorStatus({
 						Title = Info.AddonTitle,
 						Description = `Doors opened: {LatestRoom.Value}\nCurrent room: {tempRoom and tempRoom:GetAttribute("RawName") or "?"}`,
 						Persist = true
@@ -4791,7 +4853,7 @@ do
 				if value then
 					SetupTeleportBypass()
 					local tempRoom = CurrentRooms:FindFirstChild(LatestRoom.Value)
-					Variables.AutoFloorRoom = Library:Notify({
+					Variables.AutoFloorRoom = Functions.SetAutoFloorStatus({
 						Title = Info.AddonTitle,
 						Description = `Doors opened: {LatestRoom.Value}\nCurrent room: {tempRoom and tempRoom:GetAttribute("RawName") or "?"}\nAnticheat bypass status: {Character:GetAttribute("_BypassedAC") and "ON" or "OFF"}`,
 						Persist = true
@@ -5053,7 +5115,7 @@ do
 						return hook(self, func)
 					end)
 					local tempRoom = CurrentRooms:FindFirstChild(LatestRoom.Value)
-					Variables.AutoFloorRoom = Library:Notify({
+					Variables.AutoFloorRoom = Functions.SetAutoFloorStatus({
 						Title = Info.AddonTitle,
 						Description = `Doors opened: {LatestRoom.Value}\nCurrent room: {tempRoom and tempRoom:GetAttribute("RawName") or "?"}`,
 						Persist = true
@@ -5215,7 +5277,7 @@ do
 				if value then
 					SetupTeleportBypass()
 					local tempRoom = CurrentRooms:FindFirstChild(LatestRoom.Value)
-					Variables.AutoFloorRoom = Library:Notify({
+					Variables.AutoFloorRoom = Functions.SetAutoFloorStatus({
 						Title = Info.AddonTitle,
 						Description = `Doors opened: {LatestRoom.Value}\nCurrent room: {tempRoom and tempRoom:GetAttribute("RawName") or "?"}\nAnticheat bypass status: {Character:GetAttribute("_BypassedAC") and "ON" or "OFF"}`,
 						Persist = true
@@ -5396,7 +5458,7 @@ do
 				if value then
 					SetupTeleportBypass()
 					local tempRoom = CurrentRooms:FindFirstChild(LatestRoom.Value)
-					Variables.AutoFloorRoom = Library:Notify({
+					Variables.AutoFloorRoom = Functions.SetAutoFloorStatus({
 						Title = Info.AddonTitle,
 						Description = `Doors opened: {LatestRoom.Value}\nCurrent room: {tempRoom and tempRoom:GetAttribute("RawName") or "?"}`,
 						Persist = true
@@ -5543,7 +5605,7 @@ end
 						end)
 					end
 					local tempRoom = CurrentRooms:FindFirstChild(LatestRoom.Value)
-					Variables.AutoFloorRoom = Library:Notify({
+					Variables.AutoFloorRoom = Functions.SetAutoFloorStatus({
 						Title = Info.AddonTitle,
 						Description = `Doors opened: {LatestRoom.Value}\nCurrent room: {tempRoom and tempRoom:GetAttribute("RawName") or "?"}`,
 						Persist = true
@@ -5787,7 +5849,7 @@ end
 						end)
 					end
 					local tempRoom = CurrentRooms:FindFirstChild(LatestRoom.Value)
-					Variables.AutoFloorRoom = Library:Notify({
+					Variables.AutoFloorRoom = Functions.SetAutoFloorStatus({
 						Title = Info.AddonTitle,
 						Description = `Doors opened: {LatestRoom.Value}\nCurrent room: {tempRoom and tempRoom:GetAttribute("RawName") or "?"}\nAnticheat bypass status: {Character:GetAttribute("_BypassedAC") and "ON" or "OFF"}`,
 						Persist = true
@@ -6043,7 +6105,7 @@ end
 						end)
 					end
 					local tempRoom = CurrentRooms:FindFirstChild(LatestRoom.Value)
-					Variables.AutoFloorRoom = Library:Notify({
+					Variables.AutoFloorRoom = Functions.SetAutoFloorStatus({
 						Title = Info.AddonTitle,
 						Description = `Doors opened: {LatestRoom.Value}\nCurrent room: {tempRoom and tempRoom:GetAttribute("RawName") or "?"}`,
 						Persist = true
@@ -6179,7 +6241,7 @@ end
 						end)
 					end
 					local tempRoom = CurrentRooms:FindFirstChild(LatestRoom.Value)
-					Variables.AutoFloorRoom = Library:Notify({
+					Variables.AutoFloorRoom = Functions.SetAutoFloorStatus({
 						Title = Info.AddonTitle,
 						Description = `Doors opened: {LatestRoom.Value}\nCurrent room: {tempRoom and tempRoom:GetAttribute("RawName") or "?"}\nAnticheat bypass status: {Character:GetAttribute("_BypassedAC") and "ON" or "OFF"}`,
 						Persist = true
@@ -6414,7 +6476,7 @@ end
 						return hook(self, func)
 					end)
 					local tempRoom = CurrentRooms:FindFirstChild(LatestRoom.Value)
-					Variables.AutoFloorRoom = Library:Notify({
+					Variables.AutoFloorRoom = Functions.SetAutoFloorStatus({
 						Title = Info.AddonTitle,
 						Description = `Doors opened: {LatestRoom.Value}\nCurrent room: {tempRoom and tempRoom:GetAttribute("RawName") or "?"}`,
 						Persist = true
@@ -6602,7 +6664,7 @@ end
 						end)
 					end
 					local tempRoom = CurrentRooms:FindFirstChild(LatestRoom.Value)
-					Variables.AutoFloorRoom = Library:Notify({
+					Variables.AutoFloorRoom = Functions.SetAutoFloorStatus({
 						Title = Info.AddonTitle,
 						Description = `Doors opened: {LatestRoom.Value}\nCurrent room: {tempRoom and tempRoom:GetAttribute("RawName") or "?"}\nAnticheat bypass status: {Character:GetAttribute("_BypassedAC") and "ON" or "OFF"}`,
 						Persist = true
@@ -6768,7 +6830,7 @@ end
 						end)
 					end
 					local tempRoom = CurrentRooms:FindFirstChild(LatestRoom.Value)
-					Variables.AutoFloorRoom = Library:Notify({
+					Variables.AutoFloorRoom = Functions.SetAutoFloorStatus({
 						Title = Info.AddonTitle,
 						Description = `Doors opened: {LatestRoom.Value}\nCurrent room: {tempRoom and tempRoom:GetAttribute("RawName") or "?"}`,
 						Persist = true
@@ -6855,18 +6917,71 @@ end
 		local T = Variables.AutoFloorMethod and Variables.AutoFloorMethod.Value == "2" and Variables.AutoFloors240 or Variables.AutoFloors
 		return T[Floor] or T[AutoFloorKey()]
 	end
-	local function UpdateAutoFloorMethod()
-		local Toggle = Toggles.AutoFloor
-		local func = ResolveAutoFloorFunc()
-		if Toggle and func == Variables.AutoFloorFunc then return end
-		local wasOn = Toggle and Toggle.Value
-		if wasOn then Toggle:SetValue(false) end
-		Variables.AutoFloorFunc = func
-		Variables.AutoFloorSupported = ExecutorSupported(func or {Requirements = {}})
-		if func and not Variables.AutoFloorSupported then Variables.AutoFloorFunc = nil end
-		if Toggle then Toggle:SetDisabled(not (Variables.AutoFloorSupported and Variables.AutoFloorFunc)) end
-		if wasOn and Variables.AutoFloorSupported and Variables.AutoFloorFunc then Toggle:SetValue(true) end
+	-- Auto Floor is a runtime, not an owner of independently saved toggles.
+	Functions.PauseAutoFloorForConfig = function()
+		local Running = Variables.RunningAutoFloorFunc
+		Variables.RunningAutoFloorFunc = nil
+		if Running and Running.Callback then Running.Callback(false) end
 	end
+
+	Functions.SetAutoFloorEnabled = function(Value, ApplyPreset)
+		if Functions.IsConfigLoading() then return end
+		local Func = Variables.AutoFloorFunc
+		local Running = Variables.RunningAutoFloorFunc
+		if Running and (not Value or Running ~= Func) then
+			Variables.RunningAutoFloorFunc = nil
+			Running.Callback(false)
+		end
+		if not Value or not Func or not Func.Callback then return end
+		if Variables.RunningAutoFloorFunc == Func then return end
+		Variables.RunningAutoFloorFunc = Func
+		local OK, Err = pcall(Func.Callback, true)
+		if not OK then
+			Variables.RunningAutoFloorFunc = nil
+			pcall(Func.Callback, false)
+			warn("[Auto Floor start] " .. tostring(Err))
+			return
+		end
+		-- A floor callback may stop itself synchronously (for example, completed floor).
+		if Variables.RunningAutoFloorFunc ~= Func then return end
+		-- Only an explicit manual start applies the convenience preset.
+		-- Stop/config replay must never broadcast false to unrelated features.
+		if not ApplyPreset then return end
+		local Seen = {}
+		for _, Key in ipairs({
+			"Tplay_AntiEntities", "AutoUnlockPadlockToggle", "NotifyLibraryCode",
+			"AutoLibrarySolver", "BruteforceLibraryCode", "AutoBreakerBox",
+			"AutoBreakerSolver", "DoorReachToggle", "Tplay_DoorReachAlt", "DoorReach"
+		}) do
+			local Toggle = rawget(Toggles, Key) or rawget(Toggles, ToggleAliases[Key] or Key)
+			if Toggle and not Seen[Toggle] and type(Toggle.SetValue) == "function" then
+				Seen[Toggle] = true
+				if not Toggle.Value then pcall(Toggle.SetValue, Toggle, true) end
+			end
+		end
+	end
+
+	local function UpdateAutoFloorMethod()
+		local Toggle = rawget(Toggles, "Tplay_AutoFloor")
+		local Func = ResolveAutoFloorFunc()
+		local Supported = ExecutorSupported(Func or { Requirements = {} })
+		local WasOn = Toggle and Toggle.Value
+		local LoadingConfig = Functions.IsConfigLoading()
+		if not LoadingConfig and Variables.RunningAutoFloorFunc
+			and Variables.RunningAutoFloorFunc ~= Func then
+			Functions.PauseAutoFloorForConfig()
+		end
+		Variables.AutoFloorSupported = Supported
+		Variables.AutoFloorFunc = Supported and Func or nil
+		if Toggle then Toggle:SetDisabled(not (Supported and Func)) end
+		if not LoadingConfig and WasOn then Functions.SetAutoFloorEnabled(true, false) end
+	end
+	Functions.SyncAutoFloorAfterConfig = function()
+		UpdateAutoFloorMethod()
+		local Toggle = rawget(Toggles, "Tplay_AutoFloor")
+		Functions.SetAutoFloorEnabled(Toggle and Toggle.Value == true, false)
+	end
+
 	if Floor ~= "Garden" then
 		Variables.AutoFloorMethod = Tplay_Floors:AddDropdown("Tplay_AutoFloorMethod", {
 			Text = "Auto Floor Method",
@@ -6878,42 +6993,11 @@ end
 	UpdateAutoFloorMethod(Variables.AutoFloorMethod and Variables.AutoFloorMethod.Value)
 	Toggles.AutoFloor = Tplay_Floors:AddToggle("Tplay_AutoFloor", {
 		Text = "Auto Floor",
-		DisabledTooltip = Variables.AutoFloorSupported and (Variables.AutoFloorFunc and "Floor is already completed" or "Auto Floor is not supported for this floor") or "Executor is not supported",
+		DisabledTooltip = "Auto Floor is not supported for this floor or executor",
 		Default = false,
-		Disabled = false,
+		Disabled = not (Variables.AutoFloorSupported and Variables.AutoFloorFunc),
 		Callback = function(Value)
-			local func = Variables.AutoFloorFunc
-			if func and func.Callback then func.Callback(Value) end
-			if Toggles.Tplay_AntiEntities then
-				pcall(function() Toggles.Tplay_AntiEntities:SetValue(Value) end)
-			end
-			if Toggles.AutoUnlockPadlockToggle then
-				pcall(function() Toggles.AutoUnlockPadlockToggle:SetValue(Value) end)
-			end
-			if Toggles.NotifyLibraryCode then
-				pcall(function() Toggles.NotifyLibraryCode:SetValue(Value) end)
-			end
-			if Toggles.AutoLibrarySolver then
-				pcall(function() Toggles.AutoLibrarySolver:SetValue(Value) end)
-			end
-			if Toggles.BruteforceLibraryCode then
-				pcall(function() Toggles.BruteforceLibraryCode:SetValue(Value) end)
-			end
-			if Toggles.AutoBreakerBox then
-				pcall(function() Toggles.AutoBreakerBox:SetValue(Value) end)
-			end
-			if Toggles.AutoBreakerSolver then
-				pcall(function() Toggles.AutoBreakerSolver:SetValue(Value) end)
-			end
-			if Toggles.DoorReachToggle then
-				pcall(function() Toggles.DoorReachToggle:SetValue(Value) end)
-			end
-			if Toggles.Tplay_DoorReachAlt then
-				pcall(function() Toggles.Tplay_DoorReachAlt:SetValue(Value) end)
-			end
-			if Toggles.DoorReach then
-				pcall(function() Toggles.DoorReach:SetValue(Value) end)
-			end
+			Functions.SetAutoFloorEnabled(Value, true)
 		end
 	})
 
@@ -6922,13 +7006,14 @@ end
 		Default = false,
 		Tooltip = "Universal godmode bypass for Rush, Ambush, Screech, Dupe, Eyes, A90, Figure, Groundskeeper and Snare.",
 		Callback = function(Value)
+			if Functions.IsConfigLoading() then return end
 			if Toggles.AntiEntitiesMode then
 				pcall(function() Toggles.AntiEntitiesMode:SetValue("Manual") end)
 			end
 			if Toggles.CollisionOffsetGodmodeAlt then
 				pcall(function() Toggles.CollisionOffsetGodmodeAlt:SetValue(Value) end)
 			end
-			for _, tog in GetAllEntityToggles() do
+			for _, tog in ipairs(Functions.GetAllEntityToggles()) do
 				if tog and tog.SetValue then
 					pcall(function() tog:SetValue(Value) end)
 				end
@@ -7890,7 +7975,7 @@ Exploits_BypassRight:AddToggle("PositionSpoof", {
 Exploits_BypassRight:AddDivider()
 Exploits_BypassRight:AddToggle("InfiniteItemsToggle", {
 	Text = "Infinite Items", Default = false,
-	Tooltip = "Allows certain items to be used without draining their uses.",
+	Tooltip = "Hotel lock items: active only with a selected tool equipped. Errors restore native prompts and disable this feature. Crucifix uses its separate handler.",
 	Disabled = not Functions.CheckEnv("fireproximityprompt"),
 	DisabledTooltip = Global.ExecutorIssueMessage
 })
@@ -8240,11 +8325,63 @@ Options.PromptReachSlider:OnChanged(function(Value)
 		Prompt.MaxActivationDistance = Prompt:GetAttribute("MaxActivationDistance_Old") * Value
 	end
 end)
-Toggles.InstantPrompts:OnChanged(function(Value)
-	for _, Prompt in Objects.Prompts do
-		Prompt.HoldDuration = Value and 0 or Prompt:GetAttribute("HoldDuration_Old")
+-- Keep instant interaction applied when the game changes a prompt after setup.
+do
+	local States = {}
+
+	Functions.TrackInstantPrompt = function(Prompt)
+		if States[Prompt] then return end
+		local Original = Prompt:GetAttribute("HoldDuration_Old")
+		if type(Original) ~= "number" then
+			Original = Prompt.HoldDuration
+			Prompt:SetAttribute("HoldDuration_Old", Original)
+		end
+
+		local State = { Original = Original, Writing = false }
+		States[Prompt] = State
+		State.Changed = Prompt:GetPropertyChangedSignal("HoldDuration"):Connect(function()
+			if State.Writing then return end
+			local Duration = Prompt.HoldDuration
+			if Toggles.InstantPrompts.Value and Duration == 0 then return end
+			State.Original = Duration
+			Prompt:SetAttribute("HoldDuration_Old", Duration)
+			if Toggles.InstantPrompts.Value then
+				State.Writing = true
+				Prompt.HoldDuration = 0
+				State.Writing = false
+			end
+		end)
+		State.Destroying = Prompt.Destroying:Connect(function()
+			State.Changed:Disconnect()
+			State.Destroying:Disconnect()
+			States[Prompt] = nil
+		end)
+
+		if Toggles.InstantPrompts.Value then Prompt.HoldDuration = 0 end
 	end
-end)
+
+	Toggles.InstantPrompts:OnChanged(function(Value)
+		for _, Prompt in Objects.Prompts do
+			if Prompt.Parent then Functions.TrackInstantPrompt(Prompt) end
+		end
+		for Prompt, State in pairs(States) do
+			if Prompt.Parent then
+				State.Writing = true
+				Prompt.HoldDuration = Value and 0 or State.Original
+				State.Writing = false
+			end
+		end
+	end)
+
+	Functions.CleanupInstantPrompts = function()
+		for Prompt, State in pairs(States) do
+			State.Changed:Disconnect()
+			State.Destroying:Disconnect()
+			if Prompt.Parent then Prompt.HoldDuration = State.Original end
+		end
+		table.clear(States)
+	end
+end
 Toggles.PromptClip:OnChanged(function(Value)
 	for _, Prompt in Objects.Prompts do
 		Prompt.RequiresLineOfSight = Value and false or Prompt:GetAttribute("RequiresLineOfSight_Old")
@@ -12450,65 +12587,21 @@ Functions.HandleObject = function(Object)
 		end)
 		Object.Destroying:Once(function() if ElevConn then ElevConn:Disconnect() end end)
 	elseif Object.ClassName == "ProximityPrompt" and not Object:GetAttribute("FakePrompt") then
-		if Object:HasTag("DisableWhenEnabledOnClient") then Object:RemoveTag("DisableWhenEnabledOnClient") end
+		-- Preserve game-owned prompt tags; changing them can break native interaction.
 
-		Object:SetAttribute("HoldDuration_Old", Object.HoldDuration)
+		if Object:GetAttribute("HoldDuration_Old") == nil then
+			Object:SetAttribute("HoldDuration_Old", Object.HoldDuration)
+		end
 		Object:SetAttribute("RequiresLineOfSight_Old", Object.RequiresLineOfSight)
 		Object:SetAttribute("MaxActivationDistance_Old", Object.MaxActivationDistance)
 
-		if Toggles.InstantPrompts.Value    then Object.HoldDuration = 0 end
+		Functions.TrackInstantPrompt(Object)
 		if Toggles.PromptClip.Value        then Object.RequiresLineOfSight = false end
 		Object.MaxActivationDistance = Object:GetAttribute("MaxActivationDistance_Old") * Options.PromptReachSlider.Value
 
-		local LockPromptNames = { UnlockPrompt=true, SkullPrompt=true, LockPrompt=true, ThingToEnable=true, FusesPrompt=true }
-
-		if Functions.CheckEnv("fireproximityprompt") and Floor ~= "OldHotel" and Floor ~= "Fools" then
-			local IsLockPrompt = LockPromptNames[Object.Name]
-				or (Object.Parent and Object.Parent:GetAttribute("Locked") == true)
-				or (Object.Parent and Object.Parent.Parent and Object.Parent.Parent.Name == "Locker_Small_Locked" and Object.Name == "ActivateEventPrompt")
-
-			if IsLockPrompt then
-				local FakePrompt = Object:Clone()
-				FakePrompt:SetAttribute("FakePrompt", true)
-				task.wait()
-				FakePrompt.Parent = Object.Parent
-
-				FakePrompt:SetAttribute("HoldDuration_Old", Object:GetAttribute("HoldDuration_Old"))
-				FakePrompt:SetAttribute("RequiresLineOfSight_Old", Object:GetAttribute("RequiresLineOfSight_Old"))
-				FakePrompt:SetAttribute("MaxActivationDistance_Old", Object:GetAttribute("MaxActivationDistance_Old"))
-
-				FakePrompt.HoldDuration = Object.HoldDuration
-				FakePrompt.RequiresLineOfSight = Object.RequiresLineOfSight
-				FakePrompt.MaxActivationDistance = Object.MaxActivationDistance
-
-				if Toggles.InstantPrompts.Value    then FakePrompt.HoldDuration = 0 end
-				if Toggles.PromptClip.Value        then FakePrompt.RequiresLineOfSight = false end
-				FakePrompt.MaxActivationDistance = FakePrompt:GetAttribute("MaxActivationDistance_Old") * Options.PromptReachSlider.Value
-
-				FakePrompts[FakePrompt] = Object
-				pcall(function() Object.Parent = Global.PromptContainer end)
-
-				local FPEnabledConn = Object:GetPropertyChangedSignal("Enabled"):Connect(function()
-					FakePrompt.Enabled = Object.Enabled
-				end)
-				Object:GetPropertyChangedSignal("ActionText"):Once(function()
-					pcall(function() Object.Parent = FakePrompt.Parent end)
-					FakePrompt:Destroy()
-					if FPEnabledConn then FPEnabledConn:Disconnect() end
-				end)
-				Object.Destroying:Once(function()
-					FakePrompt:Destroy()
-					if FPEnabledConn then FPEnabledConn:Disconnect() end
-				end)
-				table.insert(Conns, FPEnabledConn)
-				table.insert(Objects.Prompts, FakePrompt)
-
-				FakePrompt.Enabled = false
-				task.wait()
-				FakePrompt.Enabled = Object.Enabled
-			end
-		end
 		table.insert(Objects.Prompts, Object)
+		-- Only the opt-in Hotel compatibility path may replace lock prompts.
+		if Functions.InstallInfinitePrompt then Functions.InstallInfinitePrompt(Object) end
 	elseif Name == "Padlock" then
 		Conns.PadlockConnection = Services.RunService.Heartbeat:Connect(function()
 			if Object.PrimaryPart then
@@ -12575,12 +12668,249 @@ local function ShouldBlockPrompt(Prompt)
 	return false
 end
 
+-- Hotel lock-item controller. Proxy lifetime and item transactions have one owner.
+-- Native prompts are untouched unless a supported selected tool is equipped.
+do
+	local Mirrors = {}
+	local Active = nil
+	local Stopped, RefreshQueued = false, false
+	local CharacterConnections = {}
+	local Refresh
+
+	local function BaseEnabled()
+		return not Stopped and not Library.Unloaded and Floor == "Hotel"
+			and Toggles.InfiniteItemsToggle.Value
+	end
+
+	local function Equipped()
+		local Char = LocalPlayer.Character
+		if not Char then return nil end
+		for _, Name in ipairs(ToolNames) do
+			local Tool = Char:FindFirstChild(Name)
+			if Tool and Tool:IsA("Tool") then return Tool end
+		end
+	end
+
+	local function Selected(Tool)
+		if not Tool then return false end
+		local Label = ItemNames[Tool.Name]
+		return Label and Options.InfiniteItemsList.Value[Label] == true
+	end
+
+	local function Supports(Real, Tool)
+		if not Real.Parent or not Tool or not Selected(Tool) then return false end
+		if Tool.Name ~= "Lockpick" and Tool.Name ~= "SkeletonKey"
+			and Tool.Name ~= "Shears" and Tool.Name ~= "Multitool" then return false end
+		-- Do not replace every prompt beneath an arbitrary object marked Locked.
+		local Parent = Real.Parent
+		local Grandparent = Parent.Parent
+		if not LockPromptNames[Real.Name] and not (Grandparent
+			and Grandparent.Name == "Locker_Small_Locked" and Real.Name == "ActivateEventPrompt") then return false end
+		if Parent.Name == "SkullLock" then return Tool.Name == "SkeletonKey" end
+		if VineParentNames[Parent.Name] then return Tool.Name == "Shears" or Tool.Name == "Multitool" end
+		if Tool.Name == "Shears" or Tool.Name == "Multitool" then
+			return Parent.Name == "Lock1" or Parent.Name == "Lock2"
+		end
+		return true
+	end
+
+	local function ScheduleRefresh()
+		if Stopped or RefreshQueued then return end
+		RefreshQueued = true
+		task.defer(function()
+			RefreshQueued = false
+			if not Stopped then Refresh() end
+		end)
+	end
+
+	local function Remove(Real, Restore)
+		local State = Mirrors[Real]
+		if not State then return end
+		Mirrors[Real] = nil
+		for _, Conn in ipairs(State.Connections) do Conn:Disconnect() end
+		FakePrompts[State.Fake] = nil
+		local Index = table.find(Objects.Prompts, State.Fake)
+		if Index then table.remove(Objects.Prompts, Index) end
+		if Restore then
+			local OK, Err = pcall(function()
+				Real.Parent = State.Parent
+				if State.RemovedTag then Real:AddTag("DisableWhenEnabledOnClient") end
+			end)
+			if not OK then warn("[Infinite Items restore] " .. tostring(Err)) end
+		end
+		if not State.FakeGone then State.Fake:Destroy() end
+	end
+
+	local function RestoreAll()
+		local Originals = {}
+		for Real in pairs(Mirrors) do table.insert(Originals, Real) end
+		for _, Real in ipairs(Originals) do Remove(Real, true) end
+	end
+
+	Functions.CleanupInfinitePrompts = function()
+		if Active then Active.Cancelled = true end
+		Active = nil
+		RestoreAll()
+	end
+
+	Functions.InstallInfinitePrompt = function(Real)
+		if not BaseEnabled() or Active or Mirrors[Real] or not Real.Parent
+			or Real:GetAttribute("FakePrompt") or not Supports(Real, Equipped()) then return end
+		if not Functions.CheckEnv("fireproximityprompt") then return end
+		local Fake = Real:Clone()
+		if not Fake then return end
+		local State = { Fake = Fake, Parent = Real.Parent, Connections = {}, RemovedTag = false }
+		Mirrors[Real] = State
+		FakePrompts[Fake] = Real
+		local OK, Err = pcall(function()
+			Fake:SetAttribute("FakePrompt", true)
+			if Fake:HasTag("DisableWhenEnabledOnClient") then Fake:RemoveTag("DisableWhenEnabledOnClient") end
+			State.RemovedTag = Real:HasTag("DisableWhenEnabledOnClient")
+			if State.RemovedTag then Real:RemoveTag("DisableWhenEnabledOnClient") end
+			Fake.Parent = State.Parent
+			Real.Parent = Global.PromptContainer
+			table.insert(Objects.Prompts, Fake)
+			Functions.TrackInstantPrompt(Fake)
+			table.insert(State.Connections, Fake.Destroying:Once(function()
+				State.FakeGone = true
+				if Active and Active.Real == Real then Active.Cancelled = true end
+				Remove(Real, true)
+			end))
+			table.insert(State.Connections, Real:GetPropertyChangedSignal("Enabled"):Connect(function()
+				Fake.Enabled = Real.Enabled
+			end))
+			table.insert(State.Connections, Real:GetPropertyChangedSignal("ActionText"):Once(function()
+				Remove(Real, true)
+			end))
+			table.insert(State.Connections, Real.Destroying:Once(function()
+				if Active and Active.Real == Real then Active.Cancelled = true end
+				Remove(Real, false)
+			end))
+			table.insert(State.Connections, State.Parent.Destroying:Once(function()
+				if Active and Active.Real == Real then Active.Cancelled = true end
+				Remove(Real, false)
+				Real:Destroy()
+			end))
+			Fake.Enabled = Real.Enabled
+		end)
+		if not OK then
+			Remove(Real, true)
+			warn("[Infinite Items install] " .. tostring(Err))
+		end
+	end
+
+	Refresh = function()
+		if Active then
+			if BaseEnabled() and Selected(Active.Tool) and LocalPlayer.Character == Active.Character then return end
+			Active.Cancelled = true
+			Active = nil
+		end
+		RestoreAll()
+		if not BaseEnabled() or not Selected(Equipped()) then return end
+		local Originals = {}
+		for _, Prompt in ipairs(Objects.Prompts) do
+			if Prompt.Parent and not Prompt:GetAttribute("FakePrompt") then table.insert(Originals, Prompt) end
+		end
+		for _, Prompt in ipairs(Originals) do Functions.InstallInfinitePrompt(Prompt) end
+	end
+
+	local function BindCharacter(Char)
+		Functions.CleanupInfinitePrompts()
+		for _, Conn in ipairs(CharacterConnections) do Conn:Disconnect() end
+		table.clear(CharacterConnections)
+		if Char then
+			table.insert(CharacterConnections, Char.ChildAdded:Connect(function(Child)
+				if Child:IsA("Tool") then ScheduleRefresh() end
+			end))
+			table.insert(CharacterConnections, Char.ChildRemoved:Connect(function(Child)
+				if not Child:IsA("Tool") then return end
+				-- Dropping our own tool is an expected transaction step, not unequipping.
+				if Active and Active.Tool == Child then return end
+				ScheduleRefresh()
+			end))
+		end
+		ScheduleRefresh()
+	end
+	Conns.InfiniteItemsCharacterAdded = LocalPlayer.CharacterAdded:Connect(BindCharacter)
+	Conns.InfiniteItemsCharacterRemoving = LocalPlayer.CharacterRemoving:Connect(function()
+		BindCharacter(nil)
+	end)
+	BindCharacter(LocalPlayer.Character)
+	Toggles.InfiniteItemsToggle:OnChanged(Refresh)
+	Options.InfiniteItemsList:OnChanged(Refresh)
+
+	Functions.ShutdownInfiniteItems = function()
+		Stopped = true
+		Functions.CleanupInfinitePrompts()
+		for _, Conn in ipairs(CharacterConnections) do Conn:Disconnect() end
+		table.clear(CharacterConnections)
+	end
+
+	Conns.InfiniteItemsHandler = Services.ProximityPromptService.PromptTriggered:Connect(function(Fake, Player)
+		if Player and Player ~= LocalPlayer then return end
+		local Real = FakePrompts[Fake]
+		if not Real or Active or not BaseEnabled() then return end
+		local Tool, Char = Equipped(), LocalPlayer.Character
+		if not Selected(Tool) or not Char or not Drops or not Real.Parent then return end
+		if type(Functions.FirePrompt) ~= "function" or not RemotesFolder:FindFirstChild("DropItem") then return end
+		local Root = Char:FindFirstChild("HumanoidRootPart")
+		if not Root then return end
+		local Transaction = { Real = Real, Tool = Tool, Character = Char, Cancelled = false }
+		Active = Transaction
+		local Existing, Origin, ToolName = {}, Root.Position, Tool.Name
+		for _, Child in ipairs(Drops:GetChildren()) do Existing[Child] = true end
+
+		task.spawn(function()
+			local OK, Err = pcall(function()
+				if Tool.Parent ~= Char then error("Tool is no longer equipped") end
+				RemotesFolder.DropItem:FireServer(Tool)
+				local Deadline = os.clock() + 3
+				repeat
+					if Transaction.Cancelled or Stopped or Library.Unloaded then return end
+					if not BaseEnabled() or not Selected(Tool) or LocalPlayer.Character ~= Char then return end
+					for _, Dropped in ipairs(Drops:GetChildren()) do
+						if not Existing[Dropped] and Dropped.Name == ToolName then
+							local Position
+							if Dropped:IsA("Model") then Position = Dropped:GetPivot().Position
+							elseif Dropped:IsA("BasePart") then Position = Dropped.Position end
+							local Pickup = Dropped:FindFirstChild("ModulePrompt", true)
+								or Dropped:FindFirstChildWhichIsA("ProximityPrompt", true)
+							if Position and (Position - Origin).Magnitude <= 12
+								and Pickup and Pickup:IsA("ProximityPrompt") and Pickup.Enabled then
+								if not Real.Parent then error("Original lock prompt was removed") end
+								-- Preserve the original working ordering: pickup, then real prompt.
+								Functions.FirePrompt(Pickup)
+								if Transaction.Cancelled or Stopped then return end
+								Functions.FirePrompt(Real)
+								return
+							end
+						end
+					end
+					task.wait(0.05)
+				until os.clock() >= Deadline
+				error("Dropped item was not found within 3 seconds; check the ground for the tool")
+			end)
+			if Active == Transaction then Active = nil end
+			if not OK and not Transaction.Cancelled then
+				warn("[Infinite Items] " .. tostring(Err))
+				if not Stopped and not Library.Unloaded then
+					-- Fail open: native interaction wins over keeping the item method active.
+					Functions.CleanupInfinitePrompts()
+					Toggles.InfiniteItemsToggle:SetValue(false)
+					Functions.Notify({ Title = "Infinite Items stopped", Body = tostring(Err), Time = 8 })
+				end
+			end
+			ScheduleRefresh()
+		end)
+	end)
+end
+
 Conns.PromptAnimationFixer1 = Services.ProximityPromptService.PromptButtonHoldBegan:Connect(function(Object)
 	if not Object:GetAttribute("FakePrompt") then return end
 	local Tool = GetCharacterTool()
 	if ShouldBlockPrompt(Object) then return end
 
-	if Tool and table.find(AnimateToolNames, Tool.Name) and Global.UseAnimation then
+	if Tool and table.find(AnimateToolNames, Tool.Name) and Global.UseAnimation and Global.UseAnimationBreak then
 		Global.UseAnimationBreak:Stop()
 		Global.UseAnimation:Stop()
 		Global.UseAnimation:Play()
@@ -12973,37 +13303,6 @@ spawn(function()
 		end
 	end
 end)
-Conns.InfiniteItemsHandler = Services.ProximityPromptService.PromptTriggered:Connect(function(Object)
-	if not Object:GetAttribute("FakePrompt") then return end
-
-	local Tool = GetCharacterTool()
-	if ShouldBlockPrompt(Object) then return end
-
-	if Tool and table.find(AnimateToolNames, Tool.Name) and Global.UseAnimation and Global.UseAnimationBreak then
-		Global.UseAnimation:Stop()
-		Global.UseAnimationBreak:Stop()
-		Global.UseAnimationBreak:Play()
-		if Tool.Name == "Shears" then Tool:WaitForChild("Handle"):WaitForChild("sound_prompt"):Play() end
-	end
-
-	local AnyTool = Character:FindFirstChildOfClass("Tool")
-	local ToolData = AnyTool and ItemNames[AnyTool.Name]
-	if AnyTool and ToolData and Toggles.InfiniteItemsToggle.Value and Options.InfiniteItemsList.Value[ToolData] then
-		Drops.ChildAdded:Once(function(NewTool)
-			local Prompt = NewTool:FindFirstChild("ModulePrompt")
-			local RealPrompt = FakePrompts[Object]
-			Functions.FirePrompt(Prompt)
-			Functions.FirePrompt(RealPrompt)
-		end)
-		Character.ChildAdded:Once(function(NewTool)
-			if NewTool.Name == "Shears" then NewTool:WaitForChild("Handle"):WaitForChild("sound_promptend"):Play() end
-		end)
-		RemotesFolder.DropItem:FireServer(AnyTool)
-	else
-		local RealPrompt = FakePrompts[Object]
-		Functions.FirePrompt(RealPrompt)
-	end
-end)
 Conns.FloorReplicatedHandler = FloorReplicated.DescendantAdded:Connect(function(Object)
 	if Object.Name == "GlitchScreech" then
 		Modules.GlitchScreech = Object
@@ -13168,6 +13467,9 @@ LocalPlayer.CharacterAdded:Connect(function(NewCharacter)
 end)
 
 Library:OnUnload(function()
+	if Functions.RestoreConfigLoaderEnvironment then Functions.RestoreConfigLoaderEnvironment() end
+	Functions.ShutdownInfiniteItems()
+	Functions.CleanupInstantPrompts()
 	for _, v in pairs(Conns) do
 		pcall(function() v:Disconnect() end)
 	end
@@ -13484,6 +13786,81 @@ do
         end
         if SaveManager.IgnoreThemeSettings then SaveManager:IgnoreThemeSettings() end
         if SaveManager.SetIgnoreIndexes then SaveManager:SetIgnoreIndexes({ "MenuKeybind" }) end
+        -- Wrap both entry points: autoload can call Load internally (nested depth).
+        -- Manual config loads through the UI use the same guarded path.
+        if not Variables.ConfigLoadWrapped then
+            Variables.ConfigLoadWrapped = true
+            local function WrapConfigLoad(Name)
+                local Original = SaveManager[Name]
+                if type(Original) ~= "function" then return end
+                SaveManager[Name] = function(Self, ...)
+                    local Outer = (Variables.ConfigLoadDepth or 0) == 0
+                    Variables.ConfigLoadDepth = (Variables.ConfigLoadDepth or 0) + 1
+                    if Outer and Functions.PauseAutoFloorForConfig then
+                        local Paused, PauseErr = pcall(Functions.PauseAutoFloorForConfig)
+                        if not Paused then warn("[Config pause] " .. tostring(PauseErr)) end
+                    end
+                    local Results = table.pack(pcall(Original, Self, ...))
+                    Variables.ConfigLoadDepth = Variables.ConfigLoadDepth - 1
+                    if Outer and (Variables.ConfigLoadPending or 0) == 0 and Functions.SyncAutoFloorAfterConfig then
+                        local Synced, SyncErr = pcall(Functions.SyncAutoFloorAfterConfig)
+                        if not Synced then warn("[Config Auto Floor] " .. tostring(SyncErr)) end
+                    end
+                    if not Results[1] then error(Results[2], 0) end
+                    return table.unpack(Results, 2, Results.n)
+                end
+            end
+            -- Obsidian LoadJSON enqueues Parser.Load with task.defer and returns
+            -- before it runs. Track those actual jobs instead of using a timer.
+            local JSONLoader = SaveManager.LoadJSON
+            local Scheduler = task
+            if type(JSONLoader) == "function" then
+                local Patched, PatchErr = pcall(function()
+                    local PreviousEnvironment = getfenv(JSONLoader)
+                    local function TrackScheduled(Schedule, Callback, ...)
+                        local Args = table.pack(...)
+                        Variables.ConfigLoadPending = (Variables.ConfigLoadPending or 0) + 1
+                        local Scheduled, ScheduleErr = pcall(Schedule, function()
+                            local Results = { true, n = 1 }
+                            if not Library.Unloaded then
+                                Results = table.pack(pcall(Callback, table.unpack(Args, 1, Args.n)))
+                            end
+                            Variables.ConfigLoadPending = math.max(0, (Variables.ConfigLoadPending or 1) - 1)
+                            if not Results[1] then warn("[Config parser] " .. tostring(Results[2])) end
+                            if not Functions.IsConfigLoading() and not Library.Unloaded
+                                and Functions.SyncAutoFloorAfterConfig then
+                                local OK, Err = pcall(Functions.SyncAutoFloorAfterConfig)
+                                if not OK then warn("[Config finalize] " .. tostring(Err)) end
+                            end
+                        end)
+                        if not Scheduled then
+                            Variables.ConfigLoadPending = math.max(0, (Variables.ConfigLoadPending or 1) - 1)
+                            error(ScheduleErr, 0)
+                        end
+                        return ScheduleErr
+                    end
+                    -- Isolated to this loader function: global task is never modified.
+                    local TrackedTask = setmetatable({
+                        defer = function(Callback, ...) return TrackScheduled(Scheduler.defer, Callback, ...) end,
+                        spawn = function(Callback, ...) return TrackScheduled(Scheduler.spawn, Callback, ...) end,
+                    }, { __index = Scheduler })
+                    setfenv(JSONLoader, setmetatable({ task = TrackedTask }, { __index = PreviousEnvironment }))
+                    Functions.RestoreConfigLoaderEnvironment = function()
+                        setfenv(JSONLoader, PreviousEnvironment)
+                    end
+                end)
+                if not Patched then
+                    warn("[Config] Deferred-parser tracking unavailable: " .. tostring(PatchErr))
+                    -- Fail explicitly rather than silently applying a partial guard.
+                    SaveManager.LoadJSON = function()
+                        return false, "Config load blocked: deferred-parser tracking could not initialize. See console."
+                    end
+                end
+            end
+            WrapConfigLoad("LoadJSON")
+            WrapConfigLoad("Load")
+            WrapConfigLoad("LoadAutoloadConfig")
+        end
         local Ok, Err = pcall(function() SaveManager:BuildConfigSection(Tabs.Settings) end)
         if not Ok then
             warn("[UI] SaveManager: " .. tostring(Err))
