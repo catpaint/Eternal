@@ -7836,6 +7836,281 @@ Floors_Automation:AddToggle("MinecartTeleport", {
         or "Unknown reason sorry dawg - george"
 })
 
+-- Auto Vault: observe the local native RenderStepped state and press its GUI buttons.
+-- No remote calls, state writes, module hooks, or proximity-prompt replacements.
+do
+	local Env = mstudio45.Environment
+	local GetConnections = Env.getconnections or Env.getCons or getconnections
+	local GetUpvalues = Env.getupvalues or getupvalues or (debug and debug.getupvalues)
+	local FireSignal = Env.firesignal or firesignal
+	local Session = nil
+	local UnknownStateSince = nil
+	local LastScan = 0
+	local Stopped = false
+	local Supported = type(GetConnections) == "function" and type(GetUpvalues) == "function" and type(FireSignal) == "function"
+
+	local function Values(Func)
+		if type(Func) ~= "function" then return nil end
+		local OK, Result = pcall(GetUpvalues, Func)
+		return OK and type(Result) == "table" and Result or nil
+	end
+
+	local function IsState(Value)
+		return type(Value) == "table" and type(rawget(Value, "pos")) == "number"
+			and type(rawget(Value, "target")) == "number" and type(rawget(Value, "phase")) == "number"
+			and (rawget(Value, "dir") == 1 or rawget(Value, "dir") == -1)
+			and type(rawget(Value, "onNotch")) == "boolean" and type(rawget(Value, "done")) == "boolean"
+			and type(rawget(Value, "spinUntil")) == "number" and type(rawget(Value, "hold")) == "number"
+	end
+
+	local function Buttons(Upvalues, MainUI)
+		for _, Func in pairs(Upvalues) do
+			local Nested = Values(Func)
+			if Nested then
+				for _, Value in pairs(Nested) do
+					if type(Value) == "table" then
+						local Next, Previous = rawget(Value, 1), rawget(Value, -1)
+						if typeof(Next) == "Instance" and typeof(Previous) == "Instance"
+							and Next:IsA("GuiButton") and Previous:IsA("GuiButton")
+							and Next.Name == "Next" and Previous.Name == "Previous"
+							and Next.Parent == Previous.Parent and Next:IsDescendantOf(MainUI) then
+							return Next, Previous
+						end
+					end
+				end
+			end
+		end
+	end
+
+	local function SetDirection(Current, Direction)
+		if Current.Pressed == Direction then return end
+		local Old = Current.Pressed
+		Current.Pressed = 0
+		if Old ~= 0 then
+			local Button = Old == 1 and Current.Next or Current.Previous
+			if Button.Parent then FireSignal(Button.MouseButton1Up) end
+		end
+		if Direction ~= 0 then
+			local Button = Direction == 1 and Current.Next or Current.Previous
+			if not Button.Parent then error("Vault button was removed") end
+			-- Set before firing so cancellation can always release the held button.
+			Current.Pressed = Direction
+			FireSignal(Button.MouseButton1Down)
+		end
+	end
+
+	local function Finish()
+		local Current = Session
+		Session = nil
+		if not Current then return end
+		local OK, Err = pcall(SetDirection, Current, 0)
+		if not OK then warn("[Auto Vault release] " .. tostring(Err)) end
+	end
+
+	local function Fail(Reason)
+		Finish()
+		local Toggle = rawget(Toggles, "AutoVault")
+		if Toggle and Toggle.Value then Toggle:SetValue(false) end
+		warn("[Auto Vault] " .. tostring(Reason))
+		if not Stopped and not Library.Unloaded then
+			Functions.Notify({ Title = "Auto Vault stopped", Body = tostring(Reason), Time = 7 })
+		end
+	end
+
+	local function Discover()
+		local Char = LocalPlayer.Character
+		local PlayerGui = LocalPlayer:FindFirstChild("PlayerGui")
+		local MainUI = PlayerGui and PlayerGui:FindFirstChild("MainUI")
+		if not Char or not MainUI or not Char:GetAttribute("InMinigame") then UnknownStateSince = nil; return end
+		local OK, Connections = pcall(GetConnections, Services.RunService.RenderStepped)
+		if not OK or type(Connections) ~= "table" then error("Cannot inspect native RenderStepped connections") end
+		for _, Connection in pairs(Connections) do
+			local ReadOK, Func = pcall(function() return Connection.Function end)
+			local Upvalues = ReadOK and Values(Func)
+			if Upvalues then
+				local State, Vault
+				for _, Value in pairs(Upvalues) do
+					if IsState(Value) then State = Value end
+					if typeof(Value) == "Instance" and Value:IsDescendantOf(Services.Workspace)
+						and Value:GetAttribute("_Cracking") == true
+						and Value:FindFirstChild("VaultRemote") and Value:FindFirstChild("TurnRemote") then
+						Vault = Value
+					end
+				end
+				if State and Vault then
+					if Functions.InstallVaultDirectTrace then
+						Functions.InstallVaultDirectTrace(Vault:FindFirstChild("VaultRemote"))
+					end
+					local Next, Previous = Buttons(Upvalues, MainUI)
+					if Next and Previous then
+						UnknownStateSince = nil
+						Session = {
+							State = State, Vault = Vault, Character = Char, Frame = Next.Parent,
+							Next = Next, Previous = Previous, Pressed = 0,
+							Started = os.clock(), LastProgress = os.clock(), LastPos = State.pos,
+							LastPhase = State.phase, LastSpin = State.spinUntil, Resets = 0,
+							WasDone = false,
+							PaceUntil = os.clock() + 1,
+						}
+						return
+					end
+				end
+			end
+		end
+		local HasVaultUI = false
+		for _, Child in ipairs(MainUI:GetChildren()) do
+			if Child:FindFirstChild("Next") and Child:FindFirstChild("Previous")
+				and Child:FindFirstChild("Guide") and Child:FindFirstChild("Progress") then HasVaultUI = true; break end
+		end
+		if HasVaultUI then
+			UnknownStateSince = UnknownStateSince or os.clock()
+			if os.clock() - UnknownStateSince > 10 then
+				error("Vault UI is active but native state is unreadable; executor API or game module differs")
+			end
+		else UnknownStateSince = nil end
+	end
+
+	local function Tick(DeltaTime)
+		local Toggle = rawget(Toggles, "AutoVault")
+		if Stopped or Library.Unloaded or not Toggle or not Toggle.Value then Finish(); return end
+		if not Supported then Fail("Requires getconnections, getupvalues and firesignal"); return end
+		if not Session then
+			if os.clock() - LastScan >= 0.4 then LastScan = os.clock(); Discover() end
+			return
+		end
+		local Current = Session
+		local Char, State = Current.Character, Current.State
+		local Hum = Char:FindFirstChildOfClass("Humanoid")
+		if LocalPlayer.Character ~= Char or not Char.Parent or not Hum or Hum.Health <= 0
+			or not Char:GetAttribute("InMinigame") or not Current.Vault.Parent
+			or not Current.Frame.Parent or Current.Vault:GetAttribute("Activated")
+			or Current.Vault:GetAttribute("_Cracking") ~= true then Finish(); return end
+		if not IsState(State) then error("Native vault state changed format") end
+		local Now = os.clock()
+		if State.phase ~= Current.LastPhase then
+			print(("[Auto Vault] Phase %d -> %d; pos=%.3f; target=%.3f"):format(
+				Current.LastPhase, State.phase, State.pos, State.target))
+			if Options.AutoVaultMethod.Value == "Human Pace" and not State.done then
+				Current.PaceUntil = Now + Options.AutoVaultPhasePause.Value
+			end
+		end
+		if State.done and not Current.WasDone then
+			Current.WasDone = true
+			print("[Auto Vault] Local stages complete; waiting for the native Submit result.")
+		elseif Current.WasDone and not State.done then
+			Fail("The native minigame reset after local completion. Final validation did not confirm success; see [Auto Vault] logs.")
+			return
+		end
+		if math.abs(State.pos - Current.LastPos) > 0.001 or State.phase ~= Current.LastPhase then
+			Current.LastProgress = Now
+			Current.LastPos, Current.LastPhase = State.pos, State.phase
+		end
+		if State.spinUntil > Current.LastSpin + 0.1 then
+			Current.Resets = Current.Resets + 1
+			Current.LastSpin = State.spinUntil
+			if Current.Resets >= 3 then Fail("Three vault resets; stopped to avoid looping"); return end
+		end
+		if Now - Current.Started > 180 or Now - Current.LastProgress > 12 then
+			Fail("No vault progress or server confirmation; control returned to you"); return
+		end
+		local HumanPause = Options.AutoVaultMethod.Value == "Human Pace" and Now < Current.PaceUntil
+		if State.done or Now < State.spinUntil or HumanPause then
+			SetDirection(Current, 0)
+		else
+			-- onNotch starts up to one unit BEFORE target. Aim near the center
+			-- instead of accumulating a boundary stop/snap on each phase.
+			local Remaining = (State.target - State.pos) * State.dir
+			local Near = math.clamp(1 - math.max(Remaining, 0) / 10, 0, 1)
+			local Speed = 20 * (1 - 0.4 * Near)
+			local FrameStep = Speed * math.clamp(DeltaTime or 1 / 60, 1 / 240, 0.1)
+			local StopDistance = math.clamp(FrameStep * 0.5, 0.03, 0.45)
+			local Direction = State.dir
+			local Mode = Options.AutoVaultMethod.Value
+			if Mode == "UI Green Zone" then
+				local Guide = Current.Frame:FindFirstChild("Guide")
+				local Progress = Guide and Guide:FindFirstChild("Progress")
+				local Correct = Guide and Guide:FindFirstChild("Correct")
+				if not Progress or not Correct or not Progress:IsA("GuiObject")
+					or not Correct:IsA("GuiObject") or Correct.AbsoluteSize.X <= 0 then
+					error("Vault guide geometry is unavailable; select another Auto Vault Method")
+				end
+				local Edge = Progress.AbsolutePosition.X
+				if State.dir == 1 then Edge = Edge + Progress.AbsoluteSize.X end
+				-- Follow the displayed region (including its moving offset), not pixels
+				-- of a screenshot. Target 65% through green in the current direction.
+				local Center = Correct.AbsolutePosition.X + Correct.AbsoluteSize.X * 0.5
+				local Goal = Center + State.dir * Correct.AbsoluteSize.X * 0.15
+				local PixelDistance = (Goal - Edge) * State.dir
+				-- The green zone spans two native dial units in the supplied module.
+				local PixelTolerance = math.min(Correct.AbsoluteSize.X * 0.15,
+					math.max(0.1, Correct.AbsoluteSize.X * FrameStep * 0.25))
+				if State.onNotch and PixelDistance <= PixelTolerance then Direction = 0 end
+			elseif Mode == "Past Center" then
+				-- An alternative to stopping at the leading boundary: aim 0.65 units
+				-- beyond true center, still inside the native -2 overshoot limit.
+				if State.onNotch and Remaining <= -0.65 + StopDistance then Direction = 0 end
+			else
+				if State.onNotch and Remaining <= StopDistance then Direction = 0 end
+			end
+			-- Conservative local overshoot guard for frame-time spikes.
+			if State.onNotch and Remaining - FrameStep < -1.5 then Direction = 0 end
+			if Direction == 0 and Current.Pressed ~= 0 then
+				print(("[Auto Vault] %s; hold phase %d; distance to center=%.3f"):format(Mode, State.phase, Remaining))
+			end
+			SetDirection(Current, Direction)
+		end
+	end
+
+	Functions.AutoVaultDiagnosticLabel = function()
+		if Session then return "auto/" .. tostring(Options.AutoVaultMethod.Value) end
+		return "manual"
+	end
+	Floors_Automation:AddToggle("VaultDiagnostics", {
+		Text = "Vault Diagnostics", Default = true,
+		Tooltip = "Logs native Submit replies and a rotation summary for automatic and manual attempts. Does not send requests.",
+	})
+	Floors_Automation:AddDropdown("AutoVaultMethod", {
+		Text = "Auto Vault Method",
+		Values = { "Human Pace", "UI Green Zone", "Past Center", "State Center" },
+		Default = "Human Pace",
+		Tooltip = "Experimental alternatives. Change methods between attempts, not while rotating.",
+		Callback = function()
+			if Session then Fail("Method changed during a vault session; reopen the minigame before retrying") end
+		end,
+	})
+	Floors_Automation:AddSlider("AutoVaultPhasePause", {
+		Text = "Vault Phase Pause", Default = 1.5, Min = 0.5, Max = 3, Rounding = 1,
+		Tooltip = "Human Pace only: idle between completed stages. Not a known server requirement.",
+	})
+	Floors_Automation:AddToggle("AutoVault", {
+		Text = "Auto Vault", Default = false,
+		Tooltip = "Open a CrackableVault manually; automatically turns and holds at each notch. Does not affect doors.",
+		Disabled = not Supported,
+		DisabledTooltip = "Requires getconnections, getupvalues and firesignal",
+		Callback = function(Value)
+			if not Value then Finish() end
+			LastScan = 0
+		end,
+	})
+	Conns.AutoVaultControl = Services.RunService.RenderStepped:Connect(function(DeltaTime)
+		local OK, Err = pcall(Tick, DeltaTime)
+		if not OK then Fail(Err) end
+	end)
+	Conns.AutoVaultManualInput = Services.UserInputService.InputBegan:Connect(function(Input, Processed)
+		if not Session then return end
+		local Key = Input.KeyCode
+		if Key == Enum.KeyCode.A or Key == Enum.KeyCode.D or Key == Enum.KeyCode.Left or Key == Enum.KeyCode.Right
+			or Input.UserInputType == Enum.UserInputType.Gamepad1 then
+			Fail("Manual directional input detected; Auto Vault released control")
+		end
+	end)
+	Functions.ShutdownAutoVault = function()
+		Stopped = true
+		Finish()
+	end
+end
+
+
 -- Self_Automation
 Self_Automation:AddToggle("AutoDropTV", {
 	Text = "Auto Drop TV", Default = false,
@@ -9968,7 +10243,7 @@ local ChestLabels = {
 local EntityESPLabels = {
 	JeffTheKiller = "Jeff the Killer", GiggleCeiling = "Giggle",
 	Snare = "Snare", GrumbleRig = "Grumble", TellerRig = "Teller", HonchoRig = "Honcho",
-	Drones = "Drones", Creak = "Creak", StemsEntity = "Stems",
+	Drones = "Drones", Creak = "Creak", ["Creak-HALLOWEEN26"] = "Creak", StemsEntity = "Stems",
 	Noise = "Noise", NoiseModel = "Noise", Hijack = "Hijack",
 	Drakobloxxer = "Drakobloxxer", Hole = "Mandrake Hole", Groundskeeper = "Groundskeeper",
 	LiveEntityBramble = "Bramble", Figure = "Figure", FigureRig = "Figure", FigureRagdoll = "Figure",
@@ -10721,6 +10996,133 @@ for ObjName, ToggleName in ObstructionNames do
 	end)
 end
 
+-- Diagnostic observation only. No extra calls and no substituted return values.
+do
+	local Traces = setmetatable({}, { __mode = "k" })
+	local function Enabled()
+		local Toggle = rawget(Toggles, "VaultDiagnostics")
+		return Toggle and Toggle.Value and not Library.Unloaded
+	end
+	Functions.ObserveVaultCall = function(Remote, Method, Args)
+		if not Enabled() then return false end
+		local Owner = Remote.Parent
+		if not Owner or not Owner.FindFirstChild(Owner, "VaultRemote") or not Owner.FindFirstChild(Owner, "TurnRemote") then return false end
+		if Remote.Name == "VaultRemote" and Method == "InvokeServer" and Args[1] == "Fetch" then
+			Traces[Owner] = { Started = os.clock(), Count = 0, Zero = 0, Sum = 0, Abs = 0, Max = 0, MaxGap = 0 }
+		elseif Remote.Name == "TurnRemote" and Method == "FireServer" and type(Args[1]) == "number" then
+			local Trace = Traces[Owner]
+			if Trace then
+				local Now, Delta = os.clock(), Args[1]
+				Trace.Count = Trace.Count + 1
+				if Delta == 0 then Trace.Zero = Trace.Zero + 1 end
+				Trace.Sum = Trace.Sum + Delta
+				Trace.Abs = Trace.Abs + math.abs(Delta)
+				Trace.Max = math.max(Trace.Max, math.abs(Delta))
+				if Trace.Last then Trace.MaxGap = math.max(Trace.MaxGap, Now - Trace.Last) end
+				Trace.Last = Now
+			end
+		elseif Remote.Name == "VaultRemote" and Method == "InvokeServer" and Args[1] == "Submit" then
+			local Label = Functions.AutoVaultDiagnosticLabel and Functions.AutoVaultDiagnosticLabel() or "unknown"
+			local Trace = Traces[Owner]
+			print("[Vault Trace] Submit begin; mode=" .. Label)
+			if Trace then
+				print(("[Vault Trace] elapsed=%.3f; packets=%d; zero=%d; sum=%.3f; abs=%.3f; maxDelta=%.3f; maxGap=%.3f"):format(
+					os.clock() - Trace.Started, Trace.Count, Trace.Zero, Trace.Sum, Trace.Abs, Trace.Max, Trace.MaxGap))
+			end
+			return true
+		end
+		return false
+	end
+	Functions.ObserveVaultReply = function(Results)
+		print("[Vault Trace] Submit returned; values=" .. tostring(Results.n) .. "; firstType=" .. typeof(Results[1]))
+		local Reply = Results[1]
+		if type(Reply) ~= "table" then
+			if type(Reply) == "string" or type(Reply) == "boolean" or type(Reply) == "number" or Reply == nil then
+				print("[Vault Trace] first=" .. tostring(Reply))
+			end
+			return
+		end
+		print("[Vault Trace] done=" .. tostring(rawget(Reply, "done")))
+		-- Known status fields only; do not dump opaque tokens or the full payload.
+		for _, Key in ipairs({ "reason", "error", "message", "status", "phase", "ok", "success" }) do
+			local Value = rawget(Reply, Key)
+			if type(Value) == "string" or type(Value) == "boolean" or type(Value) == "number" then
+				print("[Vault Trace] " .. Key .. "=" .. tostring(Value))
+			end
+		end
+	end
+end
+
+-- The native module calls pcall(VaultRemote.InvokeServer, VaultRemote, ...).
+-- Those direct method calls bypass __namecall, so instrument the method itself.
+do
+	local Hook = mstudio45.Environment.hookfunction or hookfunction
+	local Wrap = mstudio45.Environment.newcclosure or newcclosure
+	local OriginalInvoke, TargetInvoke
+	local Installed, Stopped, Reported = false, false, false
+	local LastScan = 0
+
+	Functions.InstallVaultDirectTrace = function(Remote)
+		if Installed or Stopped then return end
+		if type(Hook) ~= "function" then
+			if not Reported then
+				Reported = true
+				warn("[Vault Trace] Installation failed: hookfunction is unavailable")
+				Functions.Notify({ Title = "Vault Diagnostics unavailable", Body = "hookfunction is unavailable", Time = 8 })
+			end
+			return
+		end
+		if not Remote or not Remote:IsA("RemoteFunction") then return end
+		TargetInvoke = Remote.InvokeServer
+		local function Intercept(Self, ...)
+			local Args = table.pack(...)
+			local TraceSubmit = false
+			if not Stopped and not Library.Unloaded and Functions.ObserveVaultCall then
+				local OK, Result = pcall(Functions.ObserveVaultCall, Self, "InvokeServer", Args)
+				TraceSubmit = OK and Result == true
+			end
+			-- Exactly one original call. Errors propagate to the native caller's pcall.
+			-- Pack/unpack retains nils and the original number of returned values.
+			local Results = table.pack(OriginalInvoke(Self, table.unpack(Args, 1, Args.n)))
+			if TraceSubmit and not Stopped then pcall(Functions.ObserveVaultReply, Results) end
+			return table.unpack(Results, 1, Results.n)
+		end
+		local Replacement = type(Wrap) == "function" and Wrap(Intercept) or Intercept
+		local OK, Result = pcall(Hook, TargetInvoke, Replacement)
+		if not OK or type(Result) ~= "function" then
+			Stopped = true
+			warn("[Vault Trace] Direct InvokeServer hook failed: " .. tostring(Result))
+			Functions.Notify({ Title = "Vault Diagnostics unavailable", Body = tostring(Result), Time = 8 })
+			return
+		end
+		OriginalInvoke = Result
+		Installed = true
+		print("[Vault Trace] Direct InvokeServer diagnostic hook installed.")
+	end
+
+	Conns.VaultDirectTraceScan = Services.RunService.Heartbeat:Connect(function()
+		if Installed or Stopped or Library.Unloaded then return end
+		local Toggle = rawget(Toggles, "VaultDiagnostics")
+		if not Toggle or not Toggle.Value or os.clock() - LastScan < 0.75 then return end
+		LastScan = os.clock()
+		local Rooms = Services.Workspace:FindFirstChild("CurrentRooms")
+		if not Rooms then return end
+		for _, Child in ipairs(Rooms:GetDescendants()) do
+			if Child.Name == "VaultRemote" and Child:IsA("RemoteFunction") then
+				Functions.InstallVaultDirectTrace(Child)
+				return
+			end
+		end
+	end)
+	Functions.ShutdownVaultDirectTrace = function()
+		Stopped = true
+		if Installed and TargetInvoke and OriginalInvoke then
+			local OK, Err = pcall(Hook, TargetInvoke, OriginalInvoke)
+			if not OK then warn("[Vault Trace] Hook restore failed: " .. tostring(Err)) end
+		end
+	end
+end
+
 local MainHook
 local OtherHook
 if Functions.CheckEnv("hookmetamethod", "newcclosure", "getnamecallmethod") then
@@ -10728,6 +11130,9 @@ if Functions.CheckEnv("hookmetamethod", "newcclosure", "getnamecallmethod") then
 		local Args = { ... }
 		if mstudio45 and mstudio45.Environment then
 			local Method = mstudio45.Environment.getnamecallmethod()
+			if Method == "FireServer" and Functions.ObserveVaultCall then
+				pcall(Functions.ObserveVaultCall, Self, Method, Args)
+			end
 
 			if Self.Name == "Crouch" and Method == "FireServer" then
 				if Toggles.AnitFigureHearing.Value or Toggles.PositionSpoof.Value then
@@ -11610,7 +12015,7 @@ Functions.HandleObject = function(Object)
 
 	local Name = Object.Name
 
-	if Name == "Creak" then
+	if Name == "Creak" or Name == "Creak-HALLOWEEN26" then
 		-- creak sounds with the same name get placed in Terrain/misparented spots: only
 		-- the real entity is a Model inside LiveEntities, everything else is ignored
 		if not (Object:IsA("Model") and Object.Parent and Object.Parent.Name == "LiveEntities") then
@@ -12932,7 +13337,7 @@ local TrackedObjects = {
 	GiggleCeiling=true, MinesGateButton=true, ElectricalKeyObtain=true, LibraryHintPaper=true,
 	Drones=true, TellerRig=true, DronesStampede=true,
 	HonchoRig=true, ArchivesPackageDeposit=true, ArchivesStorageBox=true,
-	Creak=true, StemsEntity=true, LargeScrew=true, DinkyLamp=true, BottleCrate=true,
+	Creak=true, ["Creak-HALLOWEEN26"]=true, StemsEntity=true, LargeScrew=true, DinkyLamp=true, BottleCrate=true,
 	StairwellTerminal=true, StairwellFireAlarm=true, TV_Stand=true, Cubby_Large_Tarped=true,
 	BrokenMonitor=true, JerryCan=true,
 	Noise=true, NoiseModel=true, Hijack=true,
@@ -13467,6 +13872,8 @@ LocalPlayer.CharacterAdded:Connect(function(NewCharacter)
 end)
 
 Library:OnUnload(function()
+	Functions.ShutdownVaultDirectTrace()
+	Functions.ShutdownAutoVault()
 	if Functions.RestoreConfigLoaderEnvironment then Functions.RestoreConfigLoaderEnvironment() end
 	Functions.ShutdownInfiniteItems()
 	Functions.CleanupInstantPrompts()
